@@ -1,8 +1,9 @@
 //! A set of types which allow analysis to model memory correctly.
 
-use std::ops::{Add, Sub};
+use std::ops::{Add, Sub, Not};
 use std::cmp::PartialOrd;
 use std::slice::SliceIndex;
+use num_traits::Bounded;
 use crate::retrogram::reg;
 
 /// Represents the various possible operating modes of a memory block.
@@ -39,38 +40,107 @@ pub enum Action {
 }
 
 /// Models a region of memory visible to the program under analysis.
-pub struct Region<PType, SType> {
-    start: PType,
-    length: SType,
+/// 
+/// `P` is the architectural representation of a pointer, and `S` is any
+/// compatible type which represents a size or offset of an architectural
+/// pointer. Compatibility is defined as the ability to add an offset `s` to a
+/// pointer `p` and obtain some output value convertable to `P` which represents
+/// a pointer that many bytes forwards in the image.
+/// 
+/// `T` is the image type in use for the given region. The offset type of an
+/// image is `IO`, which is allowed to differ from architectural pointer and
+/// offset types. (For example, if your platform supports bank switching, `IO`
+/// must be wide enough to represent a fully decoded offset into a ROM image.)
+/// 
+/// #Typical type parameter values
+/// 
+/// For a 32-bit CPU such as AArch32, `P` and `S` would be `u32` and `MV` would
+/// be `u8`. `IO` would likely be `u32`, unless you specifically wished to model
+/// platforms with more complicated addressing systems. This seems so
+/// straightforward as to reveal our type system as overcomplicated, so let's
+/// get weirder.
+/// 
+/// Certain computer architectures use uncommon architectural register types of
+/// odd sizes. For example, the WDC 65816 is a CPU with a 24-bit addressing
+/// space, and would need a custom `u24` type as `P` and `S` in order to be
+/// properly analyzed. If we go back further in computing history, we'd see
+/// systems such as the PDP-10, which uses 18-bit *word* addressing into
+/// 36-bit memory. This would demand not only a `u18` `P` and `S`, but also a
+/// `u36` `MV` type.
+/// 
+/// The most complicated situation would probably be real-mode x86, where
+/// addresses are always aliased in a bizarre segment/offset scheme. If we
+/// ignored that, and modeled memory as a `u20` pointer (known contemporarily as
+/// "huge memory"); we still wouldn't be able to model the machine's ported I/O
+/// space. Pointers on x86 would need to be an enum of port and memory space
+/// addresses, with offsets being straight integers.
+pub struct Region<P, MV, S, IO> {
+    start: P,
+    length: S,
     memtype: Behavior,
-    image: Option<Vec<u8>>
+    image: Option<Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>>
 }
 
-impl<P, S> Region<P, S> where P: Copy + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output> + From<<P as Sub>::Output>, S: Copy {
+/// An Image is the contents of a given memory Region, if known.
+/// 
+/// An Image's contents may originate from an executable file, a ROM chip, or a
+/// memory dump. The source is not important; but the data retrieved from an
+/// image must match what the actual program under analysis would see if it had
+/// read or executed from this memory.
+pub trait Image {
+    /// The architectural pointer type of the CPU architecture a given program
+    /// is written or compiled for.
+    type Pointer;
+
+    /// A suitably wide type to represent an offset into any size Image we would
+    /// like to model. Not required to match the architectural offset type.
+    type Offset;
+
+    /// The architectual addressing unit.
+    type Data;
+
+    /// Retrieve data from an image.
+    fn retrieve(&self, offset: Self::Offset, count: Self::Offset) -> Option<Vec<Self::Data>>;
+
+    /// Decode an architectural pointer to an image offset.
+    /// 
+    /// The given pointer must have a positive offset from the base pointer.
+    /// If the offset is negative, this function yields None.
+    /// 
+    /// TODO: How does `decode_addr` handle non-architectural addressing
+    /// extensions (such as banking)?
+    fn decode_addr(&self, ptr: Self::Pointer, base: Self::Pointer) -> Option<Self::Offset>;
+}
+
+impl<P, MV, S, IO> Region<P, MV, S, IO>
+    where P: Copy + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
+        S: Copy + From<<P as Sub>::Output> {
+    
     pub fn is_ptr_within(&self, ptr: P) -> bool {
         self.start <= ptr && P::from(self.start + self.length) > ptr
-    }
-    
-    pub fn get_image_offset(&self, ptr: P) -> Option<P> {
-        if (self.is_ptr_within(ptr)) {
-            Some(P::from(ptr - self.start))
-        } else {
-            None
-        }
     }
 }
 
 //TODO: something better than just a vec pls...
-pub struct Memory<P, S> {
-    views: Vec<Region<P, S>>
+pub struct Memory<P, MV, S, IO> {
+    views: Vec<Region<P, MV, S, IO>>
 }
 
-impl<P, S> Memory<P, S> where P: Copy + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output> + From<<P as Sub>::Output> + SliceIndex<[u8]>, u8: From<<P as SliceIndex<[u8]>>::Output>, <P as SliceIndex<[u8]>>::Output : Sized + Copy, S: Copy {
-    pub fn read_u8(&self, ptr: P) -> reg::Symbolic<u8> {
+impl<P, MV, S, IO> Memory<P, MV, S, IO>
+    where P: Copy + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output> + SliceIndex<[u8]>,
+        MV: Copy + Not + From<<MV as Not>::Output> + Bounded + From<u8> + From<<P as SliceIndex<[u8]>>::Output>,
+        <P as SliceIndex<[u8]>>::Output : Sized,
+        IO: From<u8> {
+    
+    pub fn read_atomic(&self, ptr: P) -> reg::Symbolic<MV> {
         for view in &self.views {
-            if let Some(offset) = view.get_image_offset(ptr) {
-                if let Some(ref image) = view.image {
-                    return reg::Symbolic::from(u8::from(image[offset]));
+            if let Some(ref image) = view.image {
+                if let Some(offset) = image.decode_addr(ptr, view.start) {
+                    if let Some(imgdata) = image.retrieve(offset, IO::from(1)) {
+                        if imgdata.len() > 0 {
+                            return reg::Symbolic::from(imgdata[0]);
+                        }
+                    }
                 }
             }
         }

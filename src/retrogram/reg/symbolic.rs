@@ -1,4 +1,5 @@
-//! Represents abstract processor states as symbolic registers.
+//! A symbolic value type which allows placing bounds on values which have been
+//! mutated.
 
 use std::ops::{Not, BitAnd, BitOr};
 use std::cmp::{min, max, PartialEq, Ord};
