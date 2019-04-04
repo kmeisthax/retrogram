@@ -74,7 +74,7 @@ pub enum Action {
 /// "huge memory"); we still wouldn't be able to model the machine's ported I/O
 /// space. Pointers on x86 would need to be an enum of port and memory space
 /// addresses, with offsets being straight integers.
-pub struct Region<P, MV, S, IO> {
+pub struct Region<P, MV, S = P, IO = usize> {
     start: P,
     length: S,
     memtype: Behavior,
