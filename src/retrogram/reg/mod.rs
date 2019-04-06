@@ -1,5 +1,5 @@
 mod symbolic;
-//mod state;
+mod state;
 
 pub use symbolic::Symbolic;
-//pub use state::State;
+pub use state::State;
