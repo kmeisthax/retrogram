@@ -122,17 +122,18 @@ impl<P, MV, S, IO> Region<P, MV, S, IO>
 }
 
 //TODO: something better than just a vec pls...
-pub struct Memory<P, MV, S, IO> {
+pub struct Memory<P, MV, S = P, IO = usize> {
     views: Vec<Region<P, MV, S, IO>>
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: Copy + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output> + SliceIndex<[u8]>,
-        MV: Copy + Not + From<<MV as Not>::Output> + Bounded + From<u8> + From<<P as SliceIndex<[u8]>>::Output>,
-        <P as SliceIndex<[u8]>>::Output : Sized,
-        IO: From<u8> {
+    where P: Copy + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
+        MV: Copy + Not + From<<MV as Not>::Output> + Bounded + From<u8> + From<<usize as SliceIndex<[u8]>>::Output>,
+        <usize as SliceIndex<[u8]>>::Output : Sized,
+        IO: From<u8>,
+        usize: From<P> {
     
-    pub fn read_atomic(&self, ptr: P) -> reg::Symbolic<MV> {
+    pub fn read_unit(&self, ptr: P) -> reg::Symbolic<MV> {
         for view in &self.views {
             if let Some(ref image) = view.image {
                 if let Some(offset) = image.decode_addr(ptr, view.start) {

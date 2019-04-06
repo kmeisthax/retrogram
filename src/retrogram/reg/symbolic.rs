@@ -61,6 +61,14 @@ impl<T> Symbolic<T> where T: Copy + PartialEq + BitOr + From<<T as BitOr>::Outpu
     pub fn is_concrete(&self) -> bool {
         (self.lower_bound == self.upper_bound) || T::from(self.bits_set | self.bits_cleared) == T::from(!T::from(0))
     }
+
+    pub fn into_concrete(self) -> Option<T> {
+        if self.is_concrete() {
+            Some(self.lower_bound)
+        } else {
+            None
+        }
+    }
 }
 
 impl<T> Symbolic<T> where T: Copy + PartialEq + Ord + Not + BitAnd + From<<T as Not>::Output> + From<<T as BitAnd>::Output> + From<u8> {
