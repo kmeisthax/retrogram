@@ -1,3 +1,7 @@
+//!An abstract syntax tree representation of disassembled code
+
+use std::fmt;
+
 ///A literal value, such as an integer, pointer, or other kind of reference.
 /// 
 ///Ordinarily, one would keep this enum as-is. The integer and float
@@ -67,6 +71,20 @@ impl<I, F, P> Operand<Literal<I, F, P>> {
     }
 }
 
+impl<I, F, P> fmt::Display for Operand<Literal<I, F, P>> where I: fmt::Display, F: fmt::Display, P: fmt::Display {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Operand::Symbol(s) => write!(f, "{}", s),
+            Operand::Literal(Literal::Integer(i)) => write!(f, "{}", i),
+            Operand::Literal(Literal::Float(fl)) => write!(f, "{}", fl),
+            Operand::Literal(Literal::Pointer(p)) => write!(f, "{}", p),
+            Operand::Literal(Literal::String(s)) => write!(f, "{}", s),
+            Operand::Literal(Literal::Missing) => write!(f, "?"),
+            Operand::Add(op1, op2) => write!(f, "{} + {}", op1, op2),
+        }
+    }
+}
+
 pub struct Instruction<L = Literal> {
     /// The instruction being executed
     opcode: String,
@@ -79,6 +97,29 @@ impl<L> Instruction<L> {
         Instruction {
             opcode: opcode.to_string(),
             operands: operands
+        }
+    }
+}
+
+impl<L> fmt::Display for Instruction<L> where Operand<L>: fmt::Display {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.operands.len() == 0 {
+            write!(f, "{}", self.opcode)
+        } else {
+            let mut first = true;
+            write!(f, "{} ", self.opcode)?;
+
+            for operand in &self.operands {
+                if first {
+                    first = false;
+                    write!(f, "{}", operand)?;
+                    continue;
+                }
+
+                write!(f, ", {}", operand)?;
+            }
+
+            Ok(())
         }
     }
 }
