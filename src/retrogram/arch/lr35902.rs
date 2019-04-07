@@ -113,6 +113,9 @@ fn disassemble(p: Pointer, mem: memory::Memory<Pointer, Data>) -> (Option<ast::I
         Some(0x18) => (Some(inst::new("jr", vec![dis_op8(p+1, mem)])), 2, false),
         Some(0x76) => (Some(inst::new("halt", vec![])), 1, true), //encoded as ld [hl], [hl]
 
+        Some(0xC3) => (Some(inst::new("jp", vec![dis_op16(p+1, mem)])), 3, false),
+        Some(0xCD) => (Some(inst::new("call", vec![dis_op16(p+1, mem)])), 3, true),
+
         Some(0xC9) => (Some(inst::new("ret", vec![])), 1, false),
         Some(0xD9) => (Some(inst::new("reti", vec![])), 1, false),
         Some(0xE9) => (Some(inst::new("jp", vec![op::sym("[hl]")])), 1, false),
@@ -127,6 +130,9 @@ fn disassemble(p: Pointer, mem: memory::Memory<Pointer, Data>) -> (Option<ast::I
         Some(0xEA) => (Some(inst::new("ld", vec![dis_op16(p+1, mem), op::sym("a")])), 3, true),
         Some(0xF2) => (Some(inst::new("ld", vec![op::sym("a"), op::sym("[c]")])), 1, true),
         Some(0xFA) => (Some(inst::new("ld", vec![op::sym("a"), dis_op16(p+1, mem)])), 3, true),
+
+        Some(0xF3) => (Some(inst::new("di", vec![])), 1, true),
+        Some(0xFB) => (Some(inst::new("ei", vec![])), 1, true),
 
         //Z80 instructions that follow a particular pattern
         Some(op) => {
