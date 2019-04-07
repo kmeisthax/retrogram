@@ -74,7 +74,7 @@ pub enum Action {
 /// "huge memory"); we still wouldn't be able to model the machine's ported I/O
 /// space. Pointers on x86 would need to be an enum of port and memory space
 /// addresses, with offsets being straight integers.
-pub struct Region<P, MV, S = P, IO = usize> {
+struct Region<P, MV, S = P, IO = usize> {
     start: P,
     length: S,
     memtype: Behavior,
@@ -100,7 +100,7 @@ pub trait Image {
     type Data;
 
     /// Retrieve data from an image.
-    fn retrieve(&self, offset: Self::Offset, count: Self::Offset) -> Option<Vec<Self::Data>>;
+    fn retrieve(&self, offset: Self::Offset, count: Self::Offset) -> Option<&[Self::Data]>;
 
     /// Decode an architectural pointer to an image offset.
     /// 
@@ -124,6 +124,50 @@ impl<P, MV, S, IO> Region<P, MV, S, IO>
 //TODO: something better than just a vec pls...
 pub struct Memory<P, MV, S = P, IO = usize> {
     views: Vec<Region<P, MV, S, IO>>
+}
+
+impl<P, MV, S, IO> Memory<P, MV, S, IO> {
+    pub fn new() -> Self {
+        Memory {
+            views: Vec::new()
+        }
+    }
+
+    pub fn install_mem(&mut self, start: P, length: S) {
+        self.views.push(Region {
+            start: start,
+            length: length,
+            memtype: Behavior::Storage,
+            image: None
+        });
+    }
+
+    pub fn install_mem_image(&mut self, start: P, length: S, image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>) {
+        self.views.push(Region {
+            start: start,
+            length: length,
+            memtype: Behavior::Storage,
+            image: Some(image)
+        });
+    }
+
+    pub fn install_io(&mut self, start: P, length: S) {
+        self.views.push(Region {
+            start: start,
+            length: length,
+            memtype: Behavior::MappedIO,
+            image: None
+        });
+    }
+
+    pub fn openbus_mem(&mut self, start: P, length: S) {
+        self.views.push(Region {
+            start: start,
+            length: length,
+            memtype: Behavior::Invalid,
+            image: None
+        });
+    }
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>

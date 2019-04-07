@@ -17,18 +17,21 @@ pub enum Register {
 }
 
 /// The type which represents a value contained in an LR35902 register.
-type Value = u8;
+pub type Value = u8;
 
 /// The type which represents an LR35902 memory address.
-type Pointer = u16;
+pub type Pointer = u16;
 
 /// The type which represents a positive memory offset.
-type Offset = u16;
+pub type Offset = u16;
 
 /// The type which represents data stored in memory as seen by the processor.
-type Data = u8;
+pub type Data = u8;
 
-fn dis_op16(p: Pointer, mem: memory::Memory<Pointer, Data>, ctx: &reg::Context) -> ast::Operand {
+/// The compatible memory model type necessary to analyze GBz80 programs.
+pub type Bus = memory::Memory<Pointer, Data, Offset>;
+
+fn dis_op16(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
         if let Some(hibit) = mem.read_unit(p, ctx).into_concrete() {
             return op::int((hibit as u16) << 8 | lobit as u16);
@@ -38,7 +41,7 @@ fn dis_op16(p: Pointer, mem: memory::Memory<Pointer, Data>, ctx: &reg::Context) 
     op::miss()
 }
 
-fn dis_op8(p: Pointer, mem: memory::Memory<Pointer, Data>, ctx: &reg::Context) -> ast::Operand {
+fn dis_op8(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
         return op::int(lobit);
     }
@@ -85,7 +88,7 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///  * The size of the current instruction
 ///  * If the given instruction should halt the disassembly, or if execution
 ///    would (eventually) continue after the next
-fn disassemble(p: Pointer, mem: memory::Memory<Pointer, Data>, ctx: &reg::Context) -> (Option<ast::Instruction>, Offset, bool) {
+fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::Instruction>, Offset, bool) {
     match mem.read_unit(p, ctx).into_concrete() {
         Some(0xCB) => {
             //TODO: CB prefix

@@ -1,1 +1,1 @@
-mod lr35902;
+pub mod lr35902;
