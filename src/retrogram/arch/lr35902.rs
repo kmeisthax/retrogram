@@ -124,7 +124,7 @@ fn disassemble(p: Pointer, mem: memory::Memory<Pointer, Data>) -> (Option<ast::I
         Some(0xE0) => (Some(inst::new("ldh", vec![dis_op8(p+1, mem), op::sym("a")])), 2, true),
         Some(0xE8) => (Some(inst::new("add", vec![op::sym("sp"), dis_op8(p+1, mem)])), 2, true),
         Some(0xF0) => (Some(inst::new("ldh", vec![op::sym("a"), dis_op8(p+1, mem)])), 2, true),
-        Some(0xF8) => (Some(inst::new("ld", vec![op::sym("hl"), op::sym("sp+"), dis_op8(p+1, mem)])), 2, true), //TODO: use some kind of expression
+        Some(0xF8) => (Some(inst::new("ld", vec![op::sym("hl"), op::add(op::sym("sp"), dis_op8(p+1, mem))])), 2, true),
 
         Some(0xE2) => (Some(inst::new("ld", vec![op::sym("[c]"), op::sym("a")])), 1, true),
         Some(0xEA) => (Some(inst::new("ld", vec![dis_op16(p+1, mem), op::sym("a")])), 3, true),

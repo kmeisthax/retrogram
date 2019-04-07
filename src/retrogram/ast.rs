@@ -31,6 +31,9 @@ pub enum Operand<L = Literal> {
     /// A literal constant value.
     Literal(L),
 
+    /// The addition of two operands
+    Add(Box<Operand<L>>, Box<Operand<L>>),
+
     //TODO: Symbolized memory references
 }
 
@@ -57,6 +60,10 @@ impl<I, F, P> Operand<Literal<I, F, P>> {
 
     pub fn miss() -> Self {
         Operand::Literal(Literal::Missing)
+    }
+
+    pub fn add(op1: Self, op2: Self) -> Self {
+        Operand::Add(Box::new(op1), Box::new(op2))
     }
 }
 
