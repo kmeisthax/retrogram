@@ -146,7 +146,7 @@ impl<M> memory::Image for GameBoyROMImage<M> where M: Mapper {
 
     fn decode_addr(&self, ptr: Self::Pointer, base: Self::Pointer, context: &reg::Context) -> Option<Self::Offset> {
         if base == 0x0000 && ptr < 0x4000 {
-            Some(base as usize)
+            Some(ptr as usize)
         } else {
             self.mapper.decode_banked_addr(ptr, context)
         }
