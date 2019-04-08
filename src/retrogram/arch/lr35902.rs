@@ -31,19 +31,35 @@ pub type Data = u8;
 /// The compatible memory model type necessary to analyze GBz80 programs.
 pub type Bus = memory::Memory<Pointer, Data, Offset>;
 
-fn dis_op16(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
+fn int_op16(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
         if let Some(hibit) = mem.read_unit(p+1, ctx).into_concrete() {
-            return op::int((hibit as u16) << 8 | lobit as u16);
+            return op::int(((hibit as u16) << 8 | lobit as u16));
         }
     }
 
     op::miss()
 }
 
-fn dis_op8(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
+fn int_op8(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
         return op::int(lobit);
+    }
+
+    op::miss()
+}
+
+fn pcrel_op8(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
+    if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
+        return op::int(((p - 1) as i16 + (lobit as i8) as i16) as u16);
+    }
+
+    op::miss()
+}
+
+fn hram_op8(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
+    if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
+        return op::int(0xFF00 + lobit as u16);
     }
 
     op::miss()
@@ -111,28 +127,28 @@ pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::In
 
         //Z80 instructions that don't fit the pattern decoder below
         Some(0x00) => (Some(inst::new("nop", vec![])), 1, true),
-        Some(0x08) => (Some(inst::new("ld", vec![dis_op16(p+1, mem, ctx), op::sym("sp")])), 3, true),
+        Some(0x08) => (Some(inst::new("ld", vec![int_op16(p, mem, ctx), op::sym("sp")])), 3, true),
         Some(0x10) => (Some(inst::new("stop", vec![])), 1, true),
-        Some(0x18) => (Some(inst::new("jr", vec![dis_op8(p+1, mem, ctx)])), 2, false),
+        Some(0x18) => (Some(inst::new("jr", vec![pcrel_op8(p+1, mem, ctx)])), 2, false),
         Some(0x76) => (Some(inst::new("halt", vec![])), 1, true), //encoded as ld [hl], [hl]
 
-        Some(0xC3) => (Some(inst::new("jp", vec![dis_op16(p+1, mem, ctx)])), 3, false),
-        Some(0xCD) => (Some(inst::new("call", vec![dis_op16(p+1, mem, ctx)])), 3, true),
+        Some(0xC3) => (Some(inst::new("jp", vec![int_op16(p+1, mem, ctx)])), 3, false),
+        Some(0xCD) => (Some(inst::new("call", vec![int_op16(p+1, mem, ctx)])), 3, true),
 
         Some(0xC9) => (Some(inst::new("ret", vec![])), 1, false),
         Some(0xD9) => (Some(inst::new("reti", vec![])), 1, false),
         Some(0xE9) => (Some(inst::new("jp", vec![op::sym("[hl]")])), 1, false),
         Some(0xF9) => (Some(inst::new("ld", vec![op::sym("sp"), op::sym("hl")])), 1, true),
 
-        Some(0xE0) => (Some(inst::new("ldh", vec![dis_op8(p+1, mem, ctx), op::sym("a")])), 2, true),
-        Some(0xE8) => (Some(inst::new("add", vec![op::sym("sp"), dis_op8(p+1, mem, ctx)])), 2, true),
-        Some(0xF0) => (Some(inst::new("ldh", vec![op::sym("a"), dis_op8(p+1, mem, ctx)])), 2, true),
-        Some(0xF8) => (Some(inst::new("ld", vec![op::sym("hl"), op::add(op::sym("sp"), dis_op8(p+1, mem, ctx))])), 2, true),
+        Some(0xE0) => (Some(inst::new("ldh", vec![hram_op8(p+1, mem, ctx), op::sym("a")])), 2, true),
+        Some(0xE8) => (Some(inst::new("add", vec![op::sym("sp"), int_op8(p+1, mem, ctx)])), 2, true),
+        Some(0xF0) => (Some(inst::new("ldh", vec![op::sym("a"), hram_op8(p+1, mem, ctx)])), 2, true),
+        Some(0xF8) => (Some(inst::new("ld", vec![op::sym("hl"), op::add(op::sym("sp"), int_op8(p+1, mem, ctx))])), 2, true),
 
         Some(0xE2) => (Some(inst::new("ld", vec![op::sym("[c]"), op::sym("a")])), 1, true),
-        Some(0xEA) => (Some(inst::new("ld", vec![dis_op16(p+1, mem, ctx), op::sym("a")])), 3, true),
+        Some(0xEA) => (Some(inst::new("ld", vec![int_op16(p+1, mem, ctx), op::sym("a")])), 3, true),
         Some(0xF2) => (Some(inst::new("ld", vec![op::sym("a"), op::sym("[c]")])), 1, true),
-        Some(0xFA) => (Some(inst::new("ld", vec![op::sym("a"), dis_op16(p+1, mem, ctx)])), 3, true),
+        Some(0xFA) => (Some(inst::new("ld", vec![op::sym("a"), int_op16(p+1, mem, ctx)])), 3, true),
 
         Some(0xF3) => (Some(inst::new("di", vec![])), 1, true),
         Some(0xFB) => (Some(inst::new("ei", vec![])), 1, true),
@@ -148,12 +164,12 @@ pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::In
             let aluop = ALU_OPS[((op >> 3) & 0x07) as usize];
             let stackpair = STACK_TARGET_PAIRS[((op >> 4) & 0x03) as usize];
 
-            //decode `op` into aa?bcddd. This creates a nice visual table for
+            //decode `op` into aab?cddd. This creates a nice visual table for
             //the Z80's semiperiodic instruction encoding
-            match ((op >> 6) & 0x03, (op >> 4) & 0x01, (op >> 3) & 0x01, op & 0x07) {
+            match ((op >> 6) & 0x03, (op >> 5) & 0x01, (op >> 3) & 0x01, op & 0x07) {
                 (0, 0, _, 0) => panic!("Instruction shouldn't be decoded here"), /* 00, 08, 10, 18 */
-                (0, 1, _, 0) => (Some(inst::new("jr", vec![op::sym(condcode), dis_op8(p+1, mem, ctx)])), 2, false),
-                (0, _, 0, 1) => (Some(inst::new("ld", vec![op::sym(targetpair), dis_op16(p+1, mem, ctx)])), 3, true),
+                (0, 1, _, 0) => (Some(inst::new("jr", vec![op::sym(condcode), pcrel_op8(p+1, mem, ctx)])), 2, true),
+                (0, _, 0, 1) => (Some(inst::new("ld", vec![op::sym(targetpair), int_op16(p+1, mem, ctx)])), 3, true),
                 (0, _, 1, 1) => (Some(inst::new("add", vec![op::sym("hl"), op::sym(targetpair)])), 1, true),
                 (0, _, 0, 2) => (Some(inst::new("ld", vec![op::sym(targetmem), op::sym("a")])), 1, true),
                 (0, _, 1, 2) => (Some(inst::new("ld", vec![op::sym("a"), op::sym(targetmem)])), 1, true),
@@ -161,22 +177,22 @@ pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::In
                 (0, _, 1, 3) => (Some(inst::new("dec", vec![op::sym(targetpair)])), 1, true),
                 (0, _, _, 4) => (Some(inst::new("inc", vec![op::sym(targetreg)])), 1, true),
                 (0, _, _, 5) => (Some(inst::new("dec", vec![op::sym(targetreg)])), 1, true),
-                (0, _, _, 6) => (Some(inst::new("ld", vec![op::sym(targetreg), dis_op8(p+1, mem, ctx)])), 2, true),
+                (0, _, _, 6) => (Some(inst::new("ld", vec![op::sym(targetreg), int_op8(p+1, mem, ctx)])), 2, true),
                 (0, _, _, 7) => (Some(inst::new(bitop, vec![])), 1, true),
                 (1, _, _, _) => (Some(inst::new("ld", vec![op::sym(targetreg2), op::sym(targetreg)])), 1, true),
                 (2, _, _, _) => (Some(inst::new(aluop, vec![op::sym("a"), op::sym(targetreg2)])), 1, true),
-                (3, 0, _, 0) => (Some(inst::new("ret", vec![op::sym(condcode)])), 1, false),
+                (3, 0, _, 0) => (Some(inst::new("ret", vec![op::sym(condcode)])), 1, true),
                 (3, 1, _, 0) => panic!("Instruction shouldn't be decoded here"), /* E0, E8, F0, F8 */
                 (3, _, 0, 1) => (Some(inst::new("pop", vec![op::sym(stackpair)])), 1, true),
                 (3, _, 1, 1) => panic!("Instruction shouldn't be decoded here"), /* C9, D9, E9, F9 */
-                (3, 0, _, 2) => (Some(inst::new("jp", vec![op::sym(condcode), dis_op16(p+1, mem, ctx)])), 3, true),
+                (3, 0, _, 2) => (Some(inst::new("jp", vec![op::sym(condcode), int_op16(p+1, mem, ctx)])), 3, true),
                 (3, 1, _, 2) => panic!("Instruction shouldn't be decoded here"), /* E2, EA, F2, FA */
                 (3, _, _, 3) => (None, 0, false),
-                (3, 0, _, 4) => (Some(inst::new("call", vec![op::sym(condcode), dis_op16(p+1, mem, ctx)])), 3, true),
+                (3, 0, _, 4) => (Some(inst::new("call", vec![op::sym(condcode), int_op16(p+1, mem, ctx)])), 3, true),
                 (3, 1, _, 4) => (None, 0, false),
                 (3, _, 0, 5) => (Some(inst::new("push", vec![op::sym(stackpair)])), 1, true),
                 (3, _, 1, 5) => (None, 0, false),
-                (3, _, _, 6) => (Some(inst::new(aluop, vec![op::sym("a"), dis_op8(p+1, mem, ctx)])), 2, true),
+                (3, _, _, 6) => (Some(inst::new(aluop, vec![op::sym("a"), int_op8(p+1, mem, ctx)])), 2, true),
                 (3, _, _, 7) => (Some(inst::new("rst", vec![op::ptr(op & 0x30)])), 1, true),
 
                 _ => (None, 0, false)
