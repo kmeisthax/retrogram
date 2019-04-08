@@ -33,7 +33,7 @@ pub type Bus = memory::Memory<Pointer, Data, Offset>;
 
 fn dis_op16(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
-        if let Some(hibit) = mem.read_unit(p, ctx).into_concrete() {
+        if let Some(hibit) = mem.read_unit(p+1, ctx).into_concrete() {
             return op::int((hibit as u16) << 8 | lobit as u16);
         }
     }
@@ -86,9 +86,9 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///  * A string representation of the instruction encountered, if there is a
 ///    valid instruction at P; otherwise `None`
 ///  * The size of the current instruction
-///  * If the given instruction should halt the disassembly, or if execution
-///    would (eventually) continue after the next
-fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::Instruction>, Offset, bool) {
+///  * True, if execution would continue at the instruction following this one,
+///    or false if the instruction terminates the current basic block
+pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::Instruction>, Offset, bool) {
     match mem.read_unit(p, ctx).into_concrete() {
         Some(0xCB) => {
             //TODO: CB prefix
