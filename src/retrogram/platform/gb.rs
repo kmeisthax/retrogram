@@ -42,7 +42,7 @@ impl MBC1Mapper {
 
 impl Mapper for MBC1Mapper {
     fn decode_banked_addr(&self, ptr: lr35902::Pointer, context: &reg::Context) -> Option<usize> {
-        match context.get_platform_context("B").into_concrete() {
+        match context.get_platform_context("R").into_concrete() {
             Some(0x00) => None,
             Some(0x20) => None,
             Some(0x40) => None,
@@ -65,7 +65,7 @@ impl MBC2Mapper {
 
 impl Mapper for MBC2Mapper {
     fn decode_banked_addr(&self, ptr: lr35902::Pointer, context: &reg::Context) -> Option<usize> {
-        match context.get_platform_context("B").into_concrete() {
+        match context.get_platform_context("R").into_concrete() {
             Some(b) => Some(((ptr as usize) & 0x3FFF) + ((b & 0xF) * 0x4000) as usize),
             None => None
         }
@@ -84,7 +84,7 @@ impl MBC3Mapper {
 
 impl Mapper for MBC3Mapper {
     fn decode_banked_addr(&self, ptr: lr35902::Pointer, context: &reg::Context) -> Option<usize> {
-        match context.get_platform_context("B").into_concrete() {
+        match context.get_platform_context("R").into_concrete() {
             Some(b) => Some(((ptr as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None
         }
@@ -103,7 +103,7 @@ impl MBC5Mapper {
 
 impl Mapper for MBC5Mapper {
     fn decode_banked_addr(&self, ptr: lr35902::Pointer, context: &reg::Context) -> Option<usize> {
-        match context.get_platform_context("B").into_concrete() {
+        match context.get_platform_context("R").into_concrete() {
             Some(b) => Some(((ptr as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None
         }
