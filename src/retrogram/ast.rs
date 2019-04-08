@@ -71,11 +71,11 @@ impl<I, F, P> Operand<Literal<I, F, P>> {
     }
 }
 
-impl<I, F, P> fmt::Display for Operand<Literal<I, F, P>> where I: fmt::Display, F: fmt::Display, P: fmt::Display {
+impl<I, F, P> fmt::Display for Operand<Literal<I, F, P>> where I: fmt::Display + fmt::LowerHex, F: fmt::Display, P: fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Operand::Symbol(s) => write!(f, "{}", s),
-            Operand::Literal(Literal::Integer(i)) => write!(f, "{}", i),
+            Operand::Literal(Literal::Integer(i)) => write!(f, "${:x}", i),
             Operand::Literal(Literal::Float(fl)) => write!(f, "{}", fl),
             Operand::Literal(Literal::Pointer(p)) => write!(f, "{}", p),
             Operand::Literal(Literal::String(s)) => write!(f, "{}", s),
