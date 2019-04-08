@@ -26,6 +26,7 @@ fn main() -> io::Result<()> {
     let mut image = "".to_string();
     let mut platform = None;
     let mut arch = None;
+    let mut start_pc = None;
 
     {
         let mut ap = argparse::ArgumentParser::new();
@@ -34,6 +35,7 @@ fn main() -> io::Result<()> {
         ap.refer(&mut image).add_argument("image", argparse::Store, "The program image file to analyze");
         ap.refer(&mut platform).add_option(&["--platform"], argparse::StoreOption, "What platform to expect");
         ap.refer(&mut arch).add_option(&["--arch"], argparse::StoreOption, "What architecture to expect");
+        ap.refer(&mut start_pc).add_option(&["--start_pc"], argparse::StoreOption, "The PC value to start analysis from");
 
         ap.parse_args_or_exit();
     }
@@ -48,7 +50,7 @@ fn main() -> io::Result<()> {
 
                     let plat = platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?;
                     let ctxt = reg::Context::new();
-                    let mut pc = 0x0100;
+                    let mut pc = start_pc.unwrap_or(0x0100);
 
                     loop {
                         match arch::lr35902::disassemble(pc, &plat, &ctxt) {
