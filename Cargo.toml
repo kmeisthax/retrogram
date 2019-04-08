@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 num = "0.2.0"
 num-traits = "0.2.6"
+argparse = "0.2.2"

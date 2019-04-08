@@ -1,5 +1,5 @@
 mod memory;
-mod reg;
+pub mod reg;
 mod ast;
-mod arch;
-mod platform;
+pub mod arch;
+pub mod platform;

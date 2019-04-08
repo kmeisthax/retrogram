@@ -8,7 +8,7 @@ pub mod gb;
 use std::str;
 
 /// Enumeration of all platforms that ship with Retrogram.
-enum PlatformName {
+pub enum PlatformName {
     GB
 }
 
@@ -17,7 +17,7 @@ impl str::FromStr for PlatformName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_ref() {
-            "GB" => Ok(PlatformName::GB),
+            "gb" => Ok(PlatformName::GB),
             _ => Err(())
         }
     }

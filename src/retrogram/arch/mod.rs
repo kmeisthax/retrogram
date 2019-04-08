@@ -5,7 +5,7 @@ pub mod lr35902;
 use std::str;
 
 /// Enumeration of all architectures that ship with Retrogram.
-enum ArchName {
+pub enum ArchName {
     LR35902
 }
 

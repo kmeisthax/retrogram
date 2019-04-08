@@ -14,6 +14,12 @@ pub struct Context {
 }
 
 impl Context {
+    pub fn new() -> Self {
+        Context {
+            contexts: HashMap::new()
+        }
+    }
+    
     /// Get an architecturally-defined context.
     /// 
     /// Architectural contexts are prefixed with an `A` to avoid conflicts with
