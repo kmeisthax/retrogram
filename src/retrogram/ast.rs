@@ -17,8 +17,11 @@ pub enum Literal<I = u64, F = f64, P = I> {
     /// Some kind of floating-point constant
     Float(F),
 
-    /// Some kind of pointer constant
-    Pointer(P),
+    /// Pointer constant to data (such as a global variable etc)
+    DataPtr(P),
+
+    /// Pointer to code
+    CodePtr(P),
 
     /// Some kind of string constant
     String(String),
@@ -59,8 +62,12 @@ impl<I, F, P> Operand<Literal<I, F, P>> {
         Operand::Literal(Literal::Float(F::from(flot)))
     }
 
-    pub fn ptr<MP>(ptr: MP) -> Self where P: From<MP> {
-        Operand::Literal(Literal::Pointer(P::from(ptr)))
+    pub fn dptr<MP>(ptr: MP) -> Self where P: From<MP> {
+        Operand::Literal(Literal::DataPtr(P::from(ptr)))
+    }
+
+    pub fn cptr<MP>(ptr: MP) -> Self where P: From<MP> {
+        Operand::Literal(Literal::CodePtr(P::from(ptr)))
     }
 
     pub fn str(s: &str) -> Self {
@@ -80,13 +87,14 @@ impl<I, F, P> Operand<Literal<I, F, P>> {
     }
 }
 
-impl<I, F, P> fmt::Display for Operand<Literal<I, F, P>> where I: fmt::Display + fmt::LowerHex, F: fmt::Display, P: fmt::Display {
+impl<I, F, P> fmt::Display for Operand<Literal<I, F, P>> where I: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Operand::Symbol(s) => write!(f, "{}", s),
-            Operand::Literal(Literal::Integer(i)) => write!(f, "${:x}", i),
+            Operand::Literal(Literal::Integer(i)) => write!(f, "{}", i),
             Operand::Literal(Literal::Float(fl)) => write!(f, "{}", fl),
-            Operand::Literal(Literal::Pointer(p)) => write!(f, "{}", p),
+            Operand::Literal(Literal::DataPtr(p)) => write!(f, "${:x}", p),
+            Operand::Literal(Literal::CodePtr(p)) => write!(f, "${:x}", p),
             Operand::Literal(Literal::String(s)) => write!(f, "{}", s),
             Operand::Literal(Literal::Missing) => write!(f, "?"),
             Operand::Indirect(op) => write!(f, "[{}]", op),

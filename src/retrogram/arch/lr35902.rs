@@ -34,7 +34,27 @@ pub type Bus = memory::Memory<Pointer, Data, Offset>;
 fn int_op16(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
         if let Some(hibit) = mem.read_unit(p+1, ctx).into_concrete() {
-            return op::int(((hibit as u16) << 8 | lobit as u16));
+            return op::int((hibit as u16) << 8 | lobit as u16);
+        }
+    }
+
+    op::miss()
+}
+
+fn dptr_op16(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
+    if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
+        if let Some(hibit) = mem.read_unit(p+1, ctx).into_concrete() {
+            return op::dptr((hibit as u16) << 8 | lobit as u16);
+        }
+    }
+
+    op::miss()
+}
+
+fn cptr_op16(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
+    if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
+        if let Some(hibit) = mem.read_unit(p+1, ctx).into_concrete() {
+            return op::cptr((hibit as u16) << 8 | lobit as u16);
         }
     }
 
@@ -51,7 +71,7 @@ fn int_op8(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
 
 fn pcrel_op8(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
-        return op::int(((p - 1) as i16 + (lobit as i8) as i16) as u16);
+        return op::cptr(((p - 1) as i16 + (lobit as i8) as i16) as u16);
     }
 
     op::miss()
@@ -59,7 +79,7 @@ fn pcrel_op8(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
 
 fn hram_op8(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p, ctx).into_concrete() {
-        return op::int(0xFF00 + lobit as u16);
+        return op::dptr(0xFF00 + lobit as u16);
     }
 
     op::miss()
@@ -129,13 +149,13 @@ pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::In
 
         //Z80 instructions that don't fit the pattern decoder below
         Some(0x00) => (Some(inst::new("nop", vec![])), 1, true),
-        Some(0x08) => (Some(inst::new("ld", vec![op::indir(int_op16(p, mem, ctx)), op::sym("sp")])), 3, true),
+        Some(0x08) => (Some(inst::new("ld", vec![op::indir(dptr_op16(p, mem, ctx)), op::sym("sp")])), 3, true),
         Some(0x10) => (Some(inst::new("stop", vec![])), 1, true),
         Some(0x18) => (Some(inst::new("jr", vec![pcrel_op8(p+1, mem, ctx)])), 2, false),
         Some(0x76) => (Some(inst::new("halt", vec![])), 1, true), //encoded as ld [hl], [hl]
 
-        Some(0xC3) => (Some(inst::new("jp", vec![int_op16(p+1, mem, ctx)])), 3, false),
-        Some(0xCD) => (Some(inst::new("call", vec![int_op16(p+1, mem, ctx)])), 3, true),
+        Some(0xC3) => (Some(inst::new("jp", vec![cptr_op16(p+1, mem, ctx)])), 3, false),
+        Some(0xCD) => (Some(inst::new("call", vec![cptr_op16(p+1, mem, ctx)])), 3, true),
 
         Some(0xC9) => (Some(inst::new("ret", vec![])), 1, false),
         Some(0xD9) => (Some(inst::new("reti", vec![])), 1, false),
@@ -148,9 +168,9 @@ pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::In
         Some(0xF8) => (Some(inst::new("ld", vec![op::sym("hl"), op::add(op::sym("sp"), int_op8(p+1, mem, ctx))])), 2, true),
 
         Some(0xE2) => (Some(inst::new("ld", vec![op::indir(op::sym("c")), op::sym("a")])), 1, true),
-        Some(0xEA) => (Some(inst::new("ld", vec![op::indir(int_op16(p+1, mem, ctx)), op::sym("a")])), 3, true),
+        Some(0xEA) => (Some(inst::new("ld", vec![op::indir(dptr_op16(p+1, mem, ctx)), op::sym("a")])), 3, true),
         Some(0xF2) => (Some(inst::new("ld", vec![op::sym("a"), op::indir(op::sym("c"))])), 1, true),
-        Some(0xFA) => (Some(inst::new("ld", vec![op::sym("a"), op::indir(int_op16(p+1, mem, ctx))])), 3, true),
+        Some(0xFA) => (Some(inst::new("ld", vec![op::sym("a"), op::indir(dptr_op16(p+1, mem, ctx))])), 3, true),
 
         Some(0xF3) => (Some(inst::new("di", vec![])), 1, true),
         Some(0xFB) => (Some(inst::new("ei", vec![])), 1, true),
@@ -187,15 +207,15 @@ pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::In
                 (3, 1, _, 0) => panic!("Instruction shouldn't be decoded here"), /* E0, E8, F0, F8 */
                 (3, _, 0, 1) => (Some(inst::new("pop", vec![op::sym(stackpair)])), 1, true),
                 (3, _, 1, 1) => panic!("Instruction shouldn't be decoded here"), /* C9, D9, E9, F9 */
-                (3, 0, _, 2) => (Some(inst::new("jp", vec![op::sym(condcode), int_op16(p+1, mem, ctx)])), 3, true),
+                (3, 0, _, 2) => (Some(inst::new("jp", vec![op::sym(condcode), cptr_op16(p+1, mem, ctx)])), 3, true),
                 (3, 1, _, 2) => panic!("Instruction shouldn't be decoded here"), /* E2, EA, F2, FA */
                 (3, _, _, 3) => (None, 0, false),
-                (3, 0, _, 4) => (Some(inst::new("call", vec![op::sym(condcode), int_op16(p+1, mem, ctx)])), 3, true),
+                (3, 0, _, 4) => (Some(inst::new("call", vec![op::sym(condcode), cptr_op16(p+1, mem, ctx)])), 3, true),
                 (3, 1, _, 4) => (None, 0, false),
                 (3, _, 0, 5) => (Some(inst::new("push", vec![op::sym(stackpair)])), 1, true),
                 (3, _, 1, 5) => (None, 0, false),
                 (3, _, _, 6) => (Some(inst::new(aluop, vec![op::sym("a"), int_op8(p+1, mem, ctx)])), 2, true),
-                (3, _, _, 7) => (Some(inst::new("rst", vec![op::ptr(op & 0x30)])), 1, true),
+                (3, _, _, 7) => (Some(inst::new("rst", vec![op::cptr(op & 0x30)])), 1, true),
 
                 _ => (None, 0, false)
             }
