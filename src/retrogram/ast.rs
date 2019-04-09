@@ -142,8 +142,45 @@ impl<L> fmt::Display for Instruction<L> where Operand<L>: fmt::Display {
     }
 }
 
+pub struct Label {
+    /// Name of the label.
+    name: String,
+
+    /// Whether or not the label can be referred to outside of it's own local
+    /// block. All global labels must have a unique name.
+    global: bool,
+}
+
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.global {
+            write!(f, "{}:", self.name)
+        } else {
+            write!(f, ".{}", self.name)
+        }
+    }
+}
+
 pub struct Line<L = Literal> {
-    label: Option<String>,
-    instruction: Instruction<L>,
+    label: Option<Label>,
+    instruction: Option<Instruction<L>>,
     comment: Option<String>
+}
+
+impl<L> fmt::Display for Line<L> where Instruction<L>: fmt::Display {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(ref label) = self.label {
+            write!(f, "{}", label)?;
+        }
+
+        if let Some(ref instruction) = self.instruction {
+            write!(f, "{}", instruction)?;
+        }
+
+        if let Some(ref comment) = self.comment {
+            write!(f, ";{}", comment)?;
+        }
+
+        write!(f, "\n")
+    }
 }
