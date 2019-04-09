@@ -9,6 +9,7 @@ use std::fmt;
 ///will define a different, potentially incompatible AST. (Besides, what
 ///architecture are you using that needs `u128` pointers? AS/400 TIMI doesn't
 ///count.)
+#[derive(Clone)]
 pub enum Literal<I = u64, F = f64, P = I> {
     /// Some kind of integer constant
     Integer(I),
@@ -26,6 +27,7 @@ pub enum Literal<I = u64, F = f64, P = I> {
     Missing
 }
 
+#[derive(Clone)]
 pub enum Operand<L = Literal> {
     /// The name of an architecturally defined register, or some derivative of
     /// that register, or another non-register operand defined by the
@@ -34,6 +36,9 @@ pub enum Operand<L = Literal> {
 
     /// A literal constant value.
     Literal(L),
+
+    /// The indirection of the given operand. (e.g. HL to [HL])
+    Indirect(Box<Operand<L>>),
 
     /// The addition of two operands
     Add(Box<Operand<L>>, Box<Operand<L>>),
@@ -66,6 +71,10 @@ impl<I, F, P> Operand<Literal<I, F, P>> {
         Operand::Literal(Literal::Missing)
     }
 
+    pub fn indir(op: Self) -> Self {
+        Operand::Indirect(Box::new(op))
+    }
+
     pub fn add(op1: Self, op2: Self) -> Self {
         Operand::Add(Box::new(op1), Box::new(op2))
     }
@@ -80,6 +89,7 @@ impl<I, F, P> fmt::Display for Operand<Literal<I, F, P>> where I: fmt::Display +
             Operand::Literal(Literal::Pointer(p)) => write!(f, "{}", p),
             Operand::Literal(Literal::String(s)) => write!(f, "{}", s),
             Operand::Literal(Literal::Missing) => write!(f, "?"),
+            Operand::Indirect(op) => write!(f, "[{}]", op),
             Operand::Add(op1, op2) => write!(f, "{} + {}", op1, op2),
         }
     }

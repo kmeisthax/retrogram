@@ -65,9 +65,11 @@ fn hram_op8(p: Pointer, mem: &Bus, ctx: &reg::Context) -> ast::Operand {
     op::miss()
 }
 
-/// z80 instruction encoding uses this 3-bit enumeration to encode the target of
-/// 8-bit ALU or register transfer operations.
-static ALU_TARGET_REGS: [&str; 8] = ["b", "c", "d", "e", "h", "l", "[hl]", "a"];
+lazy_static! {
+    /// z80 instruction encoding uses this 3-bit enumeration to encode the target of
+    /// 8-bit ALU or register transfer operations.
+    static ref ALU_TARGET_REGS: [ast::Operand; 8] = [op::sym("b"), op::sym("c"), op::sym("d"), op::sym("e"), op::sym("h"), op::sym("l"), op::indir(op::sym("hl")), op::sym("a")];
+}
 
 /// z80 instruction encoding uses this 2-bit enumeration to encode the target of
 /// 16-bit ALU operations.
@@ -78,7 +80,7 @@ static ALU_TARGET_PAIRS: [&str; 4] = ["bc", "de", "hl", "sp"];
 static STACK_TARGET_PAIRS: [&str; 4] = ["bc", "de", "hl", "af"];
 
 /// z80 instruction encoding uses this 2-bit enumeration for memory pointers.
-static ALU_TARGET_MEM: [&str; 4] = ["[bc]", "[de]", "[hli]", "[hld]"];
+static ALU_TARGET_MEM: [&str; 4] = ["bc", "de", "hli", "hld"];
 
 /// z80 instruction encoding uses this 3-bit enumeration to encode most common
 /// ALU operations. The source register is always A for these operations, which
@@ -110,14 +112,14 @@ pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::In
             //TODO: CB prefix
             match mem.read_unit(p+1, ctx).into_concrete() {
                 Some(subop) => {
-                    let targetreg = ALU_TARGET_REGS[(subop & 0x07) as usize];
+                    let targetreg = ALU_TARGET_REGS[(subop & 0x07) as usize].clone();
                     let new_bitop = NEW_ALU_BITOPS[((subop >> 3) & 0x07) as usize];
 
                     match ((subop >> 6) & 0x03, (subop >> 3) & 0x07, subop & 0x07) {
-                        (0, _, _) => (Some(inst::new(new_bitop, vec![op::sym(targetreg)])), 2, true),
-                        (1, bit, _) => (Some(inst::new("bit", vec![op::int(bit), op::sym(targetreg)])), 2, true),
-                        (2, bit, _) => (Some(inst::new("res", vec![op::int(bit), op::sym(targetreg)])), 2, true),
-                        (3, bit, _) => (Some(inst::new("set", vec![op::int(bit), op::sym(targetreg)])), 2, true),
+                        (0, _, _) => (Some(inst::new(new_bitop, vec![targetreg])), 2, true),
+                        (1, bit, _) => (Some(inst::new("bit", vec![op::int(bit), targetreg])), 2, true),
+                        (2, bit, _) => (Some(inst::new("res", vec![op::int(bit), targetreg])), 2, true),
+                        (3, bit, _) => (Some(inst::new("set", vec![op::int(bit), targetreg])), 2, true),
                         _ => (None, 0, false)
                     }
                 },
@@ -127,7 +129,7 @@ pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::In
 
         //Z80 instructions that don't fit the pattern decoder below
         Some(0x00) => (Some(inst::new("nop", vec![])), 1, true),
-        Some(0x08) => (Some(inst::new("ld", vec![int_op16(p, mem, ctx), op::sym("sp")])), 3, true),
+        Some(0x08) => (Some(inst::new("ld", vec![op::indir(int_op16(p, mem, ctx)), op::sym("sp")])), 3, true),
         Some(0x10) => (Some(inst::new("stop", vec![])), 1, true),
         Some(0x18) => (Some(inst::new("jr", vec![pcrel_op8(p+1, mem, ctx)])), 2, false),
         Some(0x76) => (Some(inst::new("halt", vec![])), 1, true), //encoded as ld [hl], [hl]
@@ -137,18 +139,18 @@ pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::In
 
         Some(0xC9) => (Some(inst::new("ret", vec![])), 1, false),
         Some(0xD9) => (Some(inst::new("reti", vec![])), 1, false),
-        Some(0xE9) => (Some(inst::new("jp", vec![op::sym("[hl]")])), 1, false),
+        Some(0xE9) => (Some(inst::new("jp", vec![op::indir(op::sym("hl"))])), 1, false),
         Some(0xF9) => (Some(inst::new("ld", vec![op::sym("sp"), op::sym("hl")])), 1, true),
 
-        Some(0xE0) => (Some(inst::new("ldh", vec![hram_op8(p+1, mem, ctx), op::sym("a")])), 2, true),
+        Some(0xE0) => (Some(inst::new("ldh", vec![op::indir(hram_op8(p+1, mem, ctx)), op::sym("a")])), 2, true),
         Some(0xE8) => (Some(inst::new("add", vec![op::sym("sp"), int_op8(p+1, mem, ctx)])), 2, true),
-        Some(0xF0) => (Some(inst::new("ldh", vec![op::sym("a"), hram_op8(p+1, mem, ctx)])), 2, true),
+        Some(0xF0) => (Some(inst::new("ldh", vec![op::sym("a"), op::indir(hram_op8(p+1, mem, ctx))])), 2, true),
         Some(0xF8) => (Some(inst::new("ld", vec![op::sym("hl"), op::add(op::sym("sp"), int_op8(p+1, mem, ctx))])), 2, true),
 
-        Some(0xE2) => (Some(inst::new("ld", vec![op::sym("[c]"), op::sym("a")])), 1, true),
-        Some(0xEA) => (Some(inst::new("ld", vec![int_op16(p+1, mem, ctx), op::sym("a")])), 3, true),
-        Some(0xF2) => (Some(inst::new("ld", vec![op::sym("a"), op::sym("[c]")])), 1, true),
-        Some(0xFA) => (Some(inst::new("ld", vec![op::sym("a"), int_op16(p+1, mem, ctx)])), 3, true),
+        Some(0xE2) => (Some(inst::new("ld", vec![op::indir(op::sym("c")), op::sym("a")])), 1, true),
+        Some(0xEA) => (Some(inst::new("ld", vec![op::indir(int_op16(p+1, mem, ctx)), op::sym("a")])), 3, true),
+        Some(0xF2) => (Some(inst::new("ld", vec![op::sym("a"), op::indir(op::sym("c"))])), 1, true),
+        Some(0xFA) => (Some(inst::new("ld", vec![op::sym("a"), op::indir(int_op16(p+1, mem, ctx))])), 3, true),
 
         Some(0xF3) => (Some(inst::new("di", vec![])), 1, true),
         Some(0xFB) => (Some(inst::new("ei", vec![])), 1, true),
@@ -157,10 +159,10 @@ pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::In
         Some(op) => {
             let condcode = ALU_CONDCODE[((op >> 3) & 0x03) as usize];
             let targetpair = ALU_TARGET_PAIRS[((op >> 4) & 0x03) as usize];
-            let targetreg = ALU_TARGET_REGS[((op >> 3) & 0x07) as usize];
+            let targetreg = ALU_TARGET_REGS[((op >> 3) & 0x07) as usize].clone();
             let targetmem = ALU_TARGET_MEM[((op >> 4) & 0x03) as usize];
             let bitop = ALU_BITOPS[((op >> 3) & 0x07) as usize];
-            let targetreg2 = ALU_TARGET_REGS[(op & 0x07) as usize];
+            let targetreg2 = ALU_TARGET_REGS[(op & 0x07) as usize].clone();
             let aluop = ALU_OPS[((op >> 3) & 0x07) as usize];
             let stackpair = STACK_TARGET_PAIRS[((op >> 4) & 0x03) as usize];
 
@@ -171,16 +173,16 @@ pub fn disassemble(p: Pointer, mem: &Bus, ctx: &reg::Context) -> (Option<ast::In
                 (0, 1, _, 0) => (Some(inst::new("jr", vec![op::sym(condcode), pcrel_op8(p+1, mem, ctx)])), 2, true),
                 (0, _, 0, 1) => (Some(inst::new("ld", vec![op::sym(targetpair), int_op16(p+1, mem, ctx)])), 3, true),
                 (0, _, 1, 1) => (Some(inst::new("add", vec![op::sym("hl"), op::sym(targetpair)])), 1, true),
-                (0, _, 0, 2) => (Some(inst::new("ld", vec![op::sym(targetmem), op::sym("a")])), 1, true),
-                (0, _, 1, 2) => (Some(inst::new("ld", vec![op::sym("a"), op::sym(targetmem)])), 1, true),
+                (0, _, 0, 2) => (Some(inst::new("ld", vec![op::indir(op::sym(targetmem)), op::sym("a")])), 1, true),
+                (0, _, 1, 2) => (Some(inst::new("ld", vec![op::sym("a"), op::indir(op::sym(targetmem))])), 1, true),
                 (0, _, 0, 3) => (Some(inst::new("inc", vec![op::sym(targetpair)])), 1, true),
                 (0, _, 1, 3) => (Some(inst::new("dec", vec![op::sym(targetpair)])), 1, true),
-                (0, _, _, 4) => (Some(inst::new("inc", vec![op::sym(targetreg)])), 1, true),
-                (0, _, _, 5) => (Some(inst::new("dec", vec![op::sym(targetreg)])), 1, true),
-                (0, _, _, 6) => (Some(inst::new("ld", vec![op::sym(targetreg), int_op8(p+1, mem, ctx)])), 2, true),
+                (0, _, _, 4) => (Some(inst::new("inc", vec![targetreg])), 1, true),
+                (0, _, _, 5) => (Some(inst::new("dec", vec![targetreg])), 1, true),
+                (0, _, _, 6) => (Some(inst::new("ld", vec![targetreg, int_op8(p+1, mem, ctx)])), 2, true),
                 (0, _, _, 7) => (Some(inst::new(bitop, vec![])), 1, true),
-                (1, _, _, _) => (Some(inst::new("ld", vec![op::sym(targetreg2), op::sym(targetreg)])), 1, true),
-                (2, _, _, _) => (Some(inst::new(aluop, vec![op::sym("a"), op::sym(targetreg2)])), 1, true),
+                (1, _, _, _) => (Some(inst::new("ld", vec![targetreg2, targetreg])), 1, true),
+                (2, _, _, _) => (Some(inst::new(aluop, vec![op::sym("a"), targetreg2])), 1, true),
                 (3, 0, _, 0) => (Some(inst::new("ret", vec![op::sym(condcode)])), 1, true),
                 (3, 1, _, 0) => panic!("Instruction shouldn't be decoded here"), /* E0, E8, F0, F8 */
                 (3, _, 0, 1) => (Some(inst::new("pop", vec![op::sym(stackpair)])), 1, true),

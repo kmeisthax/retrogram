@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 mod retrogram;
 
 use std::{str, fs, io};
