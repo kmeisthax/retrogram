@@ -197,3 +197,23 @@ pub fn construct_platform<F>(file: &mut F, pv: PlatformVariant) -> io::Result<lr
 
     Ok(bus)
 }
+
+pub fn analyze<F>(file: &mut F, start_pc: Option<u16>) -> io::Result<()> where F: io::Read {
+    let plat = construct_platform(file, PlatformVariant::MBC5Mapper)?;
+    let ctxt = reg::Context::new();
+    let mut pc = start_pc.unwrap_or(0x0100);
+
+    loop {
+        match lr35902::disassemble(pc, &plat, &ctxt) {
+            (Some(instr), size, is_nonfinal) => {
+                println!("{}", instr);
+                pc += size;
+
+                if !is_nonfinal {
+                    return Ok(());
+                }
+            },
+            (None, _, _) => return Ok(())
+        }
+    }
+}

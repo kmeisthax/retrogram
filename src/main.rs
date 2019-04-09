@@ -25,7 +25,7 @@ fn main() -> io::Result<()> {
     let mut command = None;
     let mut image = "".to_string();
     let mut platform = None;
-    let mut arch = None;
+    let mut arch : Option<arch::ArchName> = None;
     let mut start_pc = None;
 
     {
@@ -45,27 +45,7 @@ fn main() -> io::Result<()> {
             let mut file = fs::File::open(image)?;
 
             match platform {
-                Some(PlatformName::GB) => {
-                    arch = Some(ArchName::LR35902);
-
-                    let plat = platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?;
-                    let ctxt = reg::Context::new();
-                    let mut pc = start_pc.unwrap_or(0x0100);
-
-                    loop {
-                        match arch::lr35902::disassemble(pc, &plat, &ctxt) {
-                            (Some(instr), size, is_nonfinal) => {
-                                println!("{}", instr);
-                                pc += size;
-
-                                if !is_nonfinal {
-                                    break;
-                                }
-                            },
-                            (None, _, _) => break
-                        }
-                    }
-                },
+                Some(PlatformName::GB) => platform::gb::analyze(&mut file, start_pc)?,
                 _ => eprintln!("Unknown platform")
             }
         },
