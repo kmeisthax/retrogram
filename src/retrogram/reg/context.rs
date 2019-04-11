@@ -33,6 +33,15 @@ impl Context {
         Symbolic::default()
     }
 
+    /// Set an architecturally-defined context.
+    /// 
+    /// Architectural contexts are prefixed with an `A` to avoid conflicts with
+    /// platform-specific contexts.
+    pub fn set_arch_context(&mut self, context_name: &str, value: Symbolic<u64>) {
+        let inner_name = format!("A{}", context_name);
+        self.contexts.insert(inner_name, value);
+    }
+
     /// Get a context specific to a given platform.
     /// 
     /// Platform contexts are prefixed with a `P` to avoid conflicts with
@@ -44,5 +53,14 @@ impl Context {
         }
 
         Symbolic::default()
+    }
+
+    /// Set a context specific to a given platform.
+    /// 
+    /// Platform contexts are prefixed with a `P` to avoid conflicts with
+    /// architecturally defined contexts.
+    pub fn set_platform_context(&mut self, context_name: &str, value: Symbolic<u64>) {
+        let inner_name = format!("P{}", context_name);
+        self.contexts.insert(inner_name, value);
     }
 }

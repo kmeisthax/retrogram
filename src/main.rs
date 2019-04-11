@@ -4,6 +4,7 @@ extern crate lazy_static;
 mod retrogram;
 
 use std::{str, fs, io};
+use std::str::FromStr;
 use argparse;
 use crate::retrogram::{arch, platform, reg};
 use crate::retrogram::arch::ArchName;
@@ -29,7 +30,7 @@ fn main() -> io::Result<()> {
     let mut image = "".to_string();
     let mut platform = None;
     let mut arch : Option<arch::ArchName> = None;
-    let mut start_pc = None;
+    let mut start_pc : Option<String> = None;
 
     {
         let mut ap = argparse::ArgumentParser::new();
@@ -46,9 +47,25 @@ fn main() -> io::Result<()> {
     match command {
         Some(Commands::Disassemble) => {
             let mut file = fs::File::open(image)?;
+            let mut pc_pieces = if let Some(start_pc) = start_pc {
+                let mut v = Vec::new();
+
+                for piece in start_pc.split(":") {
+                    v.push(u16::from_str(piece).or(Err(io::Error::new(io::ErrorKind::InvalidInput, "Given analysis address is not a valid integer")))?);
+                }
+
+                Some(v)
+            } else {
+                None
+            };
 
             match platform {
-                Some(PlatformName::GB) => platform::gb::analyze(&mut file, start_pc)?,
+                Some(PlatformName::GB) => {
+                    match pc_pieces.map(|p| platform::gb::create_context(&p)) {
+                        Some(Some((start_pc, ctxt))) => platform::gb::analyze(&mut file, Some(start_pc), Some(&ctxt))?,
+                        _ => platform::gb::analyze(&mut file, Some(0x0100), None)?
+                    }
+                },
                 _ => eprintln!("Unknown platform")
             }
         },

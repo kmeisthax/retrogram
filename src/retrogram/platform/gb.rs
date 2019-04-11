@@ -1,6 +1,7 @@
 //! Platform implementation for Game Boy and it's attendant memory mapper chips
 
 use std::io;
+use std::ops::BitAnd;
 use crate::retrogram::{reg, memory};
 use crate::retrogram::arch::lr35902;
 
@@ -168,6 +169,30 @@ impl Default for PlatformVariant {
     }
 }
 
+pub fn create_context<V>(values: &Vec<V>) -> Option<(lr35902::Pointer, reg::Context)> where V: std::fmt::Debug + Copy + BitAnd + From<lr35902::Pointer>, lr35902::Pointer: From<<V as BitAnd>::Output> + From<V>, u64: From<V> {
+    let mut context = reg::Context::new();
+
+    if values.len() > 1 {
+        match u16::from(values[values.len() - 1] & V::from(0xC000)) {
+            0x0000 => {}, //HOME
+            0x2000 => {},
+            0x4000 => context.set_platform_context("R", reg::Symbolic::from(u64::from(values[values.len() - 2]))), //Bank
+            0x6000 => context.set_platform_context("R", reg::Symbolic::from(u64::from(values[values.len() - 2]))), // ROM
+            0x8000 => context.set_platform_context("V", reg::Symbolic::from(u64::from(values[values.len() - 2]))), //VRAM
+            0xA000 => context.set_platform_context("S", reg::Symbolic::from(u64::from(values[values.len() - 2]))), //SRAM
+            0xC000 => context.set_platform_context("W", reg::Symbolic::from(u64::from(values[values.len() - 2]))), //WRAM
+            0xE000 => {}, //ECHO, IO, HRAMetc
+            _ => panic!("Your AND is wrong..."),
+        }
+    }
+
+    if values.len() > 0 {
+        Some((lr35902::Pointer::from(values[values.len() - 1]), context))
+    } else {
+        None
+    }
+}
+
 /// Construct a `Memory` corresponding to the execution environment of a given
 /// Game Boy ROM image.
 /// 
@@ -198,13 +223,12 @@ pub fn construct_platform<F>(file: &mut F, pv: PlatformVariant) -> io::Result<lr
     Ok(bus)
 }
 
-pub fn analyze<F>(file: &mut F, start_pc: Option<u16>) -> io::Result<()> where F: io::Read {
+pub fn analyze<F>(file: &mut F, start_pc: Option<u16>, ctxt: Option<&reg::Context>) -> io::Result<()> where F: io::Read {
     let plat = construct_platform(file, PlatformVariant::MBC5Mapper)?;
-    let ctxt = reg::Context::new();
     let mut pc = start_pc.unwrap_or(0x0100);
 
     loop {
-        match lr35902::disassemble(pc, &plat, &ctxt) {
+        match lr35902::disassemble(pc, &plat, ctxt.unwrap_or(&reg::Context::new())) {
             (Some(instr), size, is_nonfinal) => {
                 println!("{}", instr);
                 pc += size;
