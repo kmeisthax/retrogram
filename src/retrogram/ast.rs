@@ -1,6 +1,7 @@
 //!An abstract syntax tree representation of disassembled code
 
 use std::fmt;
+use std::cmp::{PartialEq, Eq};
 
 ///A literal value, such as an integer, pointer, or other kind of reference.
 /// 
@@ -142,6 +143,7 @@ impl<L> fmt::Display for Instruction<L> where Operand<L>: fmt::Display {
     }
 }
 
+#[derive(Hash, PartialEq, Eq)]
 pub struct Label {
     /// Name of the label.
     name: String,
