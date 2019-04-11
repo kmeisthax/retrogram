@@ -169,7 +169,7 @@ impl Default for PlatformVariant {
     }
 }
 
-pub fn create_context<V>(values: &Vec<V>) -> Option<(lr35902::Pointer, reg::Context)> where V: std::fmt::Debug + Copy + BitAnd + From<lr35902::Pointer>, lr35902::Pointer: From<<V as BitAnd>::Output> + From<V>, u64: From<V> {
+pub fn create_context<V>(values: &Vec<V>) -> Option<reg::ContextualPointer<lr35902::Pointer>> where V: std::fmt::Debug + Copy + BitAnd + From<lr35902::Pointer>, lr35902::Pointer: From<<V as BitAnd>::Output> + From<V>, u64: From<V> {
     let mut context = reg::Context::new();
 
     if values.len() > 1 {
@@ -187,7 +187,7 @@ pub fn create_context<V>(values: &Vec<V>) -> Option<(lr35902::Pointer, reg::Cont
     }
 
     if values.len() > 0 {
-        Some((lr35902::Pointer::from(values[values.len() - 1]), context))
+        Some(reg::ContextualPointer::from_parts(lr35902::Pointer::from(values[values.len() - 1]), context))
     } else {
         None
     }
@@ -223,12 +223,12 @@ pub fn construct_platform<F>(file: &mut F, pv: PlatformVariant) -> io::Result<lr
     Ok(bus)
 }
 
-pub fn analyze<F>(file: &mut F, start_pc: Option<u16>, ctxt: Option<&reg::Context>) -> io::Result<()> where F: io::Read {
+pub fn analyze<F>(file: &mut F, start_pc: Option<reg::ContextualPointer<lr35902::Pointer>>) -> io::Result<()> where F: io::Read {
     let plat = construct_platform(file, PlatformVariant::MBC5Mapper)?;
-    let mut pc = start_pc.unwrap_or(0x0100);
+    let mut pc = start_pc.unwrap_or(reg::ContextualPointer::from(0x0100));
 
     loop {
-        match lr35902::disassemble(pc, &plat, ctxt.unwrap_or(&reg::Context::new())) {
+        match lr35902::disassemble(*pc.pointer(), &plat, pc.context()) {
             (Some(instr), size, is_nonfinal) => {
                 println!("{}", instr);
                 pc += size;

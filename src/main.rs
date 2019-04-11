@@ -62,8 +62,8 @@ fn main() -> io::Result<()> {
             match platform {
                 Some(PlatformName::GB) => {
                     match pc_pieces.map(|p| platform::gb::create_context(&p)) {
-                        Some(Some((start_pc, ctxt))) => platform::gb::analyze(&mut file, Some(start_pc), Some(&ctxt))?,
-                        _ => platform::gb::analyze(&mut file, Some(0x0100), None)?
+                        Some(Some(cptr)) => platform::gb::analyze(&mut file, Some(cptr))?,
+                        _ => platform::gb::analyze(&mut file, None)?
                     }
                 },
                 _ => eprintln!("Unknown platform")

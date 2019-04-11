@@ -9,6 +9,7 @@ use crate::retrogram::reg::Symbolic;
 /// A context can represent any useful state necessary to disassemble a program.
 /// It can be used to store both architectural and platform state, such as a
 /// selected bank value, or the operating mode of a processor.
+#[derive(Clone)]
 pub struct Context {
     contexts: HashMap<String, Symbolic<u64>>
 }
