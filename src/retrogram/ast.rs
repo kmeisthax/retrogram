@@ -186,3 +186,15 @@ impl<L> fmt::Display for Line<L> where Instruction<L>: fmt::Display {
         write!(f, "\n")
     }
 }
+
+pub struct Assembly<L = Literal> {
+    labels: Vec<Line<L>>
+}
+
+impl<L> Assembly<L> {
+    pub fn new() -> Self {
+        Assembly {
+            labels: Vec::new()
+        }
+    }
+}
