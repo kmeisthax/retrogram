@@ -1,43 +1,12 @@
-//! A set of types which allow analysis to model memory correctly.
+//! A special-purpose type for modeling the address decoding of a particular
+//! platform.
 
 use std::ops::{Add, Sub, Not};
 use std::cmp::PartialOrd;
 use std::slice::SliceIndex;
 use num_traits::Bounded;
 use crate::retrogram::reg;
-
-/// Represents the various possible operating modes of a memory block.
-/// 
-/// The Behavior of a memory area bounds what analysises are considered
-/// meaningful for a program.
-pub enum Behavior {
-    /// Storage behavior corresponds to memory which can be consistently read
-    /// to and written from, such that reads always capture the last write,
-    /// repeated reads always capture the same value, and there is no semantic
-    /// value to writes aside from changing the value to be read back.
-    /// Execution is allowed from storage only.
-    Storage,
-    
-    /// MappedIO behavior corresponds to hardware devices on a memory bus.
-    /// Reads are not consistent, writes have semantic value. The intent of
-    /// such a memory block is communication with hardware. Execution is not
-    /// analyzed within mapped I/O.
-    MappedIO,
-    
-    /// Invalid behavior corresponds to memory not mapped to a hardware device
-    /// at all. Platform makes no guarantees about behavior upon reading to or
-    /// writing from an Invalid memory block. Execution, reads, and writes are
-    /// not analyzed within invalid blocks.
-    Invalid,
-}
-
-/// Represents the various possible actions that can be performed by a program
-/// under analysis.
-pub enum Action {
-    DataRead,
-    Write,
-    ProgramExecute
-}
+use crate::retrogram::memory::{Image, Behavior};
 
 /// Models a region of memory visible to the program under analysis.
 /// 
@@ -79,37 +48,6 @@ struct Region<P, MV, S = P, IO = usize> {
     length: S,
     memtype: Behavior,
     image: Option<Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>>
-}
-
-/// An Image is the contents of a given memory Region, if known.
-/// 
-/// An Image's contents may originate from an executable file, a ROM chip, or a
-/// memory dump. The source is not important; but the data retrieved from an
-/// image must match what the actual program under analysis would see if it had
-/// read or executed from this memory.
-pub trait Image {
-    /// The architectural pointer type of the CPU architecture a given program
-    /// is written or compiled for.
-    type Pointer;
-
-    /// A suitably wide type to represent an offset into any size Image we would
-    /// like to model. Not required to match the architectural offset type.
-    type Offset;
-
-    /// The architectual addressing unit.
-    type Data;
-
-    /// Retrieve data from an image.
-    fn retrieve(&self, offset: Self::Offset, count: Self::Offset) -> Option<&[Self::Data]>;
-
-    /// Decode an architectural pointer to an image offset.
-    /// 
-    /// The given pointer must have a positive offset from the base pointer.
-    /// If the offset is negative, this function yields None.
-    /// 
-    /// Images can determine the current banking in use by querying the context
-    /// for the appropriately named banking value.
-    fn decode_addr(&self, ptr: &reg::ContextualPointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset>;
 }
 
 impl<P, MV, S, IO> Region<P, MV, S, IO>
