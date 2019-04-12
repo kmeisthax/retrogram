@@ -1,53 +1,138 @@
 //! "Contextual" pointers that contain any platform or architectural state
 //! necessary to understand them.
 
-use std::ops::AddAssign;
-use crate::retrogram::reg::Context;
+use std::ops::{Add, AddAssign, Sub, SubAssign, BitAnd};
+use std::cmp::{PartialEq, PartialOrd, Ord, Ordering};
+use std::collections::HashMap;
+use num::traits::Bounded;
+use crate::retrogram::reg::Symbolic;
 
 /// A pointer bundled with the context necessary to resolve it to a concrete
 /// value.
 #[derive(Clone)]
-pub struct ContextualPointer<P> {
+pub struct ContextualPointer<P, CV = u64> {
     pointer: P,
-    context: Context
+    context: HashMap<String, Symbolic<CV>>
 }
 
-impl<P> ContextualPointer<P> {
-    /// Given a pointer and it's context, wrap them up into a contextual
-    /// pointer.
-    pub fn from_parts(pointer: P, context: Context) -> ContextualPointer<P> {
-        ContextualPointer {
-            pointer: pointer,
-            context: context
-        }
-    }
-
-    /// Consume the contextual pointer and return the pointer value and it's
-    /// modeled context.
-    pub fn into_parts(self) -> (P, Context) {
-        (self.pointer, self.context)
-    }
-
-    pub fn pointer(&self) -> &P {
+impl<P, CV> ContextualPointer<P, CV> where CV: Clone + Bounded + From<u8> {
+    /// Obtain a reference to the noncontextual pointer value.
+    pub fn as_pointer(&self) -> &P {
         &self.pointer
     }
 
-    pub fn context(&self) -> &Context {
-        &self.context
+    /// Strip the context entirely and yield a pointer value.
+    pub fn into_pointer(self) -> P {
+        self.pointer
+    }
+
+    /// Get an architecturally-defined context.
+    /// 
+    /// Architectural contexts are prefixed with an `A` to avoid conflicts with
+    /// platform-specific contexts.
+    pub fn get_arch_context(&self, context_name: &str) -> Symbolic<CV> {
+        let inner_name = format!("A{}", context_name);
+        if let Some(val) = self.context.get(&inner_name) {
+            return val.clone();
+        }
+
+        Symbolic::default()
+    }
+
+    /// Set an architecturally-defined context.
+    /// 
+    /// Architectural contexts are prefixed with an `A` to avoid conflicts with
+    /// platform-specific contexts.
+    pub fn set_arch_context(&mut self, context_name: &str, value: Symbolic<CV>) {
+        let inner_name = format!("A{}", context_name);
+        self.context.insert(inner_name, value);
+    }
+
+    /// Get a context specific to a given platform.
+    /// 
+    /// Platform contexts are prefixed with a `P` to avoid conflicts with
+    /// architecturally defined contexts.
+    pub fn get_platform_context(&self, context_name: &str) -> Symbolic<CV> {
+        let inner_name = format!("P{}", context_name);
+        if let Some(val) = self.context.get(&inner_name) {
+            return val.clone();
+        }
+
+        Symbolic::default()
+    }
+
+    /// Set a context specific to a given platform.
+    /// 
+    /// Platform contexts are prefixed with a `P` to avoid conflicts with
+    /// architecturally defined contexts.
+    pub fn set_platform_context(&mut self, context_name: &str, value: Symbolic<CV>) {
+        let inner_name = format!("P{}", context_name);
+        self.context.insert(inner_name, value);
     }
 }
 
-impl<P> From<P> for ContextualPointer<P> {
-    fn from(p: P) -> ContextualPointer<P> {
+impl<P, CV> From<P> for ContextualPointer<P, CV> {
+    fn from(p: P) -> Self {
         ContextualPointer {
             pointer: p,
-            context: Context::new()
+            context: HashMap::new()
         }
     }
 }
 
-impl<P> AddAssign<P> for ContextualPointer<P> where P: AddAssign {
+impl<P, CV> Add<P> for ContextualPointer<P, CV> where P: Add {
+    type Output = ContextualPointer<<P as Add>::Output, CV>;
+
+    fn add(self, rhs: P) -> Self::Output {
+        ContextualPointer {
+            pointer: self.pointer + rhs,
+            context: self.context
+        }
+    }
+}
+
+impl<P, CV> AddAssign<P> for ContextualPointer<P, CV> where P: AddAssign {
     fn add_assign(&mut self, rhs: P) {
         self.pointer += rhs;
+    }
+}
+
+impl<P, CV> Sub<P> for ContextualPointer<P, CV> where P: Sub {
+    type Output = ContextualPointer<<P as Sub>::Output, CV>;
+
+    fn sub(self, rhs: P) -> Self::Output {
+        ContextualPointer {
+            pointer: self.pointer - rhs,
+            context: self.context
+        }
+    }
+}
+
+impl<P, CV> SubAssign<P> for ContextualPointer<P, CV> where P: SubAssign {
+    fn sub_assign(&mut self, rhs: P) {
+        self.pointer -= rhs;
+    }
+}
+
+impl<P, CV> BitAnd<P> for ContextualPointer<P, CV> where P: BitAnd {
+    type Output = ContextualPointer<<P as BitAnd>::Output, CV>;
+
+    fn bitand(self, rhs: P) -> Self::Output {
+        ContextualPointer {
+            pointer: self.pointer & rhs,
+            context: self.context
+        }
+    }
+}
+
+impl<P, CV> PartialEq for ContextualPointer<P, CV> where P: PartialEq {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.pointer == rhs.pointer
+    }
+}
+
+impl<P, CV> PartialOrd for ContextualPointer<P, CV> where P: PartialOrd {
+    fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
+        self.pointer.partial_cmp(&rhs.pointer)
     }
 }

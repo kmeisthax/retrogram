@@ -109,7 +109,7 @@ pub trait Image {
     /// 
     /// Images can determine the current banking in use by querying the context
     /// for the appropriately named banking value.
-    fn decode_addr(&self, ptr: Self::Pointer, base: Self::Pointer, context: &reg::Context) -> Option<Self::Offset>;
+    fn decode_addr(&self, ptr: &reg::ContextualPointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset>;
 }
 
 impl<P, MV, S, IO> Region<P, MV, S, IO>
@@ -177,10 +177,10 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         IO: From<u8>,
         usize: From<P> {
     
-    pub fn read_unit(&self, ptr: P, ctx: &reg::Context) -> reg::Symbolic<MV> {
+    pub fn read_unit(&self, ptr: &reg::ContextualPointer<P>) -> reg::Symbolic<MV> {
         for view in &self.views {
             if let Some(ref image) = view.image {
-                if let Some(offset) = image.decode_addr(ptr, view.start, ctx) {
+                if let Some(offset) = image.decode_addr(ptr, view.start) {
                     if let Some(imgdata) = image.retrieve(offset, IO::from(1)) {
                         if imgdata.len() > 0 {
                             return reg::Symbolic::from(imgdata[0]);
