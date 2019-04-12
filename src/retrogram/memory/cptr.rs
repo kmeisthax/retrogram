@@ -10,12 +10,12 @@ use crate::retrogram::reg::Symbolic;
 /// A pointer bundled with the context necessary to resolve it to a concrete
 /// value.
 #[derive(Clone)]
-pub struct ContextualPointer<P, CV = u64> {
+pub struct Pointer<P, CV = u64> {
     pointer: P,
     context: HashMap<String, Symbolic<CV>>
 }
 
-impl<P, CV> ContextualPointer<P, CV> where CV: Clone + Bounded + From<u8> {
+impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
     /// Obtain a reference to the noncontextual pointer value.
     pub fn as_pointer(&self) -> &P {
         &self.pointer
@@ -71,68 +71,78 @@ impl<P, CV> ContextualPointer<P, CV> where CV: Clone + Bounded + From<u8> {
     }
 }
 
-impl<P, CV> From<P> for ContextualPointer<P, CV> {
+impl<P, CV> From<P> for Pointer<P, CV> {
     fn from(p: P) -> Self {
-        ContextualPointer {
+        Pointer {
             pointer: p,
             context: HashMap::new()
         }
     }
 }
 
-impl<P, CV> Add<P> for ContextualPointer<P, CV> where P: Add {
-    type Output = ContextualPointer<<P as Add>::Output, CV>;
+impl<P, CV> Add<P> for Pointer<P, CV> where P: Add {
+    type Output = Pointer<<P as Add>::Output, CV>;
 
     fn add(self, rhs: P) -> Self::Output {
-        ContextualPointer {
+        Pointer {
             pointer: self.pointer + rhs,
             context: self.context
         }
     }
 }
 
-impl<P, CV> AddAssign<P> for ContextualPointer<P, CV> where P: AddAssign {
+impl<P, CV> AddAssign<P> for Pointer<P, CV> where P: AddAssign {
     fn add_assign(&mut self, rhs: P) {
         self.pointer += rhs;
     }
 }
 
-impl<P, CV> Sub<P> for ContextualPointer<P, CV> where P: Sub {
-    type Output = ContextualPointer<<P as Sub>::Output, CV>;
+impl<P, CV> Sub<P> for Pointer<P, CV> where P: Sub {
+    type Output = Pointer<<P as Sub>::Output, CV>;
 
     fn sub(self, rhs: P) -> Self::Output {
-        ContextualPointer {
+        Pointer {
             pointer: self.pointer - rhs,
             context: self.context
         }
     }
 }
 
-impl<P, CV> SubAssign<P> for ContextualPointer<P, CV> where P: SubAssign {
+impl<P, CV> SubAssign<P> for Pointer<P, CV> where P: SubAssign {
     fn sub_assign(&mut self, rhs: P) {
         self.pointer -= rhs;
     }
 }
 
-impl<P, CV> BitAnd<P> for ContextualPointer<P, CV> where P: BitAnd {
-    type Output = ContextualPointer<<P as BitAnd>::Output, CV>;
+impl<P, CV> BitAnd<P> for Pointer<P, CV> where P: BitAnd {
+    type Output = Pointer<<P as BitAnd>::Output, CV>;
 
     fn bitand(self, rhs: P) -> Self::Output {
-        ContextualPointer {
+        Pointer {
             pointer: self.pointer & rhs,
             context: self.context
         }
     }
 }
 
-impl<P, CV> PartialEq for ContextualPointer<P, CV> where P: PartialEq {
+impl<P, CV> PartialEq for Pointer<P, CV> where P: PartialEq {
     fn eq(&self, rhs: &Self) -> bool {
         self.pointer == rhs.pointer
     }
 }
 
-impl<P, CV> PartialOrd for ContextualPointer<P, CV> where P: PartialOrd {
+impl<P, CV> PartialOrd for Pointer<P, CV> where P: PartialOrd {
     fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
         self.pointer.partial_cmp(&rhs.pointer)
+    }
+}
+
+impl<P, CV> Eq for Pointer<P, CV> where P: Eq {
+
+}
+
+impl<P, CV> Ord for Pointer<P, CV> where P: Ord {
+    fn cmp(&self, rhs: &Self) -> Ordering {
+        self.pointer.cmp(&rhs.pointer)
     }
 }

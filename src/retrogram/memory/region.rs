@@ -6,7 +6,7 @@ use std::cmp::PartialOrd;
 use std::slice::SliceIndex;
 use num_traits::Bounded;
 use crate::retrogram::reg;
-use crate::retrogram::memory::{Image, Behavior};
+use crate::retrogram::memory::{Image, Behavior, Pointer};
 
 /// Models a region of memory visible to the program under analysis.
 /// 
@@ -115,7 +115,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         IO: From<u8>,
         usize: From<P> {
     
-    pub fn read_unit(&self, ptr: &reg::ContextualPointer<P>) -> reg::Symbolic<MV> {
+    pub fn read_unit(&self, ptr: &Pointer<P>) -> reg::Symbolic<MV> {
         for view in &self.views {
             if let Some(ref image) = view.image {
                 if let Some(offset) = image.decode_addr(ptr, view.start) {

@@ -2,7 +2,7 @@
 //! 
 //! This only covers 32-bit ARM, now known as AArch32.
 
-use crate::retrogram::{memory, ast, reg};
+use crate::retrogram::{memory, ast};
 
 enum Aarch32Register {
     R0, R1, R2, R3,
@@ -35,6 +35,6 @@ pub type Bus = memory::Memory<Pointer, Data, Offset>;
 ///  * The size of the current instruction
 ///  * True, if execution would continue at the instruction following this one,
 ///    or false if the instruction terminates the current basic block
-pub fn disassemble(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> (Option<ast::Instruction>, Offset, bool) {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<ast::Instruction>, Offset, bool) {
     (None, 0, false)
 }

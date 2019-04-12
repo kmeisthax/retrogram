@@ -1,6 +1,6 @@
 //! A Z80 derivative created by SHARP for use in the Nintendo Game Boy
 
-use crate::retrogram::{memory, reg, ast};
+use crate::retrogram::{memory, ast};
 use crate::retrogram::ast::Operand as op;
 use crate::retrogram::ast::Instruction as inst;
 
@@ -31,7 +31,7 @@ pub type Data = u8;
 /// The compatible memory model type necessary to analyze GBz80 programs.
 pub type Bus = memory::Memory<Pointer, Data, Offset>;
 
-fn int_op16(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> ast::Operand {
+fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         if let Some(hibit) = mem.read_unit(&(p.clone()+1)).into_concrete() {
             return op::int((hibit as u16) << 8 | lobit as u16);
@@ -41,7 +41,7 @@ fn int_op16(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> ast::Operand {
     op::miss()
 }
 
-fn dptr_op16(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> ast::Operand {
+fn dptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         if let Some(hibit) = mem.read_unit(&(p.clone()+1)).into_concrete() {
             return op::dptr((hibit as u16) << 8 | lobit as u16);
@@ -51,7 +51,7 @@ fn dptr_op16(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> ast::Operand {
     op::miss()
 }
 
-fn cptr_op16(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> ast::Operand {
+fn cptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         if let Some(hibit) = mem.read_unit(&(p.clone()+1)).into_concrete() {
             return op::cptr((hibit as u16) << 8 | lobit as u16);
@@ -61,7 +61,7 @@ fn cptr_op16(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> ast::Operand {
     op::miss()
 }
 
-fn int_op8(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> ast::Operand {
+fn int_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         return op::int(lobit);
     }
@@ -69,7 +69,7 @@ fn int_op8(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> ast::Operand {
     op::miss()
 }
 
-fn pcrel_op8(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> ast::Operand {
+fn pcrel_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         return op::cptr(((p.as_pointer() - 1) as i16 + (lobit as i8) as i16) as u16);
     }
@@ -77,7 +77,7 @@ fn pcrel_op8(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> ast::Operand {
     op::miss()
 }
 
-fn hram_op8(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> ast::Operand {
+fn hram_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         return op::dptr(0xFF00 + lobit as u16);
     }
@@ -126,7 +126,7 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///  * The size of the current instruction
 ///  * True, if execution would continue at the instruction following this one,
 ///    or false if the instruction terminates the current basic block
-pub fn disassemble(p: &reg::ContextualPointer<Pointer>, mem: &Bus) -> (Option<ast::Instruction>, Offset, bool) {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<ast::Instruction>, Offset, bool) {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
             //TODO: CB prefix

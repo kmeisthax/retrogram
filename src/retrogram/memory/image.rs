@@ -1,6 +1,6 @@
 //! Types that feed data from program images, such as executable files or ROM dumps, into the memory model.
 
-use crate::retrogram::reg;
+use crate::retrogram::memory::Pointer;
 
 /// An Image is the contents of a given memory Region, if known.
 /// 
@@ -30,5 +30,5 @@ pub trait Image {
     /// 
     /// Images can determine the current banking in use by querying the context
     /// for the appropriately named banking value.
-    fn decode_addr(&self, ptr: &reg::ContextualPointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset>;
+    fn decode_addr(&self, ptr: &Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset>;
 }

@@ -3,8 +3,6 @@
 
 mod symbolic;
 mod state;
-mod cptr;
 
 pub use symbolic::Symbolic;
 pub use state::State;
-pub use cptr::ContextualPointer;

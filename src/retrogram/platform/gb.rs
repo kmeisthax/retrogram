@@ -9,7 +9,7 @@ use crate::retrogram::arch::lr35902;
 /// image.
 trait Mapper {
 
-    fn decode_banked_addr(&self, ptr: &reg::ContextualPointer<lr35902::Pointer>) -> Option<usize>;
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize>;
 }
 
 /// Mapper type which does not support banking.
@@ -26,7 +26,7 @@ impl LinearMapper {
 }
 
 impl Mapper for LinearMapper {
-    fn decode_banked_addr(&self, ptr: &reg::ContextualPointer<lr35902::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize> {
         Some((ptr.as_pointer() & 0x3FFF + 0x4000) as usize)
     }
 }
@@ -42,7 +42,7 @@ impl MBC1Mapper {
 }
 
 impl Mapper for MBC1Mapper {
-    fn decode_banked_addr(&self, ptr: &reg::ContextualPointer<lr35902::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(0x00) => None,
             Some(0x20) => None,
@@ -65,7 +65,7 @@ impl MBC2Mapper {
 }
 
 impl Mapper for MBC2Mapper {
-    fn decode_banked_addr(&self, ptr: &reg::ContextualPointer<lr35902::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + ((b & 0xF) * 0x4000) as usize),
             None => None
@@ -84,7 +84,7 @@ impl MBC3Mapper {
 }
 
 impl Mapper for MBC3Mapper {
-    fn decode_banked_addr(&self, ptr: &reg::ContextualPointer<lr35902::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None
@@ -103,7 +103,7 @@ impl MBC5Mapper {
 }
 
 impl Mapper for MBC5Mapper {
-    fn decode_banked_addr(&self, ptr: &reg::ContextualPointer<lr35902::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None
@@ -145,7 +145,7 @@ impl<M> memory::Image for GameBoyROMImage<M> where M: Mapper {
         Some(&self.data[offset as usize..(offset + count) as usize])
     }
 
-    fn decode_addr(&self, ptr: &reg::ContextualPointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset> {
+    fn decode_addr(&self, ptr: &memory::Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset> {
         if base == 0x0000 && *ptr.as_pointer() < 0x4000 {
             Some(*ptr.as_pointer() as usize)
         } else {
@@ -169,8 +169,8 @@ impl Default for PlatformVariant {
     }
 }
 
-pub fn create_context<V>(values: &Vec<V>) -> Option<reg::ContextualPointer<lr35902::Pointer>> where V: std::fmt::Debug + Copy + BitAnd + From<lr35902::Pointer>, lr35902::Pointer: From<<V as BitAnd>::Output> + From<V>, u64: From<V> {
-    let mut context = reg::ContextualPointer::from(lr35902::Pointer::from(values[values.len() - 1]));
+pub fn create_context<V>(values: &Vec<V>) -> Option<memory::Pointer<lr35902::Pointer>> where V: std::fmt::Debug + Copy + BitAnd + From<lr35902::Pointer>, lr35902::Pointer: From<<V as BitAnd>::Output> + From<V>, u64: From<V> {
+    let mut context = memory::Pointer::from(lr35902::Pointer::from(values[values.len() - 1]));
 
     if values.len() > 1 {
         match u16::from(values[values.len() - 1] & V::from(0xC000)) {
@@ -223,9 +223,9 @@ pub fn construct_platform<F>(file: &mut F, pv: PlatformVariant) -> io::Result<lr
     Ok(bus)
 }
 
-pub fn analyze<F>(file: &mut F, start_pc: Option<reg::ContextualPointer<lr35902::Pointer>>) -> io::Result<()> where F: io::Read {
+pub fn analyze<F>(file: &mut F, start_pc: Option<memory::Pointer<lr35902::Pointer>>) -> io::Result<()> where F: io::Read {
     let plat = construct_platform(file, PlatformVariant::MBC5Mapper)?;
-    let mut pc = start_pc.unwrap_or(reg::ContextualPointer::from(0x0100));
+    let mut pc = start_pc.unwrap_or(memory::Pointer::from(0x0100));
 
     loop {
         match lr35902::disassemble(&pc, &plat) {
