@@ -19,10 +19,7 @@ pub enum Literal<I = u64, F = f64, P = I> {
     Float(F),
 
     /// Pointer constant to data (such as a global variable etc)
-    DataPtr(P),
-
-    /// Pointer to code
-    CodePtr(P),
+    Pointer(P),
 
     /// Some kind of string constant
     String(String),
@@ -40,6 +37,15 @@ pub enum Operand<L = Literal> {
 
     /// A literal constant value.
     Literal(L),
+
+    /// A reference to a user-defined label.
+    Label(Label),
+
+    /// An operand which constitutes a data reference.
+    DataReference(Box<Operand<L>>),
+
+    /// An operand which constitutes a code reference.
+    CodeReference(Box<Operand<L>>),
 
     /// The indirection of the given operand. (e.g. HL to [HL])
     Indirect(Box<Operand<L>>),
@@ -64,11 +70,19 @@ impl<I, F, P> Operand<Literal<I, F, P>> {
     }
 
     pub fn dptr<MP>(ptr: MP) -> Self where P: From<MP> {
-        Operand::Literal(Literal::DataPtr(P::from(ptr)))
+        Operand::DataReference(Box::new(Operand::Literal(Literal::Pointer(P::from(ptr)))))
     }
 
     pub fn cptr<MP>(ptr: MP) -> Self where P: From<MP> {
-        Operand::Literal(Literal::CodePtr(P::from(ptr)))
+        Operand::CodeReference(Box::new(Operand::Literal(Literal::Pointer(P::from(ptr)))))
+    }
+
+    pub fn dlbl(label: Label) -> Self {
+        Operand::DataReference(Box::new(Operand::Label(label)))
+    }
+
+    pub fn clbl(label: Label) -> Self {
+        Operand::CodeReference(Box::new(Operand::Label(label)))
     }
 
     pub fn str(s: &str) -> Self {
@@ -94,10 +108,13 @@ impl<I, F, P> fmt::Display for Operand<Literal<I, F, P>> where I: fmt::Display, 
             Operand::Symbol(s) => write!(f, "{}", s),
             Operand::Literal(Literal::Integer(i)) => write!(f, "{}", i),
             Operand::Literal(Literal::Float(fl)) => write!(f, "{}", fl),
-            Operand::Literal(Literal::DataPtr(p)) => write!(f, "${:x}", p),
-            Operand::Literal(Literal::CodePtr(p)) => write!(f, "${:x}", p),
+            Operand::Literal(Literal::Pointer(p)) => write!(f, "${:x}", p),
             Operand::Literal(Literal::String(s)) => write!(f, "{}", s),
             Operand::Literal(Literal::Missing) => write!(f, "?"),
+            Operand::Label(lbl) if lbl.global => write!(f, "{}", lbl.name),
+            Operand::Label(lbl) => write!(f, ".{}", lbl.name),
+            Operand::DataReference(op) => write!(f, "{}", op),
+            Operand::CodeReference(op) => write!(f, "{}", op),
             Operand::Indirect(op) => write!(f, "[{}]", op),
             Operand::Add(op1, op2) => write!(f, "{} + {}", op1, op2),
         }
@@ -143,7 +160,7 @@ impl<L> fmt::Display for Instruction<L> where Operand<L>: fmt::Display {
     }
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub struct Label {
     /// Name of the label.
     name: String,
