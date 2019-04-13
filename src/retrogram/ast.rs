@@ -1,6 +1,6 @@
 //!An abstract syntax tree representation of disassembled code
 
-use std::fmt;
+use std::{fmt, slice};
 use std::cmp::{PartialEq, Eq};
 
 ///A literal value, such as an integer, pointer, or other kind of reference.
@@ -121,6 +121,7 @@ impl<I, F, P> fmt::Display for Operand<Literal<I, F, P>> where I: fmt::Display, 
     }
 }
 
+#[derive(Clone)]
 pub struct Instruction<L = Literal> {
     /// The instruction being executed
     opcode: String,
@@ -134,6 +135,14 @@ impl<L> Instruction<L> {
             opcode: opcode.to_string(),
             operands: operands
         }
+    }
+
+    pub fn opcode(&self) -> &String {
+        &self.opcode
+    }
+
+    pub fn iter_operands(&self) -> slice::Iter<Operand<L>> {
+        self.operands.iter()
     }
 }
 
@@ -180,6 +189,7 @@ impl fmt::Display for Label {
     }
 }
 
+#[derive(Clone)]
 pub struct Line<L = Literal> {
     label: Option<Label>,
     instruction: Option<Instruction<L>>,
@@ -204,14 +214,60 @@ impl<L> fmt::Display for Line<L> where Instruction<L>: fmt::Display {
     }
 }
 
+impl<L> Line<L> {
+    pub fn new(label: Option<Label>, instruction: Option<Instruction<L>>, comment: Option<String>) -> Self {
+        Line {
+            label: label,
+            instruction: instruction,
+            comment: comment
+        }
+    }
+    
+    pub fn label(&self) -> Option<&Label> {
+        if let Some(ref label) = self.label {
+            Some(label)
+        } else {
+            None
+        }
+    }
+
+    pub fn instr(&self) -> Option<&Instruction<L>> {
+        if let Some(ref instruction) = self.instruction {
+            Some(instruction)
+        } else {
+            None
+        }
+    }
+
+    pub fn comment(&self) -> Option<&String> {
+        if let Some(ref comment) = self.comment {
+            Some(comment)
+        } else {
+            None
+        }
+    }
+
+    pub fn into_parts(self) -> (Option<Label>, Option<Instruction<L>>, Option<String>) {
+        (self.label, self.instruction, self.comment)
+    }
+}
+
 pub struct Assembly<L = Literal> {
-    labels: Vec<Line<L>>
+    lines: Vec<Line<L>>
 }
 
 impl<L> Assembly<L> {
     pub fn new() -> Self {
         Assembly {
-            labels: Vec::new()
+            lines: Vec::new()
         }
+    }
+
+    pub fn iter_lines(&self) -> slice::Iter<Line<L>> {
+        self.lines.iter()
+    }
+
+    pub fn append_line(&mut self, line: Line<L>) {
+        self.lines.push(line);
     }
 }

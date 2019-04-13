@@ -3,6 +3,7 @@
 
 use std::ops::{Add, AddAssign, Sub, SubAssign, BitAnd};
 use std::cmp::{PartialEq, PartialOrd, Ord, Ordering};
+use std::hash::{Hash, Hasher};
 use std::collections::HashMap;
 use num::traits::Bounded;
 use crate::retrogram::reg::Symbolic;
@@ -68,6 +69,12 @@ impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
     pub fn set_platform_context(&mut self, context_name: &str, value: Symbolic<CV>) {
         let inner_name = format!("P{}", context_name);
         self.context.insert(inner_name, value);
+    }
+}
+
+impl<P, CV> Hash for Pointer<P, CV> where P: Hash {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.pointer.hash(state);
     }
 }
 
