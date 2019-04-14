@@ -111,7 +111,7 @@ impl<I, F, P> fmt::Display for Operand<Literal<I, F, P>> where I: fmt::Display, 
             Operand::Literal(Literal::Pointer(p)) => write!(f, "${:x}", p),
             Operand::Literal(Literal::String(s)) => write!(f, "{}", s),
             Operand::Literal(Literal::Missing) => write!(f, "?"),
-            Operand::Label(lbl) if lbl.global => write!(f, "{}", lbl.name),
+            Operand::Label(lbl) if lbl.parent_name == None => write!(f, "{}", lbl.name),
             Operand::Label(lbl) => write!(f, ".{}", lbl.name),
             Operand::DataReference(op) => write!(f, "{}", op),
             Operand::CodeReference(op) => write!(f, "{}", op),
@@ -174,17 +174,26 @@ pub struct Label {
     /// Name of the label.
     name: String,
 
-    /// Whether or not the label can be referred to outside of it's own local
-    /// block. All global labels must have a unique name.
-    global: bool,
+    /// Name of the parent label (if any).
+    /// If None, then the label is global.
+    parent_name: Option<String>
+}
+
+impl Label {
+    pub fn new(name: &str, parent_name: Option<&str>) -> Label {
+        Label {
+            name: name.to_string(),
+            parent_name: parent_name.map(|s| s.to_string())
+        }
+    }
 }
 
 impl fmt::Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.global {
-            write!(f, "{}:", self.name)
-        } else {
+        if let Some(parent_label) = &self.parent_name {
             write!(f, ".{}", self.name)
+        } else {
+            write!(f, "{}:", self.name)
         }
     }
 }
