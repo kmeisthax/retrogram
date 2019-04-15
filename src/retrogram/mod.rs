@@ -3,5 +3,5 @@ pub mod reg;
 mod ast;
 pub mod arch;
 pub mod platform;
-mod analysis;
-mod asm;
+pub mod analysis;
+pub mod asm;

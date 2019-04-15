@@ -1,3 +1,3 @@
 //! Interop with different assembler syntaxes
 
-mod rgbds;
+pub mod rgbds;

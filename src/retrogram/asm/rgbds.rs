@@ -4,6 +4,7 @@ use std::io;
 use std::ops::{Shl, BitOr};
 use std::hash::Hash;
 use crate::retrogram::ast;
+use crate::retrogram::arch::lr35902;
 use crate::retrogram::platform::gb;
 use crate::retrogram::analysis::Database;
 
@@ -36,7 +37,7 @@ fn str2hex<I>(thestr: &str) -> Option<I> where I: From<u8> + Shl + From<<I as Sh
 }
 
 /// Read the symbols from an RGBDS symbol file.
-fn parse_symbol_file<F>(file: F, db: &mut Database<u16>) -> io::Result<()> where F: io::BufRead {
+pub fn parse_symbol_file<F>(file: F, db: &mut Database<lr35902::Pointer>) -> io::Result<()> where F: io::BufRead {
     for line in file.lines() {
         let line = line?;
         let mut split = line.split(" ");

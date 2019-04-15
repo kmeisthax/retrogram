@@ -2,7 +2,7 @@
 
 use std::io;
 use std::ops::BitAnd;
-use crate::retrogram::{reg, memory};
+use crate::retrogram::{reg, memory, ast};
 use crate::retrogram::arch::lr35902;
 
 /// Any type which decodes the banked memory region (0x4000) of a Game Boy ROM
@@ -223,21 +223,22 @@ pub fn construct_platform<F>(file: &mut F, pv: PlatformVariant) -> io::Result<lr
     Ok(bus)
 }
 
-pub fn analyze<F>(file: &mut F, start_pc: Option<memory::Pointer<lr35902::Pointer>>) -> io::Result<()> where F: io::Read {
+pub fn analyze<F>(file: &mut F, start_pc: Option<memory::Pointer<lr35902::Pointer>>) -> io::Result<ast::Assembly> where F: io::Read {
     let plat = construct_platform(file, PlatformVariant::MBC5Mapper)?;
     let mut pc = start_pc.unwrap_or(memory::Pointer::from(0x0100));
+    let mut asm = ast::Assembly::new();
 
     loop {
         match lr35902::disassemble(&pc, &plat) {
             (Some(instr), size, is_nonfinal) => {
-                println!("{}", instr);
+                asm.append_line(ast::Line::new(None, Some(instr), None));
                 pc += size;
 
                 if !is_nonfinal {
-                    return Ok(());
+                    return Ok(asm);
                 }
             },
-            (None, _, _) => return Ok(())
+            (None, _, _) => return Ok(asm)
         }
     }
 }

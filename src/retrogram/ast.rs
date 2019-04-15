@@ -280,3 +280,13 @@ impl<L> Assembly<L> {
         self.lines.push(line);
     }
 }
+
+impl<L> fmt::Display for Assembly<L> where Line<L>: fmt::Display {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for line in self.iter_lines() {
+            write!(f, "{}", line)?;
+        }
+
+        Ok(())
+    }
+}

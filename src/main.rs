@@ -6,7 +6,7 @@ mod retrogram;
 use std::{str, fs, io};
 use std::str::FromStr;
 use argparse;
-use crate::retrogram::{arch, platform, reg};
+use crate::retrogram::{arch, platform, asm, reg, analysis};
 use crate::retrogram::arch::ArchName;
 use crate::retrogram::platform::PlatformName;
 
@@ -31,6 +31,7 @@ fn main() -> io::Result<()> {
     let mut platform = None;
     let mut arch : Option<arch::ArchName> = None;
     let mut start_pc : Option<String> = None;
+    let mut symbol_file : Option<String> = None;
 
     {
         let mut ap = argparse::ArgumentParser::new();
@@ -40,6 +41,7 @@ fn main() -> io::Result<()> {
         ap.refer(&mut platform).add_option(&["--platform"], argparse::StoreOption, "What platform to expect");
         ap.refer(&mut arch).add_option(&["--arch"], argparse::StoreOption, "What architecture to expect");
         ap.refer(&mut start_pc).add_option(&["--start_pc"], argparse::StoreOption, "The PC value to start analysis from");
+        ap.refer(&mut symbol_file).add_option(&["--symbol_file"], argparse::StoreOption, "A symbol file to use to decorate discovered symbols");
 
         ap.parse_args_or_exit();
     }
@@ -61,10 +63,19 @@ fn main() -> io::Result<()> {
 
             match platform {
                 Some(PlatformName::GB) => {
-                    match pc_pieces.map(|p| platform::gb::create_context(&p)) {
+                    let mut db = analysis::Database::new();
+                    if let Some(symbol_file) = symbol_file {
+                        asm::rgbds::parse_symbol_file(io::BufReader::new(fs::File::open(symbol_file)?), &mut db)?;
+                    }
+                    
+                    let orig_asm = match pc_pieces.map(|p| platform::gb::create_context(&p)) {
                         Some(Some(cptr)) => platform::gb::analyze(&mut file, Some(cptr))?,
                         _ => platform::gb::analyze(&mut file, None)?
-                    }
+                    };
+
+                    let labeled_asm = analysis::replace_labels(orig_asm, &db);
+
+                    println!("{}", labeled_asm);
                 },
                 _ => eprintln!("Unknown platform")
             }

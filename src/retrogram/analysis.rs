@@ -3,6 +3,8 @@
 
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::convert::TryFrom;
+use std::fmt::Debug;
 use crate::retrogram::{ast, memory};
 
 /// A repository of information obtained from the program under analysis.
@@ -34,11 +36,11 @@ impl<P> Database<P> where P: Clone + Eq + Hash {
 
 /// Given an operand, replace all Pointer literals with Label operands obtained
 /// from the Database.
-pub fn replace_operand_with_label<I, F, P>(src_operand: &ast::Operand<ast::Literal<I, F, P>>, db: &Database<P>) -> ast::Operand<ast::Literal<I, F, P>> where P: Clone + Eq + Hash, ast::Literal<I, F, P>: Clone {
+pub fn replace_operand_with_label<I, F, P, AP>(src_operand: &ast::Operand<ast::Literal<I, F, P>>, db: &Database<AP>) -> ast::Operand<ast::Literal<I, F, P>> where AP: Clone + Eq + Hash + TryFrom<P>, ast::Literal<I, F, P>: Clone, <AP as TryFrom<P>>::Error : Debug {
     match src_operand.clone() {
         ast::Operand::Literal(ast::Literal::Pointer(pt)) => {
             //TODO: How do we retain pointer context?
-            if let Some(lbl) = db.pointer_label(memory::Pointer::from(pt)) {
+            if let Some(lbl) = db.pointer_label(memory::Pointer::from(AP::try_from(pt).expect("Label operand does not fit in architecture's target pointer size."))) {
                 ast::Operand::Label(lbl.clone())
             } else {
                 src_operand.clone()
@@ -52,7 +54,9 @@ pub fn replace_operand_with_label<I, F, P>(src_operand: &ast::Operand<ast::Liter
     }
 }
 
-pub fn replace_labels<I, F, P>(src_assembly: ast::Assembly<ast::Literal<I, F, P>>, db: &Database<P>) -> ast::Assembly<ast::Literal<I, F, P>> where P: Clone + Eq + Hash, ast::Literal<I, F, P>: Clone {
+/// Given an Assembly, create a new Assembly with all pointers replaced with
+/// their equivalent labels in the database.
+pub fn replace_labels<I, F, P, AP>(src_assembly: ast::Assembly<ast::Literal<I, F, P>>, db: &Database<AP>) -> ast::Assembly<ast::Literal<I, F, P>> where AP: Clone + Eq + Hash + TryFrom<P>, ast::Literal<I, F, P>: Clone, <AP as TryFrom<P>>::Error : Debug {
     let mut dst_assembly = ast::Assembly::new();
 
     for line in src_assembly.iter_lines() {
