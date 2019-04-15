@@ -192,7 +192,7 @@ impl Label {
 impl fmt::Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(parent_label) = &self.parent_name {
-            write!(f, ".{}", self.name)
+            write!(f, ".{}:", self.name)
         } else {
             write!(f, "{}:", self.name)
         }
@@ -210,11 +210,11 @@ pub struct Line<I = u64, F = f64, P = I> {
 impl<I, F, P> fmt::Display for Line<I, F, P> where Instruction<Literal<I, F, P>>: fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref label) = self.label {
-            write!(f, "{}", label)?;
+            write!(f, "{} ", label)?;
         }
 
         if let Some(ref instruction) = self.instruction {
-            write!(f, "{}", instruction)?;
+            write!(f, "{} ", instruction)?;
         }
 
         if let Some(ref comment) = self.comment {

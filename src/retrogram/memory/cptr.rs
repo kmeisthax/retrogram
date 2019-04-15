@@ -5,6 +5,7 @@ use std::ops::{Add, AddAssign, Sub, SubAssign, BitAnd};
 use std::cmp::{PartialEq, PartialOrd, Ord, Ordering};
 use std::hash::{Hash, Hasher};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use num::traits::Bounded;
 use crate::retrogram::reg::Symbolic;
 
@@ -92,6 +93,16 @@ impl<P, CV> Pointer<P, CV> {
         Pointer {
             pointer: self.pointer.into(),
             context: self.context
+        }
+    }
+
+    pub fn try_into_ptr<OP>(self) -> Result<Pointer<OP, CV>, <P as TryInto<OP>>::Error> where P: TryInto<OP> {
+        match self.pointer.try_into() {
+            Ok(into_ptr) => Ok(Pointer {
+                pointer: into_ptr,
+                context: self.context
+            }),
+            Err(e) => Err(e)
         }
     }
 }

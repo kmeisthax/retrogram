@@ -79,3 +79,24 @@ pub fn replace_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &Da
 
     dst_assembly
 }
+
+/// Given an Assembly, create a new Assembly with all labels inserted from the
+/// database.
+pub fn inject_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &Database<AP>) -> ast::Assembly<I, F, P> where AP: Clone + Eq + Hash + TryFrom<P>, ast::Line<I, F, P>: Clone, memory::Pointer<P>: Clone, <AP as TryFrom<P>>::Error : Debug {
+    let mut dst_assembly = ast::Assembly::new();
+    
+    for line in src_assembly.iter_lines() {
+        if let None = line.label() {
+            let (label, old_instr, comment, src_addr) = line.clone().into_parts();
+            if let Some(new_label) = db.pointer_label(src_addr.clone().try_into_ptr().expect("Label operand does not fit in architecture's target pointer size.")) {
+                dst_assembly.append_line(ast::Line::new(Some(new_label.clone()), old_instr, comment, src_addr));
+            } else {
+                dst_assembly.append_line(line.clone());
+            }
+        } else {
+            dst_assembly.append_line(line.clone());
+        }
+    }
+
+    dst_assembly
+}

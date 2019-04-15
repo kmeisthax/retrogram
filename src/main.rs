@@ -74,8 +74,9 @@ fn main() -> io::Result<()> {
                     };
 
                     let labeled_asm = analysis::replace_labels(orig_asm, &db);
+                    let injected_asm = analysis::inject_labels(labeled_asm, &db);
 
-                    println!("{}", labeled_asm);
+                    println!("{}", injected_asm);
                 },
                 _ => eprintln!("Unknown platform")
             }
