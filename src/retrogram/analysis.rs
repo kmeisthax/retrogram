@@ -56,7 +56,7 @@ pub fn replace_operand_with_label<I, F, P, AP>(src_operand: &ast::Operand<ast::L
 
 /// Given an Assembly, create a new Assembly with all pointers replaced with
 /// their equivalent labels in the database.
-pub fn replace_labels<I, F, P, AP>(src_assembly: ast::Assembly<ast::Literal<I, F, P>>, db: &Database<AP>) -> ast::Assembly<ast::Literal<I, F, P>> where AP: Clone + Eq + Hash + TryFrom<P>, ast::Literal<I, F, P>: Clone, <AP as TryFrom<P>>::Error : Debug {
+pub fn replace_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &Database<AP>) -> ast::Assembly<I, F, P> where AP: Clone + Eq + Hash + TryFrom<P>, ast::Literal<I, F, P>: Clone, ast::Line<I, F, P>: Clone, <AP as TryFrom<P>>::Error : Debug {
     let mut dst_assembly = ast::Assembly::new();
 
     for line in src_assembly.iter_lines() {
@@ -70,8 +70,8 @@ pub fn replace_labels<I, F, P, AP>(src_assembly: ast::Assembly<ast::Literal<I, F
             }
 
             let new_instr = ast::Instruction::new(instr.opcode(), new_operands);
-            let (label, old_instr, comment) = line.clone().into_parts();
-            dst_assembly.append_line(ast::Line::new(label, Some(new_instr), comment));
+            let (label, old_instr, comment, src_addr) = line.clone().into_parts();
+            dst_assembly.append_line(ast::Line::new(label, Some(new_instr), comment, src_addr));
         } else {
             dst_assembly.append_line(line.clone());
         }

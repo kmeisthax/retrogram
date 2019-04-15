@@ -231,7 +231,7 @@ pub fn analyze<F>(file: &mut F, start_pc: Option<memory::Pointer<lr35902::Pointe
     loop {
         match lr35902::disassemble(&pc, &plat) {
             (Some(instr), size, is_nonfinal) => {
-                asm.append_line(ast::Line::new(None, Some(instr), None));
+                asm.append_line(ast::Line::new(None, Some(instr), None, pc.clone().into_ptr()));
                 pc += size;
 
                 if !is_nonfinal {

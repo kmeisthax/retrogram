@@ -2,6 +2,7 @@
 
 use std::{fmt, slice};
 use std::cmp::{PartialEq, Eq};
+use crate::retrogram::memory;
 
 ///A literal value, such as an integer, pointer, or other kind of reference.
 /// 
@@ -199,13 +200,14 @@ impl fmt::Display for Label {
 }
 
 #[derive(Clone)]
-pub struct Line<L = Literal> {
+pub struct Line<I = u64, F = f64, P = I> {
     label: Option<Label>,
-    instruction: Option<Instruction<L>>,
-    comment: Option<String>
+    instruction: Option<Instruction<Literal<I, F, P>>>,
+    comment: Option<String>,
+    source_address: memory::Pointer<P>,
 }
 
-impl<L> fmt::Display for Line<L> where Instruction<L>: fmt::Display {
+impl<I, F, P> fmt::Display for Line<I, F, P> where Instruction<Literal<I, F, P>>: fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref label) = self.label {
             write!(f, "{}", label)?;
@@ -223,12 +225,13 @@ impl<L> fmt::Display for Line<L> where Instruction<L>: fmt::Display {
     }
 }
 
-impl<L> Line<L> {
-    pub fn new(label: Option<Label>, instruction: Option<Instruction<L>>, comment: Option<String>) -> Self {
+impl<I, F, P> Line<I, F, P> {
+    pub fn new(label: Option<Label>, instruction: Option<Instruction<Literal<I, F, P>>>, comment: Option<String>, source_address: memory::Pointer<P>) -> Self {
         Line {
             label: label,
             instruction: instruction,
-            comment: comment
+            comment: comment,
+            source_address: source_address
         }
     }
     
@@ -240,7 +243,7 @@ impl<L> Line<L> {
         }
     }
 
-    pub fn instr(&self) -> Option<&Instruction<L>> {
+    pub fn instr(&self) -> Option<&Instruction<Literal<I, F, P>>> {
         if let Some(ref instruction) = self.instruction {
             Some(instruction)
         } else {
@@ -256,32 +259,32 @@ impl<L> Line<L> {
         }
     }
 
-    pub fn into_parts(self) -> (Option<Label>, Option<Instruction<L>>, Option<String>) {
-        (self.label, self.instruction, self.comment)
+    pub fn into_parts(self) -> (Option<Label>, Option<Instruction<Literal<I, F, P>>>, Option<String>, memory::Pointer<P>) {
+        (self.label, self.instruction, self.comment, self.source_address)
     }
 }
 
-pub struct Assembly<L = Literal> {
-    lines: Vec<Line<L>>
+pub struct Assembly<I = u64, F = f64, P = I> {
+    lines: Vec<Line<I, F, P>>
 }
 
-impl<L> Assembly<L> {
+impl<I, F, P> Assembly<I, F, P> {
     pub fn new() -> Self {
         Assembly {
             lines: Vec::new()
         }
     }
 
-    pub fn iter_lines(&self) -> slice::Iter<Line<L>> {
+    pub fn iter_lines(&self) -> slice::Iter<Line<I, F, P>> {
         self.lines.iter()
     }
 
-    pub fn append_line(&mut self, line: Line<L>) {
+    pub fn append_line(&mut self, line: Line<I, F, P>) {
         self.lines.push(line);
     }
 }
 
-impl<L> fmt::Display for Assembly<L> where Line<L>: fmt::Display {
+impl<I, F, P> fmt::Display for Assembly<I, F, P> where Line<I, F, P>: fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for line in self.iter_lines() {
             write!(f, "{}", line)?;

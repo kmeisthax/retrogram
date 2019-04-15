@@ -87,6 +87,15 @@ impl<P, CV> From<P> for Pointer<P, CV> {
     }
 }
 
+impl<P, CV> Pointer<P, CV> {
+    pub fn into_ptr<OP>(self) -> Pointer<OP, CV> where P: Into<OP> {
+        Pointer {
+            pointer: self.pointer.into(),
+            context: self.context
+        }
+    }
+}
+
 impl<P, CV> Add<P> for Pointer<P, CV> where P: Add {
     type Output = Pointer<<P as Add>::Output, CV>;
 
