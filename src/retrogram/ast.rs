@@ -259,6 +259,10 @@ impl<I, F, P> Line<I, F, P> {
         }
     }
 
+    pub fn source_address(&self) -> &memory::Pointer<P> {
+        &self.source_address
+    }
+
     pub fn into_parts(self) -> (Option<Label>, Option<Instruction<Literal<I, F, P>>>, Option<String>, memory::Pointer<P>) {
         (self.label, self.instruction, self.comment, self.source_address)
     }

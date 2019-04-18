@@ -50,6 +50,14 @@ impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
         self.context.insert(inner_name, value);
     }
 
+    /// Reset an existing platform context.
+    /// 
+    /// The value attached to the context will be returned.
+    pub fn remove_arch_context(&mut self, context_name: &str) -> Symbolic<CV> {
+        let inner_name = format!("A{}", context_name);
+        self.context.remove(&inner_name).unwrap_or(Symbolic::default())
+    }
+
     /// Get a context specific to a given platform.
     /// 
     /// Platform contexts are prefixed with a `P` to avoid conflicts with
@@ -70,6 +78,35 @@ impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
     pub fn set_platform_context(&mut self, context_name: &str, value: Symbolic<CV>) {
         let inner_name = format!("P{}", context_name);
         self.context.insert(inner_name, value);
+    }
+
+    /// Reset an existing platform context.
+    /// 
+    /// The value attached to the context will be returned.
+    pub fn remove_platform_context(&mut self, context_name: &str) -> Symbolic<CV> {
+        let inner_name = format!("P{}", context_name);
+        self.context.remove(&inner_name).unwrap_or(Symbolic::default())
+    }
+
+    /// List all the contexts a given pointer has.
+    /// 
+    /// Yields a list of tuples of booleans, strings, and context values. The
+    /// boolean indicates if the context is architectural or no; the string is
+    /// the context key, and the value is the context value.
+    pub fn iter_contexts<'a>(&'a self) -> impl Iterator + 'a {
+        self.context.iter().map(|(k, v)| (k.chars().next() == Some('A'), &k[..1], v))
+    }
+
+    /// Create a new pointer with the same context as the current one.
+    /// 
+    /// It is not guaranteed that platform or architectural contexts will remain
+    /// applicable with a different pointer. You must consult your platform to
+    /// determine if the contexts selected are still applicable.
+    pub fn contextualize(&self, p: P) -> Self {
+        Pointer {
+            pointer: p,
+            context: self.context.clone()
+        }
     }
 }
 
