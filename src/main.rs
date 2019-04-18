@@ -73,7 +73,7 @@ fn main() -> io::Result<()> {
                         _ => platform::gb::analyze(&mut file, None)?
                     };
 
-                    let labeled_asm = analysis::replace_labels(orig_asm, &db);
+                    let labeled_asm = analysis::replace_labels(orig_asm, &mut db);
                     let injected_asm = analysis::inject_labels(labeled_asm, &db);
 
                     println!("{}", injected_asm);
