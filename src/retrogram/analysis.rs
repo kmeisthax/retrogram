@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::convert::TryFrom;
-use std::fmt::Debug;
+use std::fmt::{Display, Debug, UpperHex};
 use crate::retrogram::{ast, memory};
 
 /// A repository of information obtained from the program under analysis.
@@ -36,27 +36,26 @@ impl<P> Database<P> where P: Clone + Eq + Hash {
 
 /// Given an operand, replace all Pointer literals with Label operands obtained
 /// from the Database.
-pub fn replace_operand_with_label<I, F, P, AP>(src_operand: &ast::Operand<ast::Literal<I, F, P>>, db: &Database<AP>) -> ast::Operand<ast::Literal<I, F, P>> where AP: Clone + Eq + Hash + TryFrom<P>, ast::Literal<I, F, P>: Clone, <AP as TryFrom<P>>::Error : Debug {
+pub fn replace_operand_with_label<I, F, P, AP>(src_operand: &ast::Operand<ast::Literal<I, F, P>>, db: &Database<AP>, start_addr: &memory::Pointer<AP>) -> ast::Operand<ast::Literal<I, F, P>> where AP: Clone + Eq + Hash + TryFrom<P>, ast::Literal<I, F, P>: Clone, <AP as TryFrom<P>>::Error : Debug {
     match src_operand.clone() {
         ast::Operand::Literal(ast::Literal::Pointer(pt)) => {
-            //TODO: How do we retain pointer context?
-            if let Some(lbl) = db.pointer_label(memory::Pointer::from(AP::try_from(pt).expect("Label operand does not fit in architecture's target pointer size."))) {
+            if let Some(lbl) = db.pointer_label(start_addr.contextualize(AP::try_from(pt).expect("Label operand does not fit in architecture's target pointer size."))) {
                 ast::Operand::Label(lbl.clone())
             } else {
                 src_operand.clone()
             }
         },
-        ast::Operand::DataReference(op) => ast::Operand::DataReference(Box::new(replace_operand_with_label(op.as_ref(), db))),
-        ast::Operand::CodeReference(op) => ast::Operand::CodeReference(Box::new(replace_operand_with_label(op.as_ref(), db))),
-        ast::Operand::Indirect(op) => ast::Operand::Indirect(Box::new(replace_operand_with_label(op.as_ref(), db))),
-        ast::Operand::Add(opl, opr) => ast::Operand::Add(Box::new(replace_operand_with_label(opl.as_ref(), db)), Box::new(replace_operand_with_label(opr.as_ref(), db))),
+        ast::Operand::DataReference(op) => ast::Operand::DataReference(Box::new(replace_operand_with_label(op.as_ref(), db, start_addr))),
+        ast::Operand::CodeReference(op) => ast::Operand::CodeReference(Box::new(replace_operand_with_label(op.as_ref(), db, start_addr))),
+        ast::Operand::Indirect(op) => ast::Operand::Indirect(Box::new(replace_operand_with_label(op.as_ref(), db, start_addr))),
+        ast::Operand::Add(opl, opr) => ast::Operand::Add(Box::new(replace_operand_with_label(opl.as_ref(), db, start_addr)), Box::new(replace_operand_with_label(opr.as_ref(), db, start_addr))),
         _ => src_operand.clone()
     }
 }
 
 /// Given an Assembly, create a new Assembly with all pointers replaced with
 /// their equivalent labels in the database.
-pub fn replace_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &Database<AP>) -> ast::Assembly<I, F, P> where AP: Clone + Eq + Hash + TryFrom<P>, ast::Literal<I, F, P>: Clone, ast::Line<I, F, P>: Clone, <AP as TryFrom<P>>::Error : Debug {
+pub fn replace_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &Database<AP>) -> ast::Assembly<I, F, P> where P: Clone, AP: Clone + Eq + Hash + TryFrom<P>, ast::Literal<I, F, P>: Clone, ast::Line<I, F, P>: Clone, <AP as TryFrom<P>>::Error : Debug {
     let mut dst_assembly = ast::Assembly::new();
 
     for line in src_assembly.iter_lines() {
@@ -64,9 +63,7 @@ pub fn replace_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &Da
             let mut new_operands = Vec::new();
 
             for operand in instr.iter_operands() {
-                //replace the operand...
-
-                new_operands.push(replace_operand_with_label(operand, db));
+                new_operands.push(replace_operand_with_label(operand, db, &line.source_address().clone().try_into_ptr().expect("Disassembly source address does not fit in architecture's target pointer size.")));
             }
 
             let new_instr = ast::Instruction::new(instr.opcode(), new_operands);
@@ -93,6 +90,66 @@ pub fn inject_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &Dat
             } else {
                 dst_assembly.append_line(line.clone());
             }
+        } else {
+            dst_assembly.append_line(line.clone());
+        }
+    }
+
+    dst_assembly
+}
+
+/// Given an operand, replace all Pointer literals with automatically generated
+/// labels.
+/// 
+/// All automatically generated labels will be registered in the database.
+pub fn replace_operand_with_templabel<I, F, P, AP>(src_operand: &ast::Operand<ast::Literal<I, F, P>>, db: &mut Database<AP>, start_addr: &memory::Pointer<AP>, in_dataref: bool, in_coderef: bool) -> ast::Operand<ast::Literal<I, F, P>> where P: UpperHex, AP: Clone + Eq + Hash + TryFrom<P>, ast::Literal<I, F, P>: Clone, <AP as TryFrom<P>>::Error : Debug {
+    match src_operand.clone() {
+        ast::Operand::Literal(ast::Literal::Pointer(pt)) => {
+            //TODO: This preserves context, but perhaps a little too well.
+            //In contrived scenarios we might accidentally carry a bunch of
+            //useless contexts that clutter up the label.
+            let mut name = match (in_dataref, in_coderef) {
+                (true, false) => "DATA_",
+                (false, true) => "CODE_",
+                _ => "UNK_"
+            }.to_string();
+
+            for (_, key, cval) in start_addr.iter_contexts() {
+                name = match cval.into_concrete() {
+                    Some(cval) => format!("{}_{:X}", name, cval),
+                    _ => format!("{}_{}??", name, key)
+                };
+            }
+
+            name = format!("{}_{:X}", name, pt);
+
+            db.insert_label(ast::Label::new(&name, None), start_addr.contextualize(AP::try_from(pt).expect("Label operand does not fit in architecture's target pointer size.")));
+            ast::Operand::Label(ast::Label::new(&name, None))
+        },
+        ast::Operand::DataReference(op) => ast::Operand::DataReference(Box::new(replace_operand_with_templabel(op.as_ref(), db, start_addr, true, false))),
+        ast::Operand::CodeReference(op) => ast::Operand::CodeReference(Box::new(replace_operand_with_templabel(op.as_ref(), db, start_addr, false, true))),
+        ast::Operand::Indirect(op) => ast::Operand::Indirect(Box::new(replace_operand_with_templabel(op.as_ref(), db, start_addr, in_dataref, in_coderef))),
+        ast::Operand::Add(opl, opr) => ast::Operand::Add(Box::new(replace_operand_with_templabel(opl.as_ref(), db, start_addr, in_dataref, in_coderef)), Box::new(replace_operand_with_templabel(opr.as_ref(), db, start_addr, in_dataref, in_coderef))),
+        _ => src_operand.clone()
+    }
+}
+
+/// Given an Assembly, create a new Assembly with all data and code references
+/// replaced with temporary labels.
+pub fn create_temp_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &mut Database<AP>) -> ast::Assembly<I, F, P> where P: UpperHex, AP: Clone + Eq + Hash + TryFrom<P>, ast::Line<I, F, P>: Clone, ast::Literal<I, F, P>: Clone, memory::Pointer<P>: Clone, <AP as TryFrom<P>>::Error : Debug {
+    let mut dst_assembly = ast::Assembly::new();
+
+    for line in src_assembly.iter_lines() {
+        if let Some(instr) = line.instr() {
+            let mut new_operands = Vec::new();
+
+            for operand in instr.iter_operands() {
+                new_operands.push(replace_operand_with_templabel(operand, db, &line.source_address().clone().try_into_ptr().expect("Disassembly source address does not fit in architecture's target pointer size."), false, false));
+            }
+
+            let new_instr = ast::Instruction::new(instr.opcode(), new_operands);
+            let (label, old_instr, comment, src_addr) = line.clone().into_parts();
+            dst_assembly.append_line(ast::Line::new(label, Some(new_instr), comment, src_addr));
         } else {
             dst_assembly.append_line(line.clone());
         }
