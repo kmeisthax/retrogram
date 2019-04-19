@@ -132,3 +132,17 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         reg::Symbolic::default()
     }
 }
+
+impl<P, MV, S, IO> Memory<P, MV, S, IO>
+    where P: Copy + Add<S> + Sub + PartialOrd + From<<P as Add<S>>::Output>,
+        S: Copy + From<<P as Sub>::Output> {
+    pub fn minimize_context(&self, ptr: Pointer<P>) -> Pointer<P> {
+        for view in &self.views {
+            if view.is_ptr_within(*ptr.as_pointer()) {
+                return view.image.minimize_context(ptr);
+            }
+        }
+
+        ptr
+    }
+}

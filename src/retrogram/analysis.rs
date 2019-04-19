@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::convert::TryFrom;
+use std::ops::{Add, Sub};
 use std::fmt::{Display, Debug, UpperHex};
 use crate::retrogram::{ast, memory};
 
@@ -36,26 +37,28 @@ impl<P> Database<P> where P: Clone + Eq + Hash {
 
 /// Given an operand, replace all Pointer literals with Label operands obtained
 /// from the Database.
-pub fn replace_operand_with_label<I, F, P, AP>(src_operand: &ast::Operand<ast::Literal<I, F, P>>, db: &mut Database<AP>, start_addr: &memory::Pointer<AP>, in_dataref: bool, in_coderef: bool) -> ast::Operand<ast::Literal<I, F, P>>
+pub fn replace_operand_with_label<I, F, P, AP, AMV, AS, AIO>(src_operand: &ast::Operand<ast::Literal<I, F, P>>, db: &mut Database<AP>, start_addr: &memory::Pointer<AP>, memory: &memory::Memory<AP, AMV, AS, AIO>, in_dataref: bool, in_coderef: bool) -> ast::Operand<ast::Literal<I, F, P>>
     where P: Clone + UpperHex,
-        AP: Clone + Eq + Hash + TryFrom<P>,
+        AP: Copy + PartialOrd + Add<AS> + Sub + Eq + Hash + TryFrom<P> + From<<AP as Add<AS>>::Output>,
+        AS: Copy + From<<AP as Sub>::Output>,
+        memory::Pointer<AP>: Clone,
         ast::Literal<I, F, P>: Clone,
         <AP as TryFrom<P>>::Error : Debug {
     match src_operand.clone() {
         ast::Operand::Literal(ast::Literal::Pointer(pt)) => {
-            if let Some(lbl) = db.pointer_label(start_addr.contextualize(AP::try_from(pt.clone()).expect("Label operand does not fit in architecture's target pointer size."))) {
+            let mut cpt = start_addr.contextualize(AP::try_from(pt.clone()).expect("Label operand does not fit in architecture's target pointer size."));
+            cpt = memory.minimize_context(cpt);
+
+            if let Some(lbl) = db.pointer_label(cpt.clone()) {
                 ast::Operand::Label(lbl.clone())
             } else {
-                //TODO: This preserves context, but perhaps a little too well.
-                //In contrived scenarios we might accidentally carry a bunch of
-                //useless contexts that clutter up the label.
                 let mut name = match (in_dataref, in_coderef) {
                     (true, false) => "DAT",
                     (false, true) => "LOC",
                     _ => "UNK"
                 }.to_string();
 
-                for (_, key, cval) in start_addr.iter_contexts() {
+                for (_, key, cval) in cpt.iter_contexts() {
                     name = match cval.into_concrete() {
                         Some(cval) => format!("{}_{:X}", name, cval),
                         _ => format!("{}_{}??", name, key)
@@ -68,10 +71,10 @@ pub fn replace_operand_with_label<I, F, P, AP>(src_operand: &ast::Operand<ast::L
                 ast::Operand::Label(ast::Label::new(&name, None))
             }
         },
-        ast::Operand::DataReference(op) => ast::Operand::DataReference(Box::new(replace_operand_with_label(op.as_ref(), db, start_addr, true, false))),
-        ast::Operand::CodeReference(op) => ast::Operand::CodeReference(Box::new(replace_operand_with_label(op.as_ref(), db, start_addr, false, true))),
-        ast::Operand::Indirect(op) => ast::Operand::Indirect(Box::new(replace_operand_with_label(op.as_ref(), db, start_addr, in_dataref, in_coderef))),
-        ast::Operand::Add(opl, opr) => ast::Operand::Add(Box::new(replace_operand_with_label(opl.as_ref(), db, start_addr, in_dataref, in_coderef)), Box::new(replace_operand_with_label(opr.as_ref(), db, start_addr, in_dataref, in_coderef))),
+        ast::Operand::DataReference(op) => ast::Operand::DataReference(Box::new(replace_operand_with_label(op.as_ref(), db, start_addr, memory, true, false))),
+        ast::Operand::CodeReference(op) => ast::Operand::CodeReference(Box::new(replace_operand_with_label(op.as_ref(), db, start_addr, memory, false, true))),
+        ast::Operand::Indirect(op) => ast::Operand::Indirect(Box::new(replace_operand_with_label(op.as_ref(), db, start_addr, memory, in_dataref, in_coderef))),
+        ast::Operand::Add(opl, opr) => ast::Operand::Add(Box::new(replace_operand_with_label(opl.as_ref(), db, start_addr, memory, in_dataref, in_coderef)), Box::new(replace_operand_with_label(opr.as_ref(), db, start_addr, memory, in_dataref, in_coderef))),
         _ => src_operand.clone()
     }
 }
@@ -81,9 +84,10 @@ pub fn replace_operand_with_label<I, F, P, AP>(src_operand: &ast::Operand<ast::L
 /// 
 /// If a given pointer has no matching label, then a temporary label will be
 /// automatically generated and added to the database.
-pub fn replace_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &mut Database<AP>) -> ast::Assembly<I, F, P>
+pub fn replace_labels<I, F, P, AP, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P>, db: &mut Database<AP>, memory: &memory::Memory<AP, AMV, AS, AIO>) -> ast::Assembly<I, F, P>
     where P: Clone + UpperHex,
-        AP: Clone + Eq + Hash + TryFrom<P>,
+        AP: Copy + PartialOrd + Add<AS> + Sub + Eq + Hash + TryFrom<P> + From<<AP as Add<AS>>::Output>,
+        AS: Copy + From<<AP as Sub>::Output>,
         ast::Literal<I, F, P>: Clone,
         ast::Line<I, F, P>: Clone,
         <AP as TryFrom<P>>::Error : Debug {
@@ -94,7 +98,7 @@ pub fn replace_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &mu
             let mut new_operands = Vec::new();
 
             for operand in instr.iter_operands() {
-                new_operands.push(replace_operand_with_label(operand, db, &line.source_address().clone().try_into_ptr().expect("Disassembly source address does not fit in architecture's target pointer size."), false, false));
+                new_operands.push(replace_operand_with_label(operand, db, &line.source_address().clone().try_into_ptr().expect("Disassembly source address does not fit in architecture's target pointer size."), memory, false, false));
             }
 
             let new_instr = ast::Instruction::new(instr.opcode(), new_operands);

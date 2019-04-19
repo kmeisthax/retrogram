@@ -37,7 +37,7 @@ impl<P, MV, IO> Image for UnknownImage<P, MV, IO> where P: CheckedSub + Clone, I
         base.checked_sub(ptr.as_pointer()).map(|p| IO::from(p))
     }
 
-    fn minimize_context(&self, ptr: &Pointer<Self::Pointer>) -> Pointer<Self::Pointer> {
+    fn minimize_context(&self, ptr: Pointer<Self::Pointer>) -> Pointer<Self::Pointer> {
         Pointer::from(ptr.as_pointer().clone())
     }
 }
@@ -77,7 +77,7 @@ impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: CheckedSub + Cl
         base.checked_sub(ptr.as_pointer()).map(|p| IO::from(p))
     }
 
-    fn minimize_context(&self, ptr: &Pointer<Self::Pointer>) -> Pointer<Self::Pointer> {
+    fn minimize_context(&self, ptr: Pointer<Self::Pointer>) -> Pointer<Self::Pointer> {
         let my_ctxt = ptr.get_platform_context(self.banking_ctxt);
         let mut stripped_ptr = Pointer::from(ptr.as_pointer().clone());
         

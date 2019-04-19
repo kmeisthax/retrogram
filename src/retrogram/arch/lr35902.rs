@@ -1,5 +1,6 @@
 //! A Z80 derivative created by SHARP for use in the Nintendo Game Boy
 
+use std::io;
 use crate::retrogram::{memory, ast};
 use crate::retrogram::ast::Operand as op;
 use crate::retrogram::ast::Instruction as inst;
@@ -221,5 +222,24 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<ast::Inst
             }
         },
         _ => (None, 0, false)
+    }
+}
+
+pub fn disassemble_block<F>(file: &mut F, start_pc: Option<memory::Pointer<Pointer>>, plat: &Bus) -> io::Result<ast::Assembly> where F: io::Read {
+    let mut pc = start_pc.unwrap_or(memory::Pointer::from(0x0100));
+    let mut asm = ast::Assembly::new();
+
+    loop {
+        match disassemble(&pc, &plat) {
+            (Some(instr), size, is_nonfinal) => {
+                asm.append_line(ast::Line::new(None, Some(instr), None, pc.clone().into_ptr()));
+                pc += size;
+
+                if !is_nonfinal {
+                    return Ok(asm);
+                }
+            },
+            (None, _, _) => return Ok(asm)
+        }
     }
 }

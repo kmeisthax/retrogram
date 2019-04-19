@@ -23,7 +23,7 @@ use num::traits::Bounded;
 /// If only one possible register value is valid, then the register is said to
 /// be concrete. A register with no valid state is said to be unsatisfiable. If
 /// multiple states are valid, then the register is said to be abstract.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Symbolic<T> {
     lower_bound: T,
     upper_bound: T,

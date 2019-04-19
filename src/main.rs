@@ -64,16 +64,18 @@ fn main() -> io::Result<()> {
             match platform {
                 Some(PlatformName::GB) => {
                     let mut db = analysis::Database::new();
+                    let bus = platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?;
+
                     if let Some(symbol_file) = symbol_file {
                         asm::rgbds::parse_symbol_file(io::BufReader::new(fs::File::open(symbol_file)?), &mut db)?;
                     }
                     
                     let orig_asm = match pc_pieces.map(|p| platform::gb::create_context(&p)) {
-                        Some(Some(cptr)) => platform::gb::analyze(&mut file, Some(cptr))?,
-                        _ => platform::gb::analyze(&mut file, None)?
+                        Some(Some(cptr)) => arch::lr35902::disassemble_block(&mut file, Some(cptr), &bus)?,
+                        _ => arch::lr35902::disassemble_block(&mut file, None, &bus)?
                     };
 
-                    let labeled_asm = analysis::replace_labels(orig_asm, &mut db);
+                    let labeled_asm = analysis::replace_labels(orig_asm, &mut db, &bus);
                     let injected_asm = analysis::inject_labels(labeled_asm, &db);
 
                     println!("{}", injected_asm);

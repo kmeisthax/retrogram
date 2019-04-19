@@ -35,5 +35,5 @@ pub trait Image {
 
     /// Given a pointer, remove all contexts from the pointer that are not
     /// necessary to decode it to an image offset.
-    fn minimize_context(&self, ptr: &Pointer<Self::Pointer>) -> Pointer<Self::Pointer>;
+    fn minimize_context(&self, ptr: Pointer<Self::Pointer>) -> Pointer<Self::Pointer>;
 }

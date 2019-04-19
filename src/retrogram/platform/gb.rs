@@ -153,7 +153,7 @@ impl<M> memory::Image for GameBoyROMImage<M> where M: Mapper {
         }
     }
 
-    fn minimize_context(&self, ptr: &memory::Pointer<Self::Pointer>) -> memory::Pointer<Self::Pointer> {
+    fn minimize_context(&self, ptr: memory::Pointer<Self::Pointer>) -> memory::Pointer<Self::Pointer> {
         let my_ctxt = ptr.get_platform_context("R");
         let mut stripped_ptr = memory::Pointer::from(ptr.as_pointer().clone());
         
@@ -232,24 +232,4 @@ pub fn construct_platform<F>(file: &mut F, pv: PlatformVariant) -> io::Result<lr
     bus.openbus_mem(0xE000, 0x1000); //Echo RAM
 
     Ok(bus)
-}
-
-pub fn analyze<F>(file: &mut F, start_pc: Option<memory::Pointer<lr35902::Pointer>>) -> io::Result<ast::Assembly> where F: io::Read {
-    let plat = construct_platform(file, PlatformVariant::MBC5Mapper)?;
-    let mut pc = start_pc.unwrap_or(memory::Pointer::from(0x0100));
-    let mut asm = ast::Assembly::new();
-
-    loop {
-        match lr35902::disassemble(&pc, &plat) {
-            (Some(instr), size, is_nonfinal) => {
-                asm.append_line(ast::Line::new(None, Some(instr), None, pc.clone().into_ptr()));
-                pc += size;
-
-                if !is_nonfinal {
-                    return Ok(asm);
-                }
-            },
-            (None, _, _) => return Ok(asm)
-        }
-    }
 }
