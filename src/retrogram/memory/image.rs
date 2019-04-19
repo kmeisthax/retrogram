@@ -26,9 +26,14 @@ pub trait Image {
     /// Decode an architectural pointer to an image offset.
     /// 
     /// The given pointer must have a positive offset from the base pointer.
-    /// If the offset is negative, this function yields None.
+    /// If the offset is negative, or the pointer does not resolve to this
+    /// particular image, then this function yields None.
     /// 
     /// Images can determine the current banking in use by querying the context
     /// for the appropriately named banking value.
     fn decode_addr(&self, ptr: &Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset>;
+
+    /// Given a pointer, remove all contexts from the pointer that are not
+    /// necessary to decode it to an image offset.
+    fn minimize_context(&self, ptr: &Pointer<Self::Pointer>) -> Pointer<Self::Pointer>;
 }

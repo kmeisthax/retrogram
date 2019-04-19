@@ -152,6 +152,17 @@ impl<M> memory::Image for GameBoyROMImage<M> where M: Mapper {
             self.mapper.decode_banked_addr(ptr)
         }
     }
+
+    fn minimize_context(&self, ptr: &memory::Pointer<Self::Pointer>) -> memory::Pointer<Self::Pointer> {
+        let my_ctxt = ptr.get_platform_context("R");
+        let mut stripped_ptr = memory::Pointer::from(ptr.as_pointer().clone());
+        
+        if *stripped_ptr.as_pointer() > 0x4000 {
+            stripped_ptr.set_platform_context("R", my_ctxt);
+        }
+
+        stripped_ptr
+    }
 }
 
 pub enum PlatformVariant {

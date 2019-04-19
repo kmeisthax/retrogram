@@ -5,8 +5,9 @@ use std::ops::{Add, Sub, Not};
 use std::cmp::PartialOrd;
 use std::slice::SliceIndex;
 use num_traits::Bounded;
+use num_traits::ops::checked::CheckedSub;
 use crate::retrogram::reg;
-use crate::retrogram::memory::{Image, Behavior, Pointer};
+use crate::retrogram::memory::{Image, Behavior, Pointer, UnknownImage};
 
 /// Models a region of memory visible to the program under analysis.
 /// 
@@ -47,7 +48,7 @@ struct Region<P, MV, S = P, IO = usize> {
     start: P,
     length: S,
     memtype: Behavior,
-    image: Option<Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>>
+    image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>
 }
 
 impl<P, MV, S, IO> Region<P, MV, S, IO>
@@ -71,21 +72,23 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
         }
     }
 
-    pub fn install_mem(&mut self, start: P, length: S) {
-        self.views.push(Region {
-            start: start,
-            length: length,
-            memtype: Behavior::Storage,
-            image: None
-        });
-    }
-
     pub fn install_mem_image(&mut self, start: P, length: S, image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>) {
         self.views.push(Region {
             start: start,
             length: length,
             memtype: Behavior::Storage,
-            image: Some(image)
+            image: image
+        });
+    }
+}
+
+impl<P, MV, S, IO> Memory<P, MV, S, IO> where P: CheckedSub + Clone + 'static, IO: From<P> + 'static, MV: 'static {
+    pub fn install_mem(&mut self, start: P, length: S) {
+        self.views.push(Region {
+            start: start,
+            length: length,
+            memtype: Behavior::Storage,
+            image: Box::new(UnknownImage::new())
         });
     }
 
@@ -94,7 +97,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
             start: start,
             length: length,
             memtype: Behavior::MappedIO,
-            image: None
+            image: Box::new(UnknownImage::new())
         });
     }
 
@@ -103,7 +106,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
             start: start,
             length: length,
             memtype: Behavior::Invalid,
-            image: None
+            image: Box::new(UnknownImage::new())
         });
     }
 }
@@ -117,12 +120,10 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     
     pub fn read_unit(&self, ptr: &Pointer<P>) -> reg::Symbolic<MV> {
         for view in &self.views {
-            if let Some(ref image) = view.image {
-                if let Some(offset) = image.decode_addr(ptr, view.start) {
-                    if let Some(imgdata) = image.retrieve(offset, IO::from(1)) {
-                        if imgdata.len() > 0 {
-                            return reg::Symbolic::from(imgdata[0]);
-                        }
+            if let Some(offset) = view.image.decode_addr(ptr, view.start) {
+                if let Some(imgdata) = view.image.retrieve(offset, IO::from(1)) {
+                    if imgdata.len() > 0 {
+                        return reg::Symbolic::from(imgdata[0]);
                     }
                 }
             }
