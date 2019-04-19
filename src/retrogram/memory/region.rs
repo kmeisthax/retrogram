@@ -52,11 +52,11 @@ struct Region<P, MV, S = P, IO = usize> {
 }
 
 impl<P, MV, S, IO> Region<P, MV, S, IO>
-    where P: Copy + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
-        S: Copy + From<<P as Sub>::Output> {
+    where P: Clone + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
+        S: Clone + From<<P as Sub>::Output> {
     
     pub fn is_ptr_within(&self, ptr: P) -> bool {
-        self.start <= ptr && P::from(self.start + self.length) > ptr
+        self.start <= ptr && P::from(self.start.clone() + self.length.clone()) > ptr
     }
 }
 
@@ -112,18 +112,18 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> where P: CheckedSub + Clone + 'static, I
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: Copy + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
-        MV: Copy + Not + From<<MV as Not>::Output> + Bounded + From<u8> + From<<usize as SliceIndex<[u8]>>::Output>,
+    where P: Clone + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
+        MV: Clone + Not + From<<MV as Not>::Output> + Bounded + From<u8> + From<<usize as SliceIndex<[u8]>>::Output>,
         <usize as SliceIndex<[u8]>>::Output : Sized,
         IO: From<u8>,
         usize: From<P> {
     
     pub fn read_unit(&self, ptr: &Pointer<P>) -> reg::Symbolic<MV> {
         for view in &self.views {
-            if let Some(offset) = view.image.decode_addr(ptr, view.start) {
+            if let Some(offset) = view.image.decode_addr(ptr, view.start.clone()) {
                 if let Some(imgdata) = view.image.retrieve(offset, IO::from(1)) {
                     if imgdata.len() > 0 {
-                        return reg::Symbolic::from(imgdata[0]);
+                        return reg::Symbolic::from(imgdata[0].clone());
                     }
                 }
             }
@@ -134,11 +134,11 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: Copy + Add<S> + Sub + PartialOrd + From<<P as Add<S>>::Output>,
-        S: Copy + From<<P as Sub>::Output> {
+    where P: Clone + Add<S> + Sub + PartialOrd + From<<P as Add<S>>::Output>,
+        S: Clone + From<<P as Sub>::Output> {
     pub fn minimize_context(&self, ptr: Pointer<P>) -> Pointer<P> {
         for view in &self.views {
-            if view.is_ptr_within(*ptr.as_pointer()) {
+            if view.is_ptr_within(ptr.clone().into_pointer()) {
                 return view.image.minimize_context(ptr);
             }
         }

@@ -37,16 +37,15 @@ impl<P> Database<P> where P: Clone + Eq + Hash {
 
 /// Given an operand, replace all Pointer literals with Label operands obtained
 /// from the Database.
-pub fn replace_operand_with_label<I, F, P, AP, AMV, AS, AIO>(src_operand: ast::Operand<I, F, P>, db: &mut Database<AP>, start_addr: &memory::Pointer<AP>, memory: &memory::Memory<AP, AMV, AS, AIO>, in_dataref: bool, in_coderef: bool) -> ast::Operand<I, F, P>
-    where P: Clone + UpperHex,
-        AP: Copy + PartialOrd + Add<AS> + Sub + Eq + Hash + TryFrom<P> + From<<AP as Add<AS>>::Output>,
-        AS: Copy + From<<AP as Sub>::Output>,
-        memory::Pointer<AP>: Clone,
+pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Operand<I, F, P>, db: &mut Database<P>, start_addr: &memory::Pointer<P>, memory: &memory::Memory<P, AMV, AS, AIO>, in_dataref: bool, in_coderef: bool) -> ast::Operand<I, F, P>
+    where P: Clone + UpperHex + PartialOrd + Add<AS> + Sub + Eq + Hash + From<<P as Add<AS>>::Output>,
+        AS: Clone + From<<P as Sub>::Output>,
+        memory::Pointer<P>: Clone,
         ast::Literal<I, F, P>: Clone,
-        <AP as TryFrom<P>>::Error : Debug {
+        <P as TryFrom<P>>::Error : Debug {
     match src_operand {
         ast::Operand::Literal(ast::Literal::Pointer(pt)) => {
-            let mut cpt = start_addr.contextualize(AP::try_from(pt.clone()).expect("Label operand does not fit in architecture's target pointer size."));
+            let mut cpt = start_addr.contextualize(pt.clone());
             cpt = memory.minimize_context(cpt);
 
             if let Some(lbl) = db.pointer_label(cpt.clone()) {
@@ -67,7 +66,7 @@ pub fn replace_operand_with_label<I, F, P, AP, AMV, AS, AIO>(src_operand: ast::O
 
                 name = format!("{}_{:X}", name, pt);
 
-                db.insert_label(ast::Label::new(&name, None), start_addr.contextualize(AP::try_from(pt.clone()).expect("Label operand does not fit in architecture's target pointer size.")));
+                db.insert_label(ast::Label::new(&name, None), cpt);
                 ast::Operand::Label(ast::Label::new(&name, None))
             }
         },
@@ -84,14 +83,13 @@ pub fn replace_operand_with_label<I, F, P, AP, AMV, AS, AIO>(src_operand: ast::O
 /// 
 /// If a given pointer has no matching label, then a temporary label will be
 /// automatically generated and added to the database.
-pub fn replace_labels<I, F, P, AP, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P>, db: &mut Database<AP>, memory: &memory::Memory<AP, AMV, AS, AIO>) -> ast::Assembly<I, F, P>
-    where P: Clone + UpperHex,
-        AP: Copy + PartialOrd + Add<AS> + Sub + Eq + Hash + TryFrom<P> + From<<AP as Add<AS>>::Output>,
-        AS: Copy + From<<AP as Sub>::Output>,
+pub fn replace_labels<I, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P>, db: &mut Database<P>, memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Assembly<I, F, P>
+    where P: Clone + UpperHex + PartialOrd + Add<AS> + Sub + Eq + Hash + From<<P as Add<AS>>::Output>,
+        AS: Clone + From<<P as Sub>::Output>,
         ast::Operand<I, F, P>: Clone,
         ast::Literal<I, F, P>: Clone,
         ast::Line<I, F, P>: Clone,
-        <AP as TryFrom<P>>::Error : Debug {
+        <P as TryFrom<P>>::Error : Debug {
     let mut dst_assembly = ast::Assembly::new();
 
     for line in src_assembly.iter_lines() {

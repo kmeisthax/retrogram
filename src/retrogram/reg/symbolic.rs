@@ -42,24 +42,24 @@ impl<T> Default for Symbolic<T> where T: Bounded + From<u8> {
     }
 }
 
-impl<T> From<T> for Symbolic<T> where T: Copy + Not + From<<T as Not>::Output> {
+impl<T> From<T> for Symbolic<T> where T: Clone + Not + From<<T as Not>::Output> {
     fn from(v: T) -> Self {
         Symbolic {
-            lower_bound: v,
-            upper_bound: v,
-            bits_set: v,
+            lower_bound: v.clone(),
+            upper_bound: v.clone(),
+            bits_set: v.clone(),
             bits_cleared: T::from(!v),
         }
     }
 }
 
-impl<T> Symbolic<T> where T: Copy + PartialEq + BitOr + From<<T as BitOr>::Output> + Not + From<<T as Not>::Output> + From<u8> {
+impl<T> Symbolic<T> where T: Clone + PartialEq + BitOr + From<<T as BitOr>::Output> + Not + From<<T as Not>::Output> + From<u8> {
     /// Returns true if only one valid T exists for this register
     ///
     /// TODO: This is nonexaustive, contrived cases exist which have one
     /// satisfying value but not by way of one bound mechanism or the other.
     pub fn is_concrete(&self) -> bool {
-        (self.lower_bound == self.upper_bound) || T::from(self.bits_set | self.bits_cleared) == T::from(!T::from(0))
+        (self.lower_bound == self.upper_bound) || T::from(self.bits_set.clone() | self.bits_cleared.clone()) == T::from(!T::from(0))
     }
 
     pub fn into_concrete(self) -> Option<T> {
@@ -71,20 +71,21 @@ impl<T> Symbolic<T> where T: Copy + PartialEq + BitOr + From<<T as BitOr>::Outpu
     }
 }
 
-impl<T> Symbolic<T> where T: Copy + PartialEq + Ord + Not + BitAnd + From<<T as Not>::Output> + From<<T as BitAnd>::Output> + From<u8> {
+impl<T> Symbolic<T> where T: Clone + PartialEq + Ord + Not + BitAnd + From<<T as Not>::Output> + From<<T as BitAnd>::Output> + From<u8> {
     /// Returns true if the given value satisfies the register constraint
     pub fn is_valid(&self, v: T) -> bool {
-        v >= self.lower_bound && v <= self.upper_bound && T::from(v & self.bits_set) == self.bits_set && T::from(T::from(!v) & self.bits_cleared) == self.bits_cleared
+        let notv = !v.clone();
+        v >= self.lower_bound && v <= self.upper_bound && T::from(v & self.bits_set.clone()) == self.bits_set && T::from(T::from(notv) & self.bits_cleared.clone()) == self.bits_cleared
     }
 }
 
-impl<T> Symbolic<T> where T: Copy + Ord {
+impl<T> Symbolic<T> where T: Clone + Ord {
     pub fn increase_lower_bound(&mut self, v: T) {
-        self.lower_bound = max(self.lower_bound, v);
+        self.lower_bound = max(self.lower_bound.clone(), v);
     }
     
     pub fn decrease_upper_bound(&mut self, v: T) {
-        self.upper_bound = min(self.upper_bound, v);
+        self.upper_bound = min(self.upper_bound.clone(), v);
     }
 }
 
