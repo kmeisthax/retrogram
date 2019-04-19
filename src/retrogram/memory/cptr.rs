@@ -94,7 +94,7 @@ impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
     /// boolean indicates if the context is architectural or no; the string is
     /// the context key, and the value is the context value.
     pub fn iter_contexts<'a>(&'a self) -> impl Iterator<Item = (bool, &'a str, &'a Symbolic<CV>)> + 'a {
-        self.context.iter().map(|(k, v)| (k.chars().next() == Some('A'), &k[..1], v))
+        self.context.iter().map(|(k, v)| (k.chars().next() == Some('A'), &k[1..], v))
     }
 
     /// Create a new pointer with the same context as the current one.

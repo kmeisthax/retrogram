@@ -50,9 +50,9 @@ pub fn replace_operand_with_label<I, F, P, AP>(src_operand: &ast::Operand<ast::L
                 //In contrived scenarios we might accidentally carry a bunch of
                 //useless contexts that clutter up the label.
                 let mut name = match (in_dataref, in_coderef) {
-                    (true, false) => "DATA_",
-                    (false, true) => "CODE_",
-                    _ => "UNK_"
+                    (true, false) => "DAT",
+                    (false, true) => "LOC",
+                    _ => "UNK"
                 }.to_string();
 
                 for (_, key, cval) in start_addr.iter_contexts() {
