@@ -32,7 +32,22 @@ pub type Data = u8;
 /// The compatible memory model type necessary to analyze GBz80 programs.
 pub type Bus = memory::Memory<Pointer, Data, Offset>;
 
-fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
+/// The AST type which represents a disassembled operand.
+/// 
+/// TODO: When ! is stable, replace the floating-point type with !.
+pub type Operand = ast::Operand<Offset, f32, Pointer>;
+
+/// The AST type which represents a disassembled instruction.
+/// 
+/// TODO: When ! is stable, replace the floating-point type with !.
+pub type Instruction = ast::Instruction<Offset, f32, Pointer>;
+
+/// The AST type which represents disassembled code.
+/// 
+/// TODO: When ! is stable, replace the floating-point type with !.
+pub type Assembly = ast::Assembly<Offset, f32, Pointer>;
+
+fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         if let Some(hibit) = mem.read_unit(&(p.clone()+1)).into_concrete() {
             return op::int((hibit as u16) << 8 | lobit as u16);
@@ -42,7 +57,7 @@ fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
     op::miss()
 }
 
-fn dptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
+fn dptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         if let Some(hibit) = mem.read_unit(&(p.clone()+1)).into_concrete() {
             return op::dptr((hibit as u16) << 8 | lobit as u16);
@@ -52,7 +67,7 @@ fn dptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
     op::miss()
 }
 
-fn cptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
+fn cptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         if let Some(hibit) = mem.read_unit(&(p.clone()+1)).into_concrete() {
             return op::cptr((hibit as u16) << 8 | lobit as u16);
@@ -62,7 +77,7 @@ fn cptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
     op::miss()
 }
 
-fn int_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
+fn int_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         return op::int(lobit);
     }
@@ -70,7 +85,7 @@ fn int_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
     op::miss()
 }
 
-fn pcrel_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
+fn pcrel_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         return op::cptr(((p.as_pointer() - 1) as i16 + (lobit as i8) as i16) as u16);
     }
@@ -78,7 +93,7 @@ fn pcrel_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
     op::miss()
 }
 
-fn hram_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
+fn hram_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         return op::dptr(0xFF00 + lobit as u16);
     }
@@ -89,7 +104,7 @@ fn hram_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> ast::Operand {
 lazy_static! {
     /// z80 instruction encoding uses this 3-bit enumeration to encode the target of
     /// 8-bit ALU or register transfer operations.
-    static ref ALU_TARGET_REGS: [ast::Operand; 8] = [op::sym("b"), op::sym("c"), op::sym("d"), op::sym("e"), op::sym("h"), op::sym("l"), op::indir(op::sym("hl")), op::sym("a")];
+    static ref ALU_TARGET_REGS: [Operand; 8] = [op::sym("b"), op::sym("c"), op::sym("d"), op::sym("e"), op::sym("h"), op::sym("l"), op::indir(op::sym("hl")), op::sym("a")];
 }
 
 /// z80 instruction encoding uses this 2-bit enumeration to encode the target of
@@ -127,7 +142,7 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///  * The size of the current instruction
 ///  * True, if execution would continue at the instruction following this one,
 ///    or false if the instruction terminates the current basic block
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<ast::Instruction>, Offset, bool) {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instruction>, Offset, bool) {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
             //TODO: CB prefix
@@ -225,7 +240,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<ast::Inst
     }
 }
 
-pub fn disassemble_block<F>(file: &mut F, start_pc: Option<memory::Pointer<Pointer>>, plat: &Bus) -> io::Result<ast::Assembly> where F: io::Read {
+pub fn disassemble_block<F>(file: &mut F, start_pc: Option<memory::Pointer<Pointer>>, plat: &Bus) -> io::Result<Assembly> where F: io::Read {
     let mut pc = start_pc.unwrap_or(memory::Pointer::from(0x0100));
     let mut asm = ast::Assembly::new();
 

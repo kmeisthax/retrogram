@@ -26,6 +26,12 @@ type Data = u8;
 /// The compatible memory model type necessary to analyze AArch32 programs.
 pub type Bus = memory::Memory<Pointer, Data, Offset>;
 
+/// The AST type which represents a disassembled operand.
+pub type Operand = ast::Operand<Offset, f32, Pointer>;
+
+/// The AST type which represents a disassembled instruction.
+pub type Instruction = ast::Instruction<Offset, f32, Pointer>;
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -35,6 +41,6 @@ pub type Bus = memory::Memory<Pointer, Data, Offset>;
 ///  * The size of the current instruction
 ///  * True, if execution would continue at the instruction following this one,
 ///    or false if the instruction terminates the current basic block
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<ast::Instruction>, Offset, bool) {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instruction>, Offset, bool) {
     (None, 0, false)
 }
