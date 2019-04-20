@@ -9,7 +9,8 @@ use std::fmt::{Display, Debug, UpperHex};
 use crate::retrogram::{ast, memory};
 
 /// A repository of information obtained from the program under analysis.
-pub struct Database<P> {
+#[derive(Clone, Debug)]
+pub struct Database<P> where P: Eq + Hash {
     /// A list of all labels in the program.
     labels: HashMap<ast::Label, memory::Pointer<P>>,
     
@@ -39,7 +40,7 @@ impl<P> Database<P> where P: Clone + Eq + Hash {
 /// from the Database.
 pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Operand<I, F, P>, db: &mut Database<P>, start_addr: &memory::Pointer<P>, memory: &memory::Memory<P, AMV, AS, AIO>, in_dataref: bool, in_coderef: bool) -> ast::Operand<I, F, P>
     where P: Clone + UpperHex + PartialOrd + Add<AS> + Sub + Eq + Hash + From<<P as Add<AS>>::Output>,
-        AS: Clone + From<<P as Sub>::Output>,
+        AS: Clone + PartialOrd + From<<P as Sub>::Output>,
         memory::Pointer<P>: Clone,
         ast::Literal<I, F, P>: Clone,
         <P as TryFrom<P>>::Error : Debug {
@@ -85,7 +86,7 @@ pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Opera
 /// automatically generated and added to the database.
 pub fn replace_labels<I, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P>, db: &mut Database<P>, memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Assembly<I, F, P>
     where P: Clone + UpperHex + PartialOrd + Add<AS> + Sub + Eq + Hash + From<<P as Add<AS>>::Output>,
-        AS: Clone + From<<P as Sub>::Output>,
+        AS: Clone + PartialOrd + From<<P as Sub>::Output>,
         ast::Operand<I, F, P>: Clone,
         ast::Literal<I, F, P>: Clone,
         ast::Line<I, F, P>: Clone,

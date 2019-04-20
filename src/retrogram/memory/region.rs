@@ -4,6 +4,7 @@
 use std::ops::{Add, Sub, Not};
 use std::cmp::PartialOrd;
 use std::slice::SliceIndex;
+use std::num::Wrapping;
 use num_traits::Bounded;
 use num_traits::ops::checked::CheckedSub;
 use crate::retrogram::reg;
@@ -53,10 +54,10 @@ struct Region<P, MV, S = P, IO = usize> {
 
 impl<P, MV, S, IO> Region<P, MV, S, IO>
     where P: Clone + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
-        S: Clone + From<<P as Sub>::Output> {
+        S: Clone + PartialOrd + From<<P as Sub>::Output> {
     
     pub fn is_ptr_within(&self, ptr: P) -> bool {
-        self.start <= ptr && P::from(self.start.clone() + self.length.clone()) > ptr
+        self.start <= ptr && S::from(ptr - self.start.clone()) < self.length
     }
 }
 
@@ -134,8 +135,8 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: Clone + Add<S> + Sub + PartialOrd + From<<P as Add<S>>::Output>,
-        S: Clone + From<<P as Sub>::Output> {
+    where P: Clone + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
+        S: Clone + PartialOrd + From<<P as Sub>::Output> {
     pub fn minimize_context(&self, ptr: Pointer<P>) -> Pointer<P> {
         for view in &self.views {
             if view.is_ptr_within(ptr.clone().into_pointer()) {

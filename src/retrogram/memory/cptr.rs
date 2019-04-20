@@ -11,7 +11,7 @@ use crate::retrogram::reg::Symbolic;
 
 /// A pointer bundled with the context necessary to resolve it to a concrete
 /// value.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Pointer<P, CV = u64> {
     pointer: P,
     context: HashMap<String, Symbolic<CV>>

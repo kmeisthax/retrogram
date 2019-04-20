@@ -11,7 +11,7 @@ use crate::retrogram::memory;
 ///will define a different, potentially incompatible AST. (Besides, what
 ///architecture are you using that needs `u128` pointers? AS/400 TIMI doesn't
 ///count.)
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Literal<I, F, P = I> {
     /// Some kind of integer constant
     Integer(I),
@@ -29,7 +29,7 @@ pub enum Literal<I, F, P = I> {
     Missing
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Operand<I, F, P> {
     /// The name of an architecturally defined register, or some derivative of
     /// that register, or another non-register operand defined by the
@@ -122,7 +122,7 @@ impl<I, F, P> fmt::Display for Operand<I, F, P> where I: fmt::Display, F: fmt::D
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Instruction<I, F, P> {
     /// The instruction being executed
     opcode: String,
@@ -170,7 +170,7 @@ impl<I, F, P> fmt::Display for Instruction<I, F, P> where Operand<I, F, P>: fmt:
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Label {
     /// Name of the label.
     name: String,
@@ -199,7 +199,7 @@ impl fmt::Display for Label {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Line<I = u64, F = f64, P = I> {
     label: Option<Label>,
     instruction: Option<Instruction<I, F, P>>,
@@ -268,6 +268,7 @@ impl<I, F, P> Line<I, F, P> {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Assembly<I = u64, F = f64, P = I> {
     lines: Vec<Line<I, F, P>>
 }
