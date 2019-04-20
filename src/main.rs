@@ -74,9 +74,8 @@ fn main() -> io::Result<()> {
                         Some(Some(cptr)) => arch::lr35902::disassemble_block(&mut file, Some(cptr), &bus)?,
                         _ => arch::lr35902::disassemble_block(&mut file, None, &bus)?
                     };
-                    dbg!(&db);
+                    
                     let labeled_asm = analysis::replace_labels(orig_asm, &mut db, &bus);
-                    dbg!(&db);
                     let injected_asm = analysis::inject_labels(labeled_asm, &db);
 
                     println!("{}", injected_asm);

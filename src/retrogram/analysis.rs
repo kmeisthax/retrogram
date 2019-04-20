@@ -41,9 +41,8 @@ impl<P> Database<P> where P: Clone + Eq + Hash {
 pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Operand<I, F, P>, db: &mut Database<P>, start_addr: &memory::Pointer<P>, memory: &memory::Memory<P, AMV, AS, AIO>, in_dataref: bool, in_coderef: bool) -> ast::Operand<I, F, P>
     where P: Clone + UpperHex + PartialOrd + Add<AS> + Sub + Eq + Hash + From<<P as Add<AS>>::Output>,
         AS: Clone + PartialOrd + From<<P as Sub>::Output>,
-        memory::Pointer<P>: Clone,
-        ast::Literal<I, F, P>: Clone,
-        <P as TryFrom<P>>::Error : Debug {
+        I: Clone,
+        F: Clone {
     match src_operand {
         ast::Operand::Literal(ast::Literal::Pointer(pt)) => {
             let mut cpt = start_addr.contextualize(pt.clone());
@@ -87,10 +86,8 @@ pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Opera
 pub fn replace_labels<I, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P>, db: &mut Database<P>, memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Assembly<I, F, P>
     where P: Clone + UpperHex + PartialOrd + Add<AS> + Sub + Eq + Hash + From<<P as Add<AS>>::Output>,
         AS: Clone + PartialOrd + From<<P as Sub>::Output>,
-        ast::Operand<I, F, P>: Clone,
-        ast::Literal<I, F, P>: Clone,
-        ast::Line<I, F, P>: Clone,
-        <P as TryFrom<P>>::Error : Debug {
+        I: Clone,
+        F: Clone {
     let mut dst_assembly = ast::Assembly::new();
 
     for line in src_assembly.iter_lines() {
@@ -98,7 +95,7 @@ pub fn replace_labels<I, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P
             let mut new_operands = Vec::new();
 
             for operand in instr.iter_operands() {
-                new_operands.push(replace_operand_with_label(operand.clone(), db, &line.source_address().clone().try_into_ptr().expect("Disassembly source address does not fit in architecture's target pointer size."), memory, false, false));
+                new_operands.push(replace_operand_with_label(operand.clone(), db, &line.source_address(), memory, false, false));
             }
 
             let new_instr = ast::Instruction::new(instr.opcode(), new_operands);
@@ -114,13 +111,15 @@ pub fn replace_labels<I, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P
 
 /// Given an Assembly, create a new Assembly with all labels inserted from the
 /// database.
-pub fn inject_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &Database<AP>) -> ast::Assembly<I, F, P> where AP: Clone + Eq + Hash + TryFrom<P>, ast::Line<I, F, P>: Clone, memory::Pointer<P>: Clone, <AP as TryFrom<P>>::Error : Debug {
+pub fn inject_labels<I, F, P>(src_assembly: ast::Assembly<I, F, P>, db: &Database<P>) -> ast::Assembly<I, F, P>
+    where P: Clone + Eq + Hash, I: Clone, F: Clone {
     let mut dst_assembly = ast::Assembly::new();
     
     for line in src_assembly.iter_lines() {
         if let None = line.label() {
             let (label, old_instr, comment, src_addr) = line.clone().into_parts();
-            if let Some(new_label) = db.pointer_label(src_addr.clone().try_into_ptr().expect("Label operand does not fit in architecture's target pointer size.")) {
+
+            if let Some(new_label) = db.pointer_label(src_addr.clone()) {
                 dst_assembly.append_line(ast::Line::new(Some(new_label.clone()), old_instr, comment, src_addr));
             } else {
                 dst_assembly.append_line(line.clone());
