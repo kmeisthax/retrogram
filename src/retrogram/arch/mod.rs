@@ -7,7 +7,7 @@ use std::str;
 use serde::{Deserialize, Serialize};
 
 /// Enumeration of all architectures that ship with Retrogram.
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, Serialize, Debug)]
 pub enum ArchName {
     LR35902,
     AARCH32,
@@ -27,3 +27,5 @@ impl str::FromStr for ArchName {
         }
     }
 }
+
+derive_deserialize_from_str!(ArchName, "valid architecture name");

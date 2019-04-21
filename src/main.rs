@@ -1,13 +1,14 @@
 #[macro_use]
 extern crate lazy_static;
 
+#[macro_use]
+extern crate serde_plain;
+
 mod retrogram;
 
 use std::{str, fs, io};
 use std::str::FromStr;
-use serde_json;
-use crate::retrogram::{arch, platform, asm, reg, analysis};
-use crate::retrogram::arch::ArchName;
+use crate::retrogram::{arch, platform, asm, analysis};
 use crate::retrogram::platform::PlatformName;
 use crate::retrogram::project;
 
@@ -41,6 +42,18 @@ fn main() -> io::Result<()> {
         prog.refer_args(&mut ap);
 
         ap.parse_args_or_exit();
+    }
+
+    match project::Project::read() {
+        Ok(project) => if let Some(version) = version {
+            match project.program(&version) {
+                Some(project_program) => prog = project_program.apply_override(&prog),
+                None => eprintln!("The specified program version {} does not exist.", version)
+            }
+        } else if let Some((_, default_program)) = project.default_program() {
+            prog = default_program.apply_override(&prog);
+        },
+        Err(e) => eprintln!("Cannot open project file, got error {}", e) //TODO: You shouldn't need a project file if you specified everything else correctly.
     }
 
     let image = prog.iter_images().next().ok_or(io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
@@ -78,7 +91,7 @@ fn main() -> io::Result<()> {
                     }
 
                     for symbol_file in prog.iter_symbol_files() {
-                        if let Ok(mut file) = fs::File::open(symbol_file) {
+                        if let Ok(file) = fs::File::open(symbol_file) {
                             asm::rgbds::parse_symbol_file(io::BufReader::new(file), &mut db)?;
                         }
                     }

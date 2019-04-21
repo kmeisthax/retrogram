@@ -5,7 +5,7 @@ pub mod rgbds;
 use std::str;
 use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, Serialize, Debug)]
 pub enum AssemblerName {
     RGBDS
 }
@@ -20,3 +20,5 @@ impl str::FromStr for AssemblerName {
         }
     }
 }
+
+derive_deserialize_from_str!(AssemblerName, "valid assembler name");

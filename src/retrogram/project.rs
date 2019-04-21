@@ -9,12 +9,14 @@ use crate::retrogram::platform::PlatformName;
 use crate::retrogram::arch::ArchName;
 use crate::retrogram::asm::AssemblerName;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Program {
     platform: Option<PlatformName>,
     arch: Option<ArchName>,
     assembler: Option<AssemblerName>,
     images: Vec<String>,
+
+    #[serde(default)]
     symbol_files: Vec<String>,
 }
 
@@ -56,9 +58,25 @@ impl Program {
     pub fn iter_symbol_files<'a>(&'a self) -> impl Iterator<Item = &String> + 'a {
         self.symbol_files.iter()
     }
+
+    pub fn apply_override(&self, other: &Program) -> Program {
+        Program {
+            platform: other.platform.or(self.platform),
+            arch: other.arch.or(self.arch),
+            assembler: other.assembler.or(self.assembler),
+            images: match other.images.len() {
+                0 => self.images.clone(),
+                _ => other.images.clone()
+            },
+            symbol_files: match other.symbol_files.len() {
+                0 => self.symbol_files.clone(),
+                _ => other.symbol_files.clone()
+            },
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Project {
     programs: HashMap<String, Program>
 }
@@ -69,5 +87,15 @@ impl Project {
         let project = serde_json::from_reader(project_file)?;
 
         Ok((project))
+    }
+
+    /// Get the program with the given name within the project.
+    pub fn program(&self, name: &str) -> Option<&Program> {
+        self.programs.get(name)
+    }
+
+    /// Get the project's default program.
+    pub fn default_program(&self) -> Option<(&String, &Program)> {
+        self.programs.iter().next()
     }
 }

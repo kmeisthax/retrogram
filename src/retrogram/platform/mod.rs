@@ -9,7 +9,7 @@ use std::str;
 use serde::{Deserialize, Serialize};
 
 /// Enumeration of all platforms that ship with Retrogram.
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, Serialize, Debug)]
 pub enum PlatformName {
     GB
 }
@@ -24,3 +24,5 @@ impl str::FromStr for PlatformName {
         }
     }
 }
+
+derive_deserialize_from_str!(PlatformName, "valid platform name");
