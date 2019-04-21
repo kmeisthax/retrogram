@@ -4,7 +4,7 @@ pub mod lr35902;
 pub mod aarch32;
 
 use std::str;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Enumeration of all architectures that ship with Retrogram.
 #[derive(Copy, Clone, Serialize, Debug)]

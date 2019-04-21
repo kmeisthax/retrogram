@@ -4,7 +4,6 @@
 use std::ops::{Add, Sub, Not};
 use std::cmp::PartialOrd;
 use std::slice::SliceIndex;
-use std::num::Wrapping;
 use num_traits::Bounded;
 use num_traits::ops::checked::CheckedSub;
 use crate::retrogram::reg;

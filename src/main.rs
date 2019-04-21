@@ -79,8 +79,8 @@ fn main() -> io::Result<()> {
                     let bus = platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?;
                     
                     let orig_asm = match pc_pieces.map(|p| platform::gb::create_context(&p)) {
-                        Some(Some(cptr)) => arch::lr35902::disassemble_block(&mut file, Some(cptr), &bus)?,
-                        _ => arch::lr35902::disassemble_block(&mut file, None, &bus)?
+                        Some(Some(cptr)) => arch::lr35902::disassemble_block(Some(cptr), &bus)?,
+                        _ => arch::lr35902::disassemble_block(None, &bus)?
                     };
 
                     match orig_asm.iter_lines().next() {

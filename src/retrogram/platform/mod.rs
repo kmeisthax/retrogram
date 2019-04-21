@@ -6,7 +6,7 @@
 pub mod gb;
 
 use std::str;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Enumeration of all platforms that ship with Retrogram.
 #[derive(Copy, Clone, Serialize, Debug)]

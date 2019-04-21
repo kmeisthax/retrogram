@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::convert::TryFrom;
 use std::ops::{Add, Sub};
 use std::fmt::{Display, Formatter, Result, UpperHex};
 use crate::retrogram::{ast, memory};
@@ -122,7 +121,7 @@ pub fn replace_labels<I, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P
             }
 
             let new_instr = ast::Instruction::new(instr.opcode(), new_operands);
-            let (label, old_instr, comment, src_addr) = line.clone().into_parts();
+            let (label, _old_instr, comment, src_addr) = line.clone().into_parts();
             dst_assembly.append_line(ast::Line::new(label, Some(new_instr), comment, src_addr));
         } else {
             dst_assembly.append_line(line.clone());
@@ -140,7 +139,7 @@ pub fn inject_labels<I, F, P>(src_assembly: ast::Assembly<I, F, P>, db: &Databas
     
     for line in src_assembly.iter_lines() {
         if let None = line.label() {
-            let (label, old_instr, comment, src_addr) = line.clone().into_parts();
+            let (_label, old_instr, comment, src_addr) = line.clone().into_parts();
 
             if let Some(new_label) = db.pointer_label(src_addr.clone()) {
                 dst_assembly.append_line(ast::Line::new(Some(new_label.clone()), old_instr, comment, src_addr));

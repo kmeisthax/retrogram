@@ -3,7 +3,7 @@
 pub mod rgbds;
 
 use std::str;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 #[derive(Copy, Clone, Serialize, Debug)]
 pub enum AssemblerName {

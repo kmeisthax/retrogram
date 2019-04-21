@@ -2,7 +2,7 @@
 
 use std::io;
 use std::ops::BitAnd;
-use crate::retrogram::{reg, memory, ast};
+use crate::retrogram::{reg, memory};
 use crate::retrogram::arch::lr35902;
 
 /// Any type which decodes the banked memory region (0x4000) of a Game Boy ROM

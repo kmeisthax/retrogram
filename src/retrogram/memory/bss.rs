@@ -29,7 +29,7 @@ impl<P, MV, IO> Image for UnknownImage<P, MV, IO> where P: CheckedSub + Clone, I
     type Offset = IO;
     type Data = MV;
 
-    fn retrieve(&self, offset: Self::Offset, count: Self::Offset) -> Option<&[Self::Data]> {
+    fn retrieve(&self, _offset: Self::Offset, _count: Self::Offset) -> Option<&[Self::Data]> {
         None
     }
 
@@ -69,7 +69,7 @@ impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: CheckedSub + Cl
     type Offset = IO;
     type Data = MV;
 
-    fn retrieve(&self, offset: Self::Offset, count: Self::Offset) -> Option<&[Self::Data]> {
+    fn retrieve(&self, _offset: Self::Offset, _count: Self::Offset) -> Option<&[Self::Data]> {
         None
     }
 

@@ -1,7 +1,6 @@
 //!An abstract syntax tree representation of disassembled code
 
 use std::{fmt, slice};
-use std::cmp::{PartialEq, Eq};
 use crate::retrogram::memory;
 
 ///A literal value, such as an integer, pointer, or other kind of reference.
@@ -191,7 +190,7 @@ impl Label {
 
 impl fmt::Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(parent_label) = &self.parent_name {
+        if let Some(_parent_label) = &self.parent_name {
             write!(f, ".{}:", self.name)
         } else {
             write!(f, "{}:", self.name)

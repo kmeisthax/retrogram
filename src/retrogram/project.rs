@@ -83,10 +83,10 @@ pub struct Project {
 
 impl Project {
     pub fn read() -> io::Result<Self> {
-        let mut project_file = fs::File::open("retrogram.json")?;
+        let project_file = fs::File::open("retrogram.json")?;
         let project = serde_json::from_reader(project_file)?;
 
-        Ok((project))
+        Ok(project)
     }
 
     /// Get the program with the given name within the project.

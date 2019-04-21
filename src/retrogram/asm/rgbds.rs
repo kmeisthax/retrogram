@@ -2,7 +2,6 @@
 
 use std::io;
 use std::ops::{Shl, BitOr};
-use std::hash::Hash;
 use crate::retrogram::ast;
 use crate::retrogram::arch::lr35902;
 use crate::retrogram::platform::gb;
