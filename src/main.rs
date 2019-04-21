@@ -8,7 +8,8 @@ mod retrogram;
 
 use std::{str, fs, io};
 use std::str::FromStr;
-use crate::retrogram::{arch, platform, asm, analysis};
+use std::hash::Hash;
+use crate::retrogram::{ast, arch, platform, asm, analysis, memory};
 use crate::retrogram::platform::PlatformName;
 use crate::retrogram::project;
 
@@ -27,9 +28,26 @@ impl str::FromStr for Commands {
     }
 }
 
+fn parse_pcspec<P, C>(text_str: &str, db: &analysis::Database<P>, create_context: C) -> io::Result<memory::Pointer<P>>
+    where P: Clone + Eq + Hash + FromStr, C: Fn(&Vec<P>) -> Option<memory::Pointer<P>> {
+    if let Ok(text_lbl) = ast::Label::from_str(text_str) {
+        if let Some(ptr) = db.label_pointer(&text_lbl) {
+            return Ok(ptr.clone());
+        }
+    }
+
+    let mut v = Vec::new();
+
+    for piece in text_str.split(":") {
+        v.push(P::from_str(piece).or(Err(io::Error::new(io::ErrorKind::InvalidInput, "Given analysis address is not a valid integer")))?);
+    }
+
+    create_context(&v).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Could not create context for input pointer"))
+}
+
 fn main() -> io::Result<()> {
     let mut command = None;
-    let mut start_pc : Option<String> = None;
+    let mut start_pc : String = "".to_string();
     let mut version : Option<String> = None;
     let mut prog = project::Program::default();
 
@@ -37,7 +55,7 @@ fn main() -> io::Result<()> {
         let mut ap = argparse::ArgumentParser::new();
 
         ap.refer(&mut command).add_argument("command", argparse::StoreOption, "The command to run.");
-        ap.refer(&mut start_pc).add_argument("start_pc", argparse::StoreOption, "The PC value to start analysis from");
+        ap.refer(&mut start_pc).add_argument("start_pc", argparse::Store, "The PC value to start analysis from");
         ap.refer(&mut version).add_option(&["--program"], argparse::StoreOption, "Which program to analyze");
         prog.refer_args(&mut ap);
 
@@ -61,39 +79,25 @@ fn main() -> io::Result<()> {
     match command {
         Some(Commands::Disassemble) => {
             let mut file = fs::File::open(image)?;
-            let pc_pieces = if let Some(start_pc) = start_pc {
-                let mut v = Vec::new();
-
-                for piece in start_pc.split(":") {
-                    v.push(u16::from_str(piece).or(Err(io::Error::new(io::ErrorKind::InvalidInput, "Given analysis address is not a valid integer")))?);
-                }
-
-                Some(v)
-            } else {
-                None
-            };
 
             match prog.platform() {
                 Some(PlatformName::GB) => {
                     let mut db = analysis::Database::new();
                     let bus = platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?;
-                    
-                    let orig_asm = match pc_pieces.map(|p| platform::gb::create_context(&p)) {
-                        Some(Some(cptr)) => arch::lr35902::disassemble_block(Some(cptr), &bus)?,
-                        _ => arch::lr35902::disassemble_block(None, &bus)?
-                    };
+
+                    for symbol_file in prog.iter_symbol_files() {
+                        if let Ok(file) = fs::File::open(symbol_file) {
+                            asm::rgbds::parse_symbol_file(io::BufReader::new(file), &mut db)?;
+                        }
+                    }
+
+                    let orig_asm = arch::lr35902::disassemble_block(parse_pcspec(&start_pc, &db, platform::gb::create_context).ok(), &bus)?;
 
                     match orig_asm.iter_lines().next() {
                         Some(line) => {
                             db.insert_placeholder_label(line.source_address().clone(), analysis::ReferenceKind::Unknown);
                         },
                         _ => {}
-                    }
-
-                    for symbol_file in prog.iter_symbol_files() {
-                        if let Ok(file) = fs::File::open(symbol_file) {
-                            asm::rgbds::parse_symbol_file(io::BufReader::new(file), &mut db)?;
-                        }
                     }
                     
                     let labeled_asm = analysis::replace_labels(orig_asm, &mut db, &bus);

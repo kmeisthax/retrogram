@@ -1,6 +1,6 @@
-mod memory;
+pub mod memory;
 pub mod reg;
-mod ast;
+pub mod ast;
 pub mod arch;
 pub mod platform;
 pub mod analysis;

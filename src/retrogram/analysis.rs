@@ -69,8 +69,12 @@ impl<P> Database<P> where P: Clone + Eq + Hash {
         ast::Label::new(&name, None)
     }
 
-    pub fn pointer_label(&self, ptr: memory::Pointer<P>) -> Option<&ast::Label> {
-        self.pointers.get(&ptr)
+    pub fn pointer_label(&self, ptr: &memory::Pointer<P>) -> Option<&ast::Label> {
+        self.pointers.get(ptr)
+    }
+
+    pub fn label_pointer(&self, label: &ast::Label) -> Option<&memory::Pointer<P>> {
+        self.labels.get(label)
     }
 }
 
@@ -86,7 +90,7 @@ pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Opera
             let mut cpt = start_addr.contextualize(pt.clone());
             cpt = memory.minimize_context(cpt);
 
-            if let Some(lbl) = db.pointer_label(cpt.clone()) {
+            if let Some(lbl) = db.pointer_label(&cpt) {
                 ast::Operand::Label(lbl.clone())
             } else {
                 ast::Operand::Label(db.insert_placeholder_label(cpt, refkind))
@@ -141,7 +145,7 @@ pub fn inject_labels<I, F, P>(src_assembly: ast::Assembly<I, F, P>, db: &Databas
         if let None = line.label() {
             let (_label, old_instr, comment, src_addr) = line.clone().into_parts();
 
-            if let Some(new_label) = db.pointer_label(src_addr.clone()) {
+            if let Some(new_label) = db.pointer_label(&src_addr) {
                 dst_assembly.append_line(ast::Line::new(Some(new_label.clone()), old_instr, comment, src_addr));
             } else {
                 dst_assembly.append_line(line.clone());

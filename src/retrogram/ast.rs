@@ -1,6 +1,6 @@
 //!An abstract syntax tree representation of disassembled code
 
-use std::{fmt, slice};
+use std::{fmt, slice, str};
 use crate::retrogram::memory;
 
 ///A literal value, such as an integer, pointer, or other kind of reference.
@@ -184,6 +184,28 @@ impl Label {
         Label {
             name: name.to_string(),
             parent_name: parent_name.map(|s| s.to_string())
+        }
+    }
+}
+
+impl str::FromStr for Label {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut split = s.split(".");
+        let maybe_parent = split.next();
+        let maybe_child = split.next();
+
+        match (maybe_parent, maybe_child) {
+            (Some(parent), Some(child)) => Ok(Label {
+                name: child.to_string(),
+                parent_name: Some(parent.to_string())
+            }),
+            (Some(parent), None) => Ok(Label {
+                name: parent.to_string(),
+                parent_name: None
+            }),
+            _ => Err(())
         }
     }
 }
