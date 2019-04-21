@@ -9,6 +9,7 @@ mod retrogram;
 use std::{str, fs, io};
 use std::str::FromStr;
 use std::hash::Hash;
+use num_traits::Num;
 use crate::retrogram::{ast, arch, platform, asm, analysis, memory};
 use crate::retrogram::platform::PlatformName;
 use crate::retrogram::project;
@@ -29,7 +30,7 @@ impl str::FromStr for Commands {
 }
 
 fn parse_pcspec<P, C>(text_str: &str, db: &analysis::Database<P>, create_context: C) -> io::Result<memory::Pointer<P>>
-    where P: Clone + Eq + Hash + FromStr, C: Fn(&Vec<P>) -> Option<memory::Pointer<P>> {
+    where P: Clone + Eq + Hash + FromStr + Num, C: Fn(&Vec<P>) -> Option<memory::Pointer<P>> {
     if let Ok(text_lbl) = ast::Label::from_str(text_str) {
         if let Some(ptr) = db.label_pointer(&text_lbl) {
             return Ok(ptr.clone());
@@ -39,7 +40,7 @@ fn parse_pcspec<P, C>(text_str: &str, db: &analysis::Database<P>, create_context
     let mut v = Vec::new();
 
     for piece in text_str.split(":") {
-        v.push(P::from_str(piece).or(Err(io::Error::new(io::ErrorKind::InvalidInput, "Given analysis address is not a valid integer")))?);
+        v.push(P::from_str_radix(piece, 16).or(Err(io::Error::new(io::ErrorKind::InvalidInput, "Given analysis address is not a valid integer")))?);
     }
 
     create_context(&v).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Could not create context for input pointer"))
