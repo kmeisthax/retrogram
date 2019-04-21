@@ -4,8 +4,10 @@ pub mod lr35902;
 pub mod aarch32;
 
 use std::str;
+use serde::{Deserialize, Serialize};
 
 /// Enumeration of all architectures that ship with Retrogram.
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub enum ArchName {
     LR35902,
     AARCH32,

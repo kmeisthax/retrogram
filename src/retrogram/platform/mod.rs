@@ -6,8 +6,10 @@
 pub mod gb;
 
 use std::str;
+use serde::{Deserialize, Serialize};
 
 /// Enumeration of all platforms that ship with Retrogram.
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub enum PlatformName {
     GB
 }
