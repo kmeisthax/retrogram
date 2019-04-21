@@ -6,3 +6,4 @@ pub mod platform;
 pub mod analysis;
 pub mod asm;
 pub mod project;
+pub mod input;

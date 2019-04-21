@@ -1,7 +1,6 @@
 //! Platform implementation for Game Boy and it's attendant memory mapper chips
 
 use std::io;
-use std::ops::BitAnd;
 use crate::retrogram::{reg, memory};
 use crate::retrogram::arch::lr35902;
 
@@ -180,20 +179,22 @@ impl Default for PlatformVariant {
     }
 }
 
-pub fn create_context<V>(values: &Vec<V>) -> Option<memory::Pointer<lr35902::Pointer>> where V: std::fmt::Debug + Copy + BitAnd + From<lr35902::Pointer>, lr35902::Pointer: From<<V as BitAnd>::Output> + From<V>, u64: From<V> {
-    let mut context = memory::Pointer::from(lr35902::Pointer::from(values[values.len() - 1]));
+pub fn create_context<V>(values: &Vec<V>) -> Option<memory::Pointer<lr35902::Pointer>>
+    where V: Clone + PartialOrd + From<lr35902::Pointer>,
+        lr35902::Pointer: From<V>,
+        u64: From<V> {
+    let mut context = memory::Pointer::from(lr35902::Pointer::from(values[values.len() - 1].clone()));
 
     if values.len() > 1 {
-        match u16::from(values[values.len() - 1] & V::from(0xC000)) {
-            0x0000 => {}, //HOME
-            0x2000 => {},
-            0x4000 => context.set_platform_context("R", reg::Symbolic::from(u64::from(values[values.len() - 2]))), //Bank
-            0x6000 => context.set_platform_context("R", reg::Symbolic::from(u64::from(values[values.len() - 2]))), // ROM
-            0x8000 => context.set_platform_context("V", reg::Symbolic::from(u64::from(values[values.len() - 2]))), //VRAM
-            0xA000 => context.set_platform_context("S", reg::Symbolic::from(u64::from(values[values.len() - 2]))), //SRAM
-            0xC000 => context.set_platform_context("W", reg::Symbolic::from(u64::from(values[values.len() - 2]))), //WRAM
-            0xE000 => {}, //ECHO, IO, HRAMetc
-            _ => panic!("Your AND is wrong..."),
+        if values[values.len() - 1] >= V::from(0xE000) {
+        } else if values[values.len() - 1] >= V::from(0xC000) {
+            context.set_platform_context("W", reg::Symbolic::from(u64::from(values[values.len() - 2].clone())));
+        } else if values[values.len() - 1] >= V::from(0xA000) {
+            context.set_platform_context("S", reg::Symbolic::from(u64::from(values[values.len() - 2].clone())));
+        } else if values[values.len() - 1] >= V::from(0x8000) {
+            context.set_platform_context("V", reg::Symbolic::from(u64::from(values[values.len() - 2].clone())));
+        } else if values[values.len() - 1] >= V::from(0x4000) {
+            context.set_platform_context("R", reg::Symbolic::from(u64::from(values[values.len() - 2].clone())));
         }
     }
 

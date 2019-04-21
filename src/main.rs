@@ -7,10 +7,7 @@ extern crate serde_plain;
 mod retrogram;
 
 use std::{str, fs, io};
-use std::str::FromStr;
-use std::hash::Hash;
-use num_traits::Num;
-use crate::retrogram::{ast, arch, platform, asm, analysis, memory};
+use crate::retrogram::{ast, arch, platform, asm, analysis, memory, input};
 use crate::retrogram::platform::PlatformName;
 use crate::retrogram::project;
 
@@ -27,23 +24,6 @@ impl str::FromStr for Commands {
             _ => Err(())
         }
     }
-}
-
-fn parse_pcspec<P, C>(text_str: &str, db: &analysis::Database<P>, create_context: C) -> io::Result<memory::Pointer<P>>
-    where P: Clone + Eq + Hash + FromStr + Num, C: Fn(&Vec<P>) -> Option<memory::Pointer<P>> {
-    if let Ok(text_lbl) = ast::Label::from_str(text_str) {
-        if let Some(ptr) = db.label_pointer(&text_lbl) {
-            return Ok(ptr.clone());
-        }
-    }
-
-    let mut v = Vec::new();
-
-    for piece in text_str.split(":") {
-        v.push(P::from_str_radix(piece, 16).or(Err(io::Error::new(io::ErrorKind::InvalidInput, "Given analysis address is not a valid integer")))?);
-    }
-
-    create_context(&v).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Could not create context for input pointer"))
 }
 
 fn main() -> io::Result<()> {
@@ -92,7 +72,7 @@ fn main() -> io::Result<()> {
                         }
                     }
 
-                    let orig_asm = arch::lr35902::disassemble_block(parse_pcspec(&start_pc, &db, platform::gb::create_context).ok(), &bus)?;
+                    let orig_asm = arch::lr35902::disassemble_block(input::parse_ptr(&start_pc, &db, platform::gb::create_context::<u16>).ok(), &bus)?;
 
                     match orig_asm.iter_lines().next() {
                         Some(line) => {
