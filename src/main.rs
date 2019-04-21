@@ -64,17 +64,24 @@ fn main() -> io::Result<()> {
                 Some(PlatformName::GB) => {
                     let mut db = analysis::Database::new();
                     let bus = platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?;
+                    
+                    let orig_asm = match pc_pieces.map(|p| platform::gb::create_context(&p)) {
+                        Some(Some(cptr)) => arch::lr35902::disassemble_block(&mut file, Some(cptr), &bus)?,
+                        _ => arch::lr35902::disassemble_block(&mut file, None, &bus)?
+                    };
+
+                    match orig_asm.iter_lines().next() {
+                        Some(line) => {
+                            db.insert_placeholder_label(line.source_address().clone(), analysis::ReferenceKind::Unknown);
+                        },
+                        _ => {}
+                    }
 
                     for symbol_file in prog.iter_symbol_files() {
                         if let Ok(mut file) = fs::File::open(symbol_file) {
                             asm::rgbds::parse_symbol_file(io::BufReader::new(file), &mut db)?;
                         }
                     }
-                    
-                    let orig_asm = match pc_pieces.map(|p| platform::gb::create_context(&p)) {
-                        Some(Some(cptr)) => arch::lr35902::disassemble_block(&mut file, Some(cptr), &bus)?,
-                        _ => arch::lr35902::disassemble_block(&mut file, None, &bus)?
-                    };
                     
                     let labeled_asm = analysis::replace_labels(orig_asm, &mut db, &bus);
                     let injected_asm = analysis::inject_labels(labeled_asm, &db);

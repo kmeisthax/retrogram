@@ -5,8 +5,28 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::convert::TryFrom;
 use std::ops::{Add, Sub};
-use std::fmt::{Display, Debug, UpperHex};
+use std::fmt::{Display, Formatter, Result, UpperHex};
 use crate::retrogram::{ast, memory};
+
+#[derive(Copy, Clone, Debug)]
+pub enum ReferenceKind {
+    Unknown,
+    Data,
+    Code,
+    Subroutine
+}
+
+impl Display for ReferenceKind {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        //write!(f, "({}, {})", self.x, self.y)
+        match self {
+            ReferenceKind::Unknown => write!(f, "UNK"),
+            ReferenceKind::Data => write!(f, "DAT"),
+            ReferenceKind::Code => write!(f, "LOC"),
+            ReferenceKind::Subroutine => write!(f, "FUN")
+        }
+    }
+}
 
 /// A repository of information obtained from the program under analysis.
 #[derive(Clone, Debug)]
@@ -31,6 +51,25 @@ impl<P> Database<P> where P: Clone + Eq + Hash {
         self.pointers.insert(ptr, label);
     }
 
+    /// Create a label for a location that is not named in the database.
+    pub fn insert_placeholder_label(&mut self, ptr: memory::Pointer<P>, kind: ReferenceKind) -> ast::Label
+        where P: UpperHex {
+        let mut name = format!("{}", kind);
+
+        for (_, key, cval) in ptr.iter_contexts() {
+            name = match cval.into_concrete() {
+                Some(cval) => format!("{}_{:X}", name, cval),
+                _ => format!("{}_{}??", name, key)
+            };
+        }
+
+        name = format!("{}_{:X}", name, ptr.as_pointer());
+
+        self.insert_label(ast::Label::new(&name, None), ptr);
+
+        ast::Label::new(&name, None)
+    }
+
     pub fn pointer_label(&self, ptr: memory::Pointer<P>) -> Option<&ast::Label> {
         self.pointers.get(&ptr)
     }
@@ -38,12 +77,11 @@ impl<P> Database<P> where P: Clone + Eq + Hash {
 
 /// Given an operand, replace all Pointer literals with Label operands obtained
 /// from the Database.
-pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Operand<I, F, P>, db: &mut Database<P>, start_addr: &memory::Pointer<P>, memory: &memory::Memory<P, AMV, AS, AIO>, in_dataref: bool, in_coderef: bool) -> ast::Operand<I, F, P>
+pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Operand<I, F, P>, db: &mut Database<P>, start_addr: &memory::Pointer<P>, memory: &memory::Memory<P, AMV, AS, AIO>, refkind: ReferenceKind) -> ast::Operand<I, F, P>
     where P: Clone + UpperHex + PartialOrd + Add<AS> + Sub + Eq + Hash + From<<P as Add<AS>>::Output>,
         AS: Clone + PartialOrd + From<<P as Sub>::Output>,
-        memory::Pointer<P>: Clone,
-        ast::Literal<I, F, P>: Clone,
-        <P as TryFrom<P>>::Error : Debug {
+        I: Clone,
+        F: Clone {
     match src_operand {
         ast::Operand::Literal(ast::Literal::Pointer(pt)) => {
             let mut cpt = start_addr.contextualize(pt.clone());
@@ -52,29 +90,13 @@ pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Opera
             if let Some(lbl) = db.pointer_label(cpt.clone()) {
                 ast::Operand::Label(lbl.clone())
             } else {
-                let mut name = match (in_dataref, in_coderef) {
-                    (true, false) => "DAT",
-                    (false, true) => "LOC",
-                    _ => "UNK"
-                }.to_string();
-
-                for (_, key, cval) in cpt.iter_contexts() {
-                    name = match cval.into_concrete() {
-                        Some(cval) => format!("{}_{:X}", name, cval),
-                        _ => format!("{}_{}??", name, key)
-                    };
-                }
-
-                name = format!("{}_{:X}", name, pt);
-
-                db.insert_label(ast::Label::new(&name, None), cpt);
-                ast::Operand::Label(ast::Label::new(&name, None))
+                ast::Operand::Label(db.insert_placeholder_label(cpt, refkind))
             }
         },
-        ast::Operand::DataReference(op) => ast::Operand::DataReference(Box::new(replace_operand_with_label(*op, db, start_addr, memory, true, false))),
-        ast::Operand::CodeReference(op) => ast::Operand::CodeReference(Box::new(replace_operand_with_label(*op, db, start_addr, memory, false, true))),
-        ast::Operand::Indirect(op) => ast::Operand::Indirect(Box::new(replace_operand_with_label(*op, db, start_addr, memory, in_dataref, in_coderef))),
-        ast::Operand::Add(opl, opr) => ast::Operand::Add(Box::new(replace_operand_with_label(*opl, db, start_addr, memory, in_dataref, in_coderef)), Box::new(replace_operand_with_label(*opr, db, start_addr, memory, in_dataref, in_coderef))),
+        ast::Operand::DataReference(op) => ast::Operand::DataReference(Box::new(replace_operand_with_label(*op, db, start_addr, memory, ReferenceKind::Data))),
+        ast::Operand::CodeReference(op) => ast::Operand::CodeReference(Box::new(replace_operand_with_label(*op, db, start_addr, memory, ReferenceKind::Code))),
+        ast::Operand::Indirect(op) => ast::Operand::Indirect(Box::new(replace_operand_with_label(*op, db, start_addr, memory, refkind))),
+        ast::Operand::Add(opl, opr) => ast::Operand::Add(Box::new(replace_operand_with_label(*opl, db, start_addr, memory, refkind)), Box::new(replace_operand_with_label(*opr, db, start_addr, memory, refkind))),
         _ => src_operand
     }
 }
@@ -87,10 +109,8 @@ pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Opera
 pub fn replace_labels<I, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P>, db: &mut Database<P>, memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Assembly<I, F, P>
     where P: Clone + UpperHex + PartialOrd + Add<AS> + Sub + Eq + Hash + From<<P as Add<AS>>::Output>,
         AS: Clone + PartialOrd + From<<P as Sub>::Output>,
-        ast::Operand<I, F, P>: Clone,
-        ast::Literal<I, F, P>: Clone,
-        ast::Line<I, F, P>: Clone,
-        <P as TryFrom<P>>::Error : Debug {
+        I: Clone,
+        F: Clone {
     let mut dst_assembly = ast::Assembly::new();
 
     for line in src_assembly.iter_lines() {
@@ -98,7 +118,7 @@ pub fn replace_labels<I, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P
             let mut new_operands = Vec::new();
 
             for operand in instr.iter_operands() {
-                new_operands.push(replace_operand_with_label(operand.clone(), db, &line.source_address().clone().try_into_ptr().expect("Disassembly source address does not fit in architecture's target pointer size."), memory, false, false));
+                new_operands.push(replace_operand_with_label(operand.clone(), db, &line.source_address(), memory, ReferenceKind::Unknown));
             }
 
             let new_instr = ast::Instruction::new(instr.opcode(), new_operands);
@@ -114,13 +134,15 @@ pub fn replace_labels<I, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P
 
 /// Given an Assembly, create a new Assembly with all labels inserted from the
 /// database.
-pub fn inject_labels<I, F, P, AP>(src_assembly: ast::Assembly<I, F, P>, db: &Database<AP>) -> ast::Assembly<I, F, P> where AP: Clone + Eq + Hash + TryFrom<P>, ast::Line<I, F, P>: Clone, memory::Pointer<P>: Clone, <AP as TryFrom<P>>::Error : Debug {
+pub fn inject_labels<I, F, P>(src_assembly: ast::Assembly<I, F, P>, db: &Database<P>) -> ast::Assembly<I, F, P>
+    where P: Clone + Eq + Hash, I: Clone, F: Clone {
     let mut dst_assembly = ast::Assembly::new();
     
     for line in src_assembly.iter_lines() {
         if let None = line.label() {
             let (label, old_instr, comment, src_addr) = line.clone().into_parts();
-            if let Some(new_label) = db.pointer_label(src_addr.clone().try_into_ptr().expect("Label operand does not fit in architecture's target pointer size.")) {
+
+            if let Some(new_label) = db.pointer_label(src_addr.clone()) {
                 dst_assembly.append_line(ast::Line::new(Some(new_label.clone()), old_instr, comment, src_addr));
             } else {
                 dst_assembly.append_line(line.clone());
