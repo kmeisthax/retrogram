@@ -7,3 +7,4 @@ pub mod analysis;
 pub mod asm;
 pub mod project;
 pub mod input;
+pub mod cli;
