@@ -4,6 +4,7 @@
 use std::marker::PhantomData;
 use num_traits::ops::checked::CheckedSub;
 use crate::retrogram::memory::{Image, Pointer};
+use crate::retrogram::reg;
 
 /// Models a range of memory whose contents are unknown.
 /// 
@@ -83,5 +84,14 @@ impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: CheckedSub + Cl
         
         stripped_ptr.set_platform_context(self.banking_ctxt, my_ctxt);
         stripped_ptr
+    }
+
+    fn insert_user_context(&self, mut ptr: Pointer<Self::Pointer>, ctxts: &[u64]) -> Pointer<Self::Pointer> {
+        match ctxts.get(0) {
+            Some(ctxt) => ptr.set_platform_context(self.banking_ctxt, reg::Symbolic::from(*ctxt)),
+            _ => {}
+        }
+
+        ptr
     }
 }

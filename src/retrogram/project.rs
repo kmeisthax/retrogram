@@ -45,6 +45,14 @@ impl Program {
         self.platform
     }
 
+    pub fn arch(&self) -> Option<ArchName> {
+        self.arch
+    }
+
+    pub fn assembler(&self) -> Option<AssemblerName> {
+        self.assembler
+    }
+
     /// List all the image files related to a given program.
     /// 
     /// TODO: This should return &str, not &String, no?

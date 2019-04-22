@@ -1,11 +1,12 @@
 //! Analysis database - Allows accumulation of program facts as disassembly
 //! passes run on the program.
 
+use std::{fs, io};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::ops::{Add, Sub};
 use std::fmt::{Display, Formatter, Result, UpperHex};
-use crate::retrogram::{ast, memory};
+use crate::retrogram::{ast, memory, project};
 
 #[derive(Copy, Clone, Debug)]
 pub enum ReferenceKind {
@@ -43,6 +44,19 @@ impl<P> Database<P> where P: Clone + Eq + Hash {
             labels: HashMap::new(),
             pointers: HashMap::new()
         }
+    }
+
+    pub fn for_program<PS>(prog: &project::Program, parse_symbol_file: PS) -> io::Result<Self>
+        where PS: Fn(io::BufReader<fs::File>, &mut Database<P>) -> io::Result<()> {
+        let mut db = Self::new();
+
+        for symbol_file in prog.iter_symbol_files() {
+            if let Ok(file) = fs::File::open(symbol_file) {
+                parse_symbol_file(io::BufReader::new(file), &mut db)?;
+            }
+        }
+
+        Ok(db)
     }
 
     pub fn insert_label(&mut self, label: ast::Label, ptr: memory::Pointer<P>) {

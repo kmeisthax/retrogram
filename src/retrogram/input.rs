@@ -1,6 +1,8 @@
 use std::io;
 use std::str::FromStr;
 use std::hash::Hash;
+use std::ops::{Add, Sub};
+use std::convert::TryFrom;
 use num_traits::Num;
 use crate::retrogram::{memory, analysis, ast};
 
@@ -26,21 +28,27 @@ use crate::retrogram::{memory, analysis, ast};
 /// This function assumes the default context type of `u64`. No known platform
 /// requires a wider context type and adding more type parameters to every user
 /// of `memory::Pointer` is inadvisable.
-pub fn parse_ptr<PI, P, CX>(text_str: &str, db: &analysis::Database<P>, create_context: CX) -> io::Result<memory::Pointer<P>>
-    where PI: Num,
-        P: Clone + Eq + Hash + FromStr,
-        CX: Fn(&Vec<PI>) -> Option<memory::Pointer<P>> {
+pub fn parse_ptr<P, MV, S, IO>(text_str: &str, db: &analysis::Database<P>, bus: &memory::Memory<P, MV, S, IO>) -> Option<memory::Pointer<P>>
+    where P: Clone + Eq + Hash + FromStr + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output> + TryFrom<u64>,
+        S: Clone + PartialOrd + From<<P as Sub>::Output> {
     if let Ok(text_lbl) = ast::Label::from_str(text_str) {
         if let Some(ptr) = db.label_pointer(&text_lbl) {
-            return Ok(ptr.clone());
+            return Some(ptr.clone());
         }
     }
 
     let mut v = Vec::new();
 
     for piece in text_str.split(":") {
-        v.push(PI::from_str_radix(piece, 16).or(Err(io::Error::new(io::ErrorKind::InvalidInput, "Given analysis address is not a valid integer")))?);
+        v.push(u64::from_str_radix(piece, 16).ok()?);
     }
 
-    create_context(&v).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Could not create context for input pointer"))
+    if let Some(pival) = v.get(v.len() - 1) {
+        let pval = P::try_from(*pival).ok()?;
+        let ptr = memory::Pointer::from(pval);
+
+        Some(bus.insert_user_context(ptr, &v[1..]))
+    } else {
+        None
+    }
 }

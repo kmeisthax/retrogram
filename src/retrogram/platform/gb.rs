@@ -162,6 +162,15 @@ impl<M> memory::Image for GameBoyROMImage<M> where M: Mapper {
 
         stripped_ptr
     }
+
+    fn insert_user_context(&self, mut ptr: memory::Pointer<Self::Pointer>, ctxts: &[u64]) -> memory::Pointer<Self::Pointer> {
+        match ctxts.get(0) {
+            Some(ctxt) => ptr.set_platform_context("R", reg::Symbolic::from(*ctxt)),
+            _ => {}
+        }
+
+        ptr
+    }
 }
 
 pub enum PlatformVariant {
@@ -211,8 +220,51 @@ pub fn create_context<V>(values: &Vec<V>) -> Option<memory::Pointer<lr35902::Poi
 /// You may optionally specify a `PlatformVariant` to control which MBC behavior
 /// is used to analyze the image. If unspecified, the ROM header will be used to
 /// determine which MBC was intended to be used alongside this program.
-pub fn construct_platform<F>(file: &mut F, pv: PlatformVariant) -> io::Result<lr35902::Bus> where F: io::Read {
+pub fn construct_platform<F>(file: &mut F, mut pv: PlatformVariant) -> io::Result<lr35902::Bus> where F: io::Read + io::Seek {
     let mut bus = lr35902::Bus::new();
+
+    pv = match pv {
+        PlatformVariant::UnknownMapper => {
+            let orig_pos = file.seek(io::SeekFrom::Current(0))?;
+            file.seek(io::SeekFrom::Start(0x147))?;
+
+            let mut romtype : [u8; 1] = [0];
+            file.read(&mut romtype)?;
+
+            match romtype {
+                [0x00] => PlatformVariant::LinearMapper, //ROM w/o RAM
+                [0x01] => PlatformVariant::MBC1Mapper, //MBC1 ROM
+                [0x02] => PlatformVariant::MBC1Mapper, //MBC1 ROM with RAM
+                [0x03] => PlatformVariant::MBC1Mapper, //MBC1 ROM with persistent RAM
+                [0x05] => PlatformVariant::MBC2Mapper, //MBC2 ROM; TODO: MBC2 has weird 4-bit SRAM and we should always return symbolic 4-bit values
+                [0x06] => PlatformVariant::MBC2Mapper, //MBC2 ROM w/ persistence
+                [0x08] => PlatformVariant::LinearMapper, //ROM with RAM
+                [0x09] => PlatformVariant::LinearMapper, //ROM with persistent RAM
+                [0x0B] => PlatformVariant::UnknownMapper, //MMM01, currently not supported
+                [0x0C] => PlatformVariant::UnknownMapper, //MMM01, currently not supported, with RAM
+                [0x0D] => PlatformVariant::UnknownMapper, //MMM01, currently not supported, with persistent RAM
+                [0x0F] => PlatformVariant::MBC3Mapper, //MBC3 with persistent clock
+                [0x10] => PlatformVariant::MBC3Mapper, //MBC3 with persistent clock and RAM
+                [0x11] => PlatformVariant::MBC3Mapper, //MBC3 ROM only
+                [0x12] => PlatformVariant::MBC3Mapper, //MBC3 with RAM
+                [0x13] => PlatformVariant::MBC3Mapper, //MBC3 with persistent RAM, no clock
+                [0x19] => PlatformVariant::MBC5Mapper, //MBC5 ROM only
+                [0x1A] => PlatformVariant::MBC5Mapper, //MBC5 with RAM
+                [0x1B] => PlatformVariant::MBC5Mapper, //MBC5 with persistent RAM
+                [0x1C] => PlatformVariant::MBC5Mapper, //MBC5 with rumble motor
+                [0x1D] => PlatformVariant::MBC5Mapper, //MBC5 with rumble motor and RAM
+                [0x1E] => PlatformVariant::MBC5Mapper, //MBC5 with rumble motor and persistent RAM
+                [0x20] => PlatformVariant::UnknownMapper, //MBC6 ROM only
+                [0x22] => PlatformVariant::UnknownMapper, //MBC7 with tilt sensor, rumble motor, and persistent EEPROM
+                [0xFC] => PlatformVariant::UnknownMapper, //Game Boy Camera with CCD video sensor
+                [0xFD] => PlatformVariant::UnknownMapper, //Bandai TAMA5 (capabilities unknown)
+                [0xFE] => PlatformVariant::UnknownMapper, //HuC3 (capabilities unknown)
+                [0xFF] => PlatformVariant::UnknownMapper, //HuC1 with cartridge infrared port and persistent RAM
+                _ => PlatformVariant::UnknownMapper
+            }
+        },
+        e => e
+    };
 
     match pv {
         PlatformVariant::LinearMapper => bus.install_mem_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, LinearMapper::new())?)),
@@ -220,7 +272,7 @@ pub fn construct_platform<F>(file: &mut F, pv: PlatformVariant) -> io::Result<lr
         PlatformVariant::MBC2Mapper => bus.install_mem_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, MBC2Mapper::new())?)),
         PlatformVariant::MBC3Mapper => bus.install_mem_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, MBC3Mapper::new())?)),
         PlatformVariant::MBC5Mapper => bus.install_mem_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, MBC5Mapper::new())?)),
-        PlatformVariant::UnknownMapper => return Err(io::Error::new(io::ErrorKind::Other, "Not yet implemented"))
+        PlatformVariant::UnknownMapper => panic!("Platform variant detection failed! Please manually specify the platform variant.")
     }
 
     bus.install_mem(0x8000, 0x2000); //VRAM

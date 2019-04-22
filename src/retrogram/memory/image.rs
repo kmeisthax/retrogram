@@ -35,5 +35,19 @@ pub trait Image {
 
     /// Given a pointer, remove all contexts from the pointer that are not
     /// necessary to decode it to an image offset.
-    fn minimize_context(&self, ptr: Pointer<Self::Pointer>) -> Pointer<Self::Pointer>;
+    fn minimize_context(&self, ptr: Pointer<Self::Pointer>) -> Pointer<Self::Pointer> {
+        ptr
+    }
+    
+    /// Given a pointer, insert any additional user-specified contexts into the
+    /// pointer.
+    /// 
+    /// This function is used to parse user input. How many contexts are used,
+    /// if any, and in what order, is wholly dependent on the Image type in
+    /// question. Images are not required to implement this method, the default
+    /// merely does not alter the pointer. Platforms should document their use
+    /// of contexts as appropriate.
+    fn insert_user_context(&self, ptr: Pointer<Self::Pointer>, ctxts: &[u64]) -> Pointer<Self::Pointer> {
+        ptr
+    }
 }
