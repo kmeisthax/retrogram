@@ -8,7 +8,7 @@ use std::convert::TryFrom;
 use std::fmt::{Display, LowerHex, UpperHex};
 use crate::retrogram::{asm, ast, arch, analysis, project, platform, input, memory};
 
-fn dis_inner<I, F, P, MV, S, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P>, bus: &memory::Memory<P, MV, S, IO>, disassemble_block: DIS) -> io::Result<()>
+fn dis_inner<I, F, P, MV, S, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P>, bus: &memory::Memory<P, MV, S, IO>, disassemble_block: DIS) -> io::Result<ast::Assembly<I, F, P>>
     where P: Clone + Eq + Hash + FromStr + Display + LowerHex + UpperHex + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output> + TryFrom<u64>,
         S: Clone + PartialOrd + From<<P as Sub>::Output>,
         I: Clone + Display,
@@ -27,9 +27,7 @@ fn dis_inner<I, F, P, MV, S, IO, DIS>(start_spec: &str, db: &mut analysis::Datab
     let labeled_asm = analysis::replace_labels(orig_asm, db, bus);
     let injected_asm = analysis::inject_labels(labeled_asm, db);
 
-    println!("{}", injected_asm);
-
-    Ok(())
+    Ok(injected_asm)
 }
 
 pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
@@ -51,7 +49,12 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
                 _ => return Err(io::Error::new(io::ErrorKind::Other, "Invalid platform for architecture"))
             };
 
-            dis_inner(start_spec, &mut db, &bus, arch::lr35902::disassemble_block)?;
+            let asm = dis_inner(start_spec, &mut db, &bus, arch::lr35902::disassemble_block)?;
+
+            match prog.assembler() {
+                Some(asm::AssemblerName::RGBDS) => println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm)),
+                _ => eprintln!("Please specify an assembler to print with")
+            };
         },
         _ => return Err(io::Error::new(io::ErrorKind::Other, "oops"))
     }

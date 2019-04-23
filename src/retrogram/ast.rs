@@ -186,6 +186,18 @@ impl Label {
             parent_name: parent_name.map(|s| s.to_string())
         }
     }
+
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+
+    pub fn parent_name(&self) -> Option<&String> {
+        if let Some(ref parent_label) = self.parent_name {
+            Some(&parent_label)
+        } else {
+            None
+        }
+    }
 }
 
 impl str::FromStr for Label {
