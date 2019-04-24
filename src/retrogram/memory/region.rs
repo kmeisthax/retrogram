@@ -1,12 +1,13 @@
 //! A special-purpose type for modeling the address decoding of a particular
 //! platform.
 
-use std::ops::{Add, Sub, Not};
+use std::ops::{Add, Sub, Not, BitOr, BitAnd, Shl};
 use std::cmp::PartialOrd;
 use std::slice::SliceIndex;
-use num_traits::Bounded;
+use num::traits::{Zero, One, Bounded};
 use num_traits::ops::checked::CheckedSub;
-use crate::retrogram::reg;
+use crate::retrogram::{reg, mynums};
+use crate::retrogram::reg::Convertable;
 use crate::retrogram::memory::{Image, Behavior, Pointer, UnknownImage};
 
 /// Models a region of memory visible to the program under analysis.
@@ -130,6 +131,51 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         }
         
         reg::Symbolic::default()
+    }
+}
+
+trait Desegmentable<AU> : Clone + Bounded + From<AU> + mynums::BoundWidth<usize> + Shl<usize> + BitOr + BitAnd + Zero + One + Not + From<<Self as Not>::Output> + From<<Self as Shl<usize>>::Output> + From<<Self as BitOr>::Output> + From<<Self as BitAnd>::Output> {
+
+}
+
+//Bounded + BitAnd + BitOr + From<<T as BitAnd>::Output> + From<<T as BitOr>::Output>
+impl<T, AU> Desegmentable<AU> for T
+    where T: Clone + Bounded + From<AU> + mynums::BoundWidth<usize> + Shl<usize> + BitOr + BitAnd + Zero + One + Not + From<<T as Not>::Output> + From<<T as Shl<usize>>::Output> + From<<T as BitOr>::Output> + From<<T as BitAnd>::Output> {
+
+}
+
+impl<P, MV, S, IO> Memory<P, MV, S, IO>
+    where P: Clone + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
+        MV: Clone + Not + From<<MV as Not>::Output> + Bounded + From<u8> + From<<usize as SliceIndex<[u8]>>::Output>,
+        <usize as SliceIndex<[u8]>>::Output : Sized,
+        IO: From<u8>,
+        usize: From<P> {
+    
+    /// Read an arbitary little-endian integer type from memory.
+    /// 
+    /// All integer types involved must provide a way to reason about their
+    /// widths. This is provided with the `BoundWidth` trait, which indicates how
+    /// many left shifts of a given integer type are required in order to
+    /// overflow it. The `BoundWidth` of the memory word type (MV) thus
+    /// determines how many atomic memory units are required to be read in order
+    /// to populate the expected value type.
+    pub fn read_manywords_le<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
+        where EV: Desegmentable<MV>,
+            P: Add<S> + From<<P as Add<S>>::Output>,
+            S: From<usize>,
+            MV: mynums::BoundWidth<usize>,
+            <EV as Shl<usize>>::Output: BitOr + Sub<EV> + From<<<EV as Shl<usize>>::Output as BitOr>::Output> + From<<<EV as Shl<usize>>::Output as Sub<EV>>::Output>,
+            reg::Symbolic<EV>: Shl<usize> + Convertable<<EV as Not>::Output> + Convertable<<EV as Shl<usize>>::Output>,
+            reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output> {
+        let units_reqd = (EV::bound_width() as f32 / MV::bound_width() as f32).round() as usize;
+        let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::from(EV::zero());
+        for i in 0..units_reqd {
+            let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::from(i)));
+            let shifted_unit = reg::Symbolic::<EV>::convert_from(self.read_unit(&ptr)) << i * MV::bound_width();
+            sum = sum | reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(shifted_unit));
+        }
+
+        sum
     }
 }
 

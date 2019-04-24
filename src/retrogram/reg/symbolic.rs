@@ -1,9 +1,9 @@
 //! A symbolic value type which allows placing bounds on values which have been
 //! mutated.
 
-use std::ops::{Not, BitAnd, BitOr};
+use std::ops::{Sub, Not, BitAnd, BitOr, Shl, Shr};
 use std::cmp::{min, max, PartialEq, Ord};
-use num::traits::Bounded;
+use num::traits::{Bounded, One};
 
 /// Represents a processor register bounded to a particular set of states.
 /// 
@@ -49,6 +49,26 @@ impl<T> From<T> for Symbolic<T> where T: Clone + Not + From<<T as Not>::Output> 
             upper_bound: v.clone(),
             bits_set: v.clone(),
             bits_cleared: T::from(!v),
+        }
+    }
+}
+
+/// Rust doesn't let us expose the child type's From impl as another From impl
+/// because there's no way to convey a blanket implementation that doesn't
+/// conflict with the blanket self-from impl in core. So instead we define a new
+/// trait which specifically means "convert the symbolic valid to another type",
+/// and our existing From impl means "wrap a concrete value".
+pub trait Convertable<R> {
+    fn convert_from(v: Symbolic<R>) -> Self;
+}
+
+impl<T, R> Convertable<R> for Symbolic<T> where T: From<R> {
+    fn convert_from(v: Symbolic<R>) -> Self {
+        Symbolic {
+            lower_bound: T::from(v.lower_bound),
+            upper_bound: T::from(v.upper_bound),
+            bits_set: T::from(v.bits_set),
+            bits_cleared: T::from(v.bits_cleared),
         }
     }
 }
@@ -111,6 +131,20 @@ impl<T> BitOr for Symbolic<T> where T: Bounded + BitAnd + BitOr + From<<T as Bit
             upper_bound: T::max_value(),
             bits_set: T::from(self.bits_set | sv.bits_set),
             bits_cleared: T::from(self.bits_cleared & sv.bits_cleared)
+        }
+    }
+}
+
+impl<T,R> Shl<R> for Symbolic<T> where T: Shl<R> + One, R: Clone,
+    <T as Shl<R>>::Output: BitOr + Sub<T> + From<<<T as Shl<R>>::Output as BitOr>::Output> + From<<<T as Shl<R>>::Output as Sub<T>>::Output> {
+    type Output = Symbolic<<T as Shl<R>>::Output>;
+
+    fn shl(self, rhs: R) -> Self::Output {
+        Symbolic {
+            lower_bound: self.lower_bound << rhs.clone(),
+            upper_bound: self.upper_bound << rhs.clone(),
+            bits_set: self.bits_set << rhs.clone(),
+            bits_cleared: <T as Shl<R>>::Output::from(self.bits_cleared << rhs.clone() | <T as Shl<R>>::Output::from((T::one() << rhs.clone()) - T::one()))
         }
     }
 }
