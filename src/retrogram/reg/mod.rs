@@ -3,7 +3,8 @@
 
 mod symbolic;
 mod state;
+mod traits;
 
 pub use symbolic::Symbolic;
-pub use symbolic::Convertable;
 pub use state::State;
+pub use traits::*;

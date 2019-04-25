@@ -1,5 +1,4 @@
 #[macro_use]
-pub mod traits;
 pub mod memory;
 pub mod reg;
 pub mod ast;

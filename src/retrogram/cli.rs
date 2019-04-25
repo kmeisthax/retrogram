@@ -9,8 +9,8 @@ use std::fmt::{Display, LowerHex, UpperHex};
 use crate::retrogram::{asm, ast, arch, analysis, project, platform, input, memory};
 
 fn dis_inner<I, F, P, MV, S, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P>, bus: &memory::Memory<P, MV, S, IO>, disassemble_block: DIS) -> io::Result<ast::Assembly<I, F, P>>
-    where P: Clone + Eq + Hash + FromStr + Display + LowerHex + UpperHex + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output> + TryFrom<u64>,
-        S: Clone + PartialOrd + From<<P as Sub>::Output>,
+    where P: memory::PtrNum<S> + Clone + Eq + Hash + FromStr + Display + LowerHex + UpperHex + TryFrom<u64>,
+        S: memory::Offset<P>,
         I: Clone + Display,
         F: Clone + Display,
         DIS: Fn(Option<memory::Pointer<P>>, &memory::Memory<P, MV, S, IO>) -> io::Result<ast::Assembly<I, F, P>> {

@@ -4,6 +4,7 @@
 use std::ops::{Sub, Not, BitAnd, BitOr, Shl, Shr};
 use std::cmp::{min, max, PartialEq, Ord};
 use num::traits::{Bounded, One};
+use crate::retrogram::reg::{Convertable, Symbolizable, Concretizable, Validatable};
 
 /// Represents a processor register bounded to a particular set of states.
 /// 
@@ -42,7 +43,7 @@ impl<T> Default for Symbolic<T> where T: Bounded + From<u8> {
     }
 }
 
-impl<T> From<T> for Symbolic<T> where T: Clone + Not + From<<T as Not>::Output> {
+impl<T> From<T> for Symbolic<T> where T: Symbolizable {
     fn from(v: T) -> Self {
         Symbolic {
             lower_bound: v.clone(),
@@ -51,15 +52,6 @@ impl<T> From<T> for Symbolic<T> where T: Clone + Not + From<<T as Not>::Output> 
             bits_cleared: T::from(!v),
         }
     }
-}
-
-/// Rust doesn't let us expose the child type's From impl as another From impl
-/// because there's no way to convey a blanket implementation that doesn't
-/// conflict with the blanket self-from impl in core. So instead we define a new
-/// trait which specifically means "convert the symbolic valid to another type",
-/// and our existing From impl means "wrap a concrete value".
-pub trait Convertable<R> {
-    fn convert_from(v: Symbolic<R>) -> Self;
 }
 
 impl<T, R> Convertable<R> for Symbolic<T> where T: From<R> {
@@ -73,13 +65,13 @@ impl<T, R> Convertable<R> for Symbolic<T> where T: From<R> {
     }
 }
 
-impl<T> Symbolic<T> where T: Clone + PartialEq + BitOr + From<<T as BitOr>::Output> + Not + From<<T as Not>::Output> + From<u8> {
+impl<T> Symbolic<T> where T: Concretizable {
     /// Returns true if only one valid T exists for this register
     ///
     /// TODO: This is nonexaustive, contrived cases exist which have one
     /// satisfying value but not by way of one bound mechanism or the other.
     pub fn is_concrete(&self) -> bool {
-        (self.lower_bound == self.upper_bound) || T::from(self.bits_set.clone() | self.bits_cleared.clone()) == T::from(!T::from(0))
+        (self.lower_bound == self.upper_bound) || T::from(self.bits_set.clone() | self.bits_cleared.clone()) == T::from(!T::zero())
     }
 
     pub fn into_concrete(self) -> Option<T> {
@@ -91,7 +83,7 @@ impl<T> Symbolic<T> where T: Clone + PartialEq + BitOr + From<<T as BitOr>::Outp
     }
 }
 
-impl<T> Symbolic<T> where T: Clone + PartialEq + Ord + Not + BitAnd + From<<T as Not>::Output> + From<<T as BitAnd>::Output> + From<u8> {
+impl<T> Symbolic<T> where T: Validatable {
     /// Returns true if the given value satisfies the register constraint
     pub fn is_valid(&self, v: T) -> bool {
         let notv = !v.clone();

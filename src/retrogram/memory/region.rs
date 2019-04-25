@@ -1,12 +1,11 @@
 //! A special-purpose type for modeling the address decoding of a particular
 //! platform.
 
-use std::ops::{Add, Sub, Not, BitOr, BitAnd, Shl};
+use std::ops::{Add, Sub, Not, BitOr, Shl};
 use std::cmp::PartialOrd;
 use std::slice::SliceIndex;
-use num::traits::{Zero, One, Bounded};
-use num_traits::ops::checked::CheckedSub;
-use crate::retrogram::{reg, mynums};
+use num::traits::{Bounded, One};
+use crate::retrogram::{reg, mynums, memory};
 use crate::retrogram::reg::Convertable;
 use crate::retrogram::memory::{Image, Behavior, Pointer, UnknownImage};
 
@@ -52,10 +51,7 @@ struct Region<P, MV, S = P, IO = usize> {
     image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>
 }
 
-impl<P, MV, S, IO> Region<P, MV, S, IO>
-    where P: Clone + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
-        S: Clone + PartialOrd + From<<P as Sub>::Output> {
-    
+impl<P, MV, S, IO> Region<P, MV, S, IO> where P: memory::PtrNum<S>, S: memory::Offset<P> {
     pub fn is_ptr_within(&self, ptr: P) -> bool {
         self.start <= ptr && S::from(ptr - self.start.clone()) < self.length
     }
@@ -83,7 +79,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
     }
 }
 
-impl<P, MV, S, IO> Memory<P, MV, S, IO> where P: CheckedSub + Clone + 'static, IO: From<P> + 'static, MV: 'static {
+impl<P, MV, S, IO> Memory<P, MV, S, IO>
+    where P: memory::PtrNum<S> + 'static, S: memory::Offset<P>,
+        IO: From<<P as Sub>::Output> + 'static, MV: 'static {
     pub fn install_mem(&mut self, start: P, length: S) {
         self.views.push(Region {
             start: start,
@@ -113,16 +111,13 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> where P: CheckedSub + Clone + 'static, I
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: Clone + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
-        MV: Clone + Not + From<<MV as Not>::Output> + Bounded + From<u8> + From<<usize as SliceIndex<[u8]>>::Output>,
-        <usize as SliceIndex<[u8]>>::Output : Sized,
-        IO: From<u8>,
-        usize: From<P> {
+    where P: memory::PtrNum<S>, S: memory::Offset<P>, MV: reg::Symbolizable,
+        IO: One, reg::Symbolic<MV>: Default {
     
     pub fn read_unit(&self, ptr: &Pointer<P>) -> reg::Symbolic<MV> {
         for view in &self.views {
             if let Some(offset) = view.image.decode_addr(ptr, view.start.clone()) {
-                if let Some(imgdata) = view.image.retrieve(offset, IO::from(1)) {
+                if let Some(imgdata) = view.image.retrieve(offset, IO::one()) {
                     if imgdata.len() > 0 {
                         return reg::Symbolic::from(imgdata[0].clone());
                     }
@@ -134,22 +129,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     }
 }
 
-trait Desegmentable<AU> : Clone + Bounded + From<AU> + mynums::BoundWidth<usize> + Shl<usize> + BitOr + BitAnd + Zero + One + Not + From<<Self as Not>::Output> + From<<Self as Shl<usize>>::Output> + From<<Self as BitOr>::Output> + From<<Self as BitAnd>::Output> {
-
-}
-
-//Bounded + BitAnd + BitOr + From<<T as BitAnd>::Output> + From<<T as BitOr>::Output>
-impl<T, AU> Desegmentable<AU> for T
-    where T: Clone + Bounded + From<AU> + mynums::BoundWidth<usize> + Shl<usize> + BitOr + BitAnd + Zero + One + Not + From<<T as Not>::Output> + From<<T as Shl<usize>>::Output> + From<<T as BitOr>::Output> + From<<T as BitAnd>::Output> {
-
-}
-
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: Clone + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
-        MV: Clone + Not + From<<MV as Not>::Output> + Bounded + From<u8> + From<<usize as SliceIndex<[u8]>>::Output>,
-        <usize as SliceIndex<[u8]>>::Output : Sized,
-        IO: From<u8>,
-        usize: From<P> {
+    where P: memory::PtrNum<S>, S: memory::Offset<P>, MV: reg::Symbolizable,
+        IO: One, reg::Symbolic<MV>: Default {
     
     /// Read an arbitary little-endian integer type from memory.
     /// 
@@ -160,7 +142,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     /// determines how many atomic memory units are required to be read in order
     /// to populate the expected value type.
     pub fn read_manywords_le<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
-        where EV: Desegmentable<MV>,
+        where EV: memory::Desegmentable<MV>,
             P: Add<S> + From<<P as Add<S>>::Output>,
             S: From<usize>,
             MV: mynums::BoundWidth<usize>,
@@ -180,8 +162,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: Clone + PartialOrd + Add<S> + Sub + From<<P as Add<S>>::Output>,
-        S: Clone + PartialOrd + From<<P as Sub>::Output> {
+    where P: memory::PtrNum<S>, S: memory::Offset<P> {
     pub fn minimize_context(&self, ptr: Pointer<P>) -> Pointer<P> {
         for view in &self.views {
             if view.is_ptr_within(ptr.clone().into_pointer()) {

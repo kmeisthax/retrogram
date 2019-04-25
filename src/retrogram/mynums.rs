@@ -1,5 +1,7 @@
 //! My number traits
 
+use std::ops::Sub;
+
 /// A trait which indicates the number of left shifts of the given type's
 /// smallest value (1) are required in order to overflow that type.
 /// 
@@ -67,3 +69,37 @@ boundwidth_impl!(u128, u32, 128);
 boundwidth_impl!(u128, u64, 128);
 boundwidth_impl!(u128, u128, 128);
 boundwidth_impl!(u128, usize, 128);
+
+/// Reimplementation of the num_traits `CheckedSub` trait, except with the
+/// ability to specify a different RHS and Output type.
+/// 
+/// num_traits doesn't support this behavior because Rust itself doesn't define
+/// checked maths with different types of operands and output parameters.
+pub trait CheckedSub<RHS = Self>: Sized + Sub<RHS> {
+    fn checked_sub(&self, v: &RHS) -> Option<<Self as Sub<RHS>>::Output>;
+}
+
+macro_rules! checked_impl {
+    ($trait_name:ident, $method:ident, $t:ty, $rhs:ty, $out:ty) => {
+        impl $trait_name for $t {
+            #[inline]
+            fn $method(&self, v: &$rhs) -> Option<$out> {
+                <$t>::$method(*self, *v)
+            }
+        }
+    }
+}
+
+checked_impl!(CheckedSub, checked_sub, u8, u8, u8);
+checked_impl!(CheckedSub, checked_sub, u16, u16, u16);
+checked_impl!(CheckedSub, checked_sub, u32, u32, u32);
+checked_impl!(CheckedSub, checked_sub, u64, u64, u64);
+checked_impl!(CheckedSub, checked_sub, u128, u128, u128);
+checked_impl!(CheckedSub, checked_sub, usize, usize, usize);
+
+checked_impl!(CheckedSub, checked_sub, i8, i8, i8);
+checked_impl!(CheckedSub, checked_sub, i16, i16, i16);
+checked_impl!(CheckedSub, checked_sub, i32, i32, i32);
+checked_impl!(CheckedSub, checked_sub, i64, i64, i64);
+checked_impl!(CheckedSub, checked_sub, i128, i128, i128);
+checked_impl!(CheckedSub, checked_sub, isize, isize, isize);

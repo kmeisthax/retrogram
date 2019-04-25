@@ -2,7 +2,8 @@
 //! unknown.
 
 use std::marker::PhantomData;
-use num_traits::ops::checked::CheckedSub;
+use std::ops::Sub;
+use crate::retrogram::mynums::CheckedSub;
 use crate::retrogram::memory::{Image, Pointer};
 use crate::retrogram::reg;
 
@@ -25,7 +26,7 @@ impl<P, MV, IO> UnknownImage<P, MV, IO> {
     }
 }
 
-impl<P, MV, IO> Image for UnknownImage<P, MV, IO> where P: CheckedSub + Clone, IO: From<P> {
+impl<P, MV, IO> Image for UnknownImage<P, MV, IO> where P: CheckedSub + Clone, IO: From<<P as Sub>::Output> {
     type Pointer = P;
     type Offset = IO;
     type Data = MV;
@@ -65,7 +66,7 @@ impl<P, MV, IO> UnknownBankedImage<P, MV, IO> {
     }
 }
 
-impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: CheckedSub + Clone, IO: From<P> {
+impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: CheckedSub + Clone, IO: From<<P as Sub>::Output> {
     type Pointer = P;
     type Offset = IO;
     type Data = MV;

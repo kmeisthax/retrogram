@@ -95,8 +95,8 @@ impl<P> Database<P> where P: Clone + Eq + Hash {
 /// Given an operand, replace all Pointer literals with Label operands obtained
 /// from the Database.
 pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Operand<I, F, P>, db: &mut Database<P>, start_addr: &memory::Pointer<P>, memory: &memory::Memory<P, AMV, AS, AIO>, refkind: ReferenceKind) -> ast::Operand<I, F, P>
-    where P: Clone + UpperHex + PartialOrd + Add<AS> + Sub + Eq + Hash + From<<P as Add<AS>>::Output>,
-        AS: Clone + PartialOrd + From<<P as Sub>::Output>,
+    where P: memory::PtrNum<AS> + Clone + UpperHex + Eq + Hash,
+        AS: memory::Offset<P> + Clone,
         I: Clone,
         F: Clone {
     match src_operand {
@@ -124,8 +124,8 @@ pub fn replace_operand_with_label<I, F, P, AMV, AS, AIO>(src_operand: ast::Opera
 /// If a given pointer has no matching label, then a temporary label will be
 /// automatically generated and added to the database.
 pub fn replace_labels<I, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, F, P>, db: &mut Database<P>, memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Assembly<I, F, P>
-    where P: Clone + UpperHex + PartialOrd + Add<AS> + Sub + Eq + Hash + From<<P as Add<AS>>::Output>,
-        AS: Clone + PartialOrd + From<<P as Sub>::Output>,
+    where P: memory::PtrNum<AS> + Clone + UpperHex + Eq + Hash,
+        AS: memory::Offset<P> + Clone,
         I: Clone,
         F: Clone {
     let mut dst_assembly = ast::Assembly::new();
