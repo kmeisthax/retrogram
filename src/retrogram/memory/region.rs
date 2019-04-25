@@ -130,8 +130,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: memory::PtrNum<S>, S: memory::Offset<P>, MV: reg::Symbolizable,
-        IO: One, reg::Symbolic<MV>: Default {
+    where P: memory::PtrNum<S>, S: memory::Offset<P> + From<usize>,
+        MV: reg::Symbolizable + mynums::BoundWidth<usize>, IO: One,
+        reg::Symbolic<MV>: Default {
     
     /// Read an arbitary little-endian integer type from memory.
     /// 
@@ -143,18 +144,16 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     /// to populate the expected value type.
     pub fn read_manywords_le<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
         where EV: memory::Desegmentable<MV>,
-            P: Add<S> + From<<P as Add<S>>::Output>,
-            S: From<usize>,
-            MV: mynums::BoundWidth<usize>,
-            <EV as Shl<usize>>::Output: BitOr + Sub<EV> + From<<<EV as Shl<usize>>::Output as BitOr>::Output> + From<<<EV as Shl<usize>>::Output as Sub<EV>>::Output>,
-            reg::Symbolic<EV>: Shl<usize> + Convertable<<EV as Not>::Output> + Convertable<<EV as Shl<usize>>::Output>,
+            reg::Symbolic<EV>: Shl<usize>,
             reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output> {
         let units_reqd = (EV::bound_width() as f32 / MV::bound_width() as f32).round() as usize;
         let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::from(EV::zero());
+
         for i in 0..units_reqd {
             let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::from(i)));
-            let shifted_unit = reg::Symbolic::<EV>::convert_from(self.read_unit(&ptr)) << i * MV::bound_width();
-            sum = sum | reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(shifted_unit));
+            let unit = reg::Symbolic::<EV>::convert_from(self.read_unit(&ptr));
+            let shifted_unit = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(unit << (i * MV::bound_width())));
+            sum = sum | shifted_unit;
         }
 
         sum
