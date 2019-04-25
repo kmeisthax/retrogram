@@ -142,7 +142,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     /// overflow it. The `BoundWidth` of the memory word type (MV) thus
     /// determines how many atomic memory units are required to be read in order
     /// to populate the expected value type.
-    pub fn read_manywords_le<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
+    pub fn read_leword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
         where EV: memory::Desegmentable<MV>,
             reg::Symbolic<EV>: Shl<usize>,
             reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output> {
@@ -167,7 +167,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     /// overflow it. The `BoundWidth` of the memory word type (MV) thus
     /// determines how many atomic memory units are required to be read in order
     /// to populate the expected value type.
-    pub fn read_manywords_be<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
+    pub fn read_beword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
         where EV: memory::Desegmentable<MV>,
             reg::Symbolic<EV>: Shl<usize>,
             reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output> {
