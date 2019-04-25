@@ -158,6 +158,31 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 
         sum
     }
+    
+    /// Read an arbitary big-endian integer type from memory.
+    /// 
+    /// All integer types involved must provide a way to reason about their
+    /// widths. This is provided with the `BoundWidth` trait, which indicates how
+    /// many left shifts of a given integer type are required in order to
+    /// overflow it. The `BoundWidth` of the memory word type (MV) thus
+    /// determines how many atomic memory units are required to be read in order
+    /// to populate the expected value type.
+    pub fn read_manywords_be<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
+        where EV: memory::Desegmentable<MV>,
+            reg::Symbolic<EV>: Shl<usize>,
+            reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output> {
+        let units_reqd = (EV::bound_width() as f32 / MV::bound_width() as f32).round() as usize;
+        let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::from(EV::zero());
+
+        for i in (0..units_reqd).rev() {
+            let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::from(i)));
+            let unit = reg::Symbolic::<EV>::convert_from(self.read_unit(&ptr));
+            let shifted_unit = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(unit << (i * MV::bound_width())));
+            sum = sum | shifted_unit;
+        }
+
+        sum
+    }
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
