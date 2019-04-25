@@ -1,6 +1,8 @@
 //! Helper traits for defining where clauses without getting an RSI
 
 use std::ops::{Add, Sub, Not, BitOr, BitAnd, Shl};
+use std::fmt::Debug;
+use std::convert::TryFrom;
 use num::traits::{Bounded, Zero, One};
 use crate::retrogram::reg;
 use crate::retrogram::mynums::{BoundWidth, CheckedSub};
@@ -33,11 +35,14 @@ impl <T, S> PtrNum<S> for T
 /// TODO: Switch From to TryFrom. It should be possible to have two pointers
 /// without a valid offset (e.g. there is no offset that takes you from a memory
 /// pointer to an I/O port).
-pub trait Offset<P> : Clone + PartialOrd + From<<P as Sub>::Output> where P: Sub {
+pub trait Offset<P> : Clone + PartialOrd + From<<P as Sub>::Output> + TryFrom<usize>
+    where P: Sub {
 
 }
 
-impl <T, P> Offset<P> for T where T: Clone + PartialOrd + From<<P as Sub>::Output>, P: Sub {
+impl <T, P> Offset<P> for T
+    where T: Clone + PartialOrd + From<<P as Sub>::Output> + TryFrom<usize>,
+        P: Sub {
 
 }
 

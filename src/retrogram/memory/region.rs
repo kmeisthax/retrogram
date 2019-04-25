@@ -2,8 +2,10 @@
 //! platform.
 
 use std::ops::{Add, Sub, Not, BitOr, Shl};
+use std::convert::TryFrom;
 use std::cmp::PartialOrd;
 use std::slice::SliceIndex;
+use std::fmt::Debug;
 use num::traits::{Bounded, One};
 use crate::retrogram::{reg, mynums, memory};
 use crate::retrogram::reg::Convertable;
@@ -130,9 +132,10 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: memory::PtrNum<S>, S: memory::Offset<P> + From<usize>,
+    where P: memory::PtrNum<S>, S: memory::Offset<P> + TryFrom<usize>,
         MV: reg::Symbolizable + mynums::BoundWidth<usize>, IO: One,
-        reg::Symbolic<MV>: Default {
+        reg::Symbolic<MV>: Default, 
+        <S as TryFrom<usize>>::Error : Debug {
     
     /// Read an arbitary little-endian integer type from memory.
     /// 
@@ -150,7 +153,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::from(EV::zero());
 
         for i in 0..units_reqd {
-            let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::from(i)));
+            let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
             let unit = reg::Symbolic::<EV>::convert_from(self.read_unit(&ptr));
             let shifted_unit = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(unit << (i * MV::bound_width())));
             sum = sum | shifted_unit;
@@ -175,7 +178,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::from(EV::zero());
 
         for i in (0..units_reqd).rev() {
-            let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::from(i)));
+            let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
             let unit = reg::Symbolic::<EV>::convert_from(self.read_unit(&ptr));
             let shifted_unit = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(unit << (i * MV::bound_width())));
             sum = sum | shifted_unit;

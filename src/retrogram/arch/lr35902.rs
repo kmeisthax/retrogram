@@ -48,30 +48,24 @@ pub type Instruction = ast::Instruction<Offset, f32, Pointer>;
 pub type Assembly = ast::Assembly<Offset, f32, Pointer>;
 
 fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
-    if let Some(lobit) = mem.read_unit(p).into_concrete() {
-        if let Some(hibit) = mem.read_unit(&(p.clone()+1)).into_concrete() {
-            return op::int((hibit as u16) << 8 | lobit as u16);
-        }
+    if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
+        return op::int(val);
     }
 
     op::miss()
 }
 
 fn dptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
-    if let Some(lobit) = mem.read_unit(p).into_concrete() {
-        if let Some(hibit) = mem.read_unit(&(p.clone()+1)).into_concrete() {
-            return op::dptr((hibit as u16) << 8 | lobit as u16);
-        }
+    if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
+        return op::dptr(val);
     }
 
     op::miss()
 }
 
 fn cptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
-    if let Some(lobit) = mem.read_unit(p).into_concrete() {
-        if let Some(hibit) = mem.read_unit(&(p.clone()+1)).into_concrete() {
-            return op::cptr((hibit as u16) << 8 | lobit as u16);
-        }
+    if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
+        return op::cptr(val);
     }
 
     op::miss()
