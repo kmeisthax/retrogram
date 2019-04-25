@@ -27,21 +27,27 @@ impl <T, S> PtrNum<S> for T
 
 /// Trait which represents the offset type of a given pointer.
 /// 
-/// In plain english: An offset of a pointer must be orderable and convertable
-/// from the difference of two pointers. Ordering has the semantics that the
-/// greater offset represents a larger distance from the pointer that birthed
-/// the offset than the right-hand-side offset.
+/// In plain english: An offset of a pointer must be orderable. The ordering of
+/// offsets is assumed to mean that greater offsets mean a further distance from
+/// the base pointer that birthed them.
 /// 
-/// TODO: Switch From to TryFrom. It should be possible to have two pointers
-/// without a valid offset (e.g. there is no offset that takes you from a memory
-/// pointer to an I/O port).
-pub trait Offset<P> : Clone + PartialOrd + From<<P as Sub>::Output> + TryFrom<usize>
+/// Offsets may be potentially convertable from the difference of two pointer
+/// types, as well as the runtime platform's preferred offset representation.
+/// The former allows us to calculate offsets from the target archiecture's
+/// pointer type, and the latter allows us to apply pointer maths to the target
+/// architecture's pointers.
+/// 
+/// The selection of traits used here is deliberate: it allows pointer values to
+/// encompass multiple disjoint address spaces; such as memory and I/O space, or
+/// program and data space. `TryFrom` allows the type system to signal that the
+/// difference of two pointers is undefined.
+pub trait Offset<P> : Clone + PartialOrd + TryFrom<<P as Sub>::Output> + TryFrom<usize>
     where P: Sub {
 
 }
 
 impl <T, P> Offset<P> for T
-    where T: Clone + PartialOrd + From<<P as Sub>::Output> + TryFrom<usize>,
+    where T: Clone + PartialOrd + TryFrom<<P as Sub>::Output> + TryFrom<usize>,
         P: Sub {
 
 }

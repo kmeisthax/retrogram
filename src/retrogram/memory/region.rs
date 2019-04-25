@@ -55,7 +55,11 @@ struct Region<P, MV, S = P, IO = usize> {
 
 impl<P, MV, S, IO> Region<P, MV, S, IO> where P: memory::PtrNum<S>, S: memory::Offset<P> {
     pub fn is_ptr_within(&self, ptr: P) -> bool {
-        self.start <= ptr && S::from(ptr - self.start.clone()) < self.length
+        if let Ok(offset) = S::try_from(ptr.clone() - self.start.clone()) {
+            self.start <= ptr.clone() && offset < self.length
+        } else {
+            false
+        }
     }
 }
 
