@@ -1,10 +1,7 @@
-use std::io;
+//! Input utility functions
+
 use std::str::FromStr;
-use std::hash::Hash;
-use std::ops::{Add, Sub};
-use std::convert::TryFrom;
-use num_traits::Num;
-use crate::retrogram::{memory, analysis, ast};
+use crate::retrogram::{memory, analysis, ast, cli};
 
 /// Parse any pointer specification entered in by a user.
 /// 
@@ -29,7 +26,7 @@ use crate::retrogram::{memory, analysis, ast};
 /// requires a wider context type and adding more type parameters to every user
 /// of `memory::Pointer` is inadvisable.
 pub fn parse_ptr<P, MV, S, IO>(text_str: &str, db: &analysis::Database<P>, bus: &memory::Memory<P, MV, S, IO>) -> Option<memory::Pointer<P>>
-    where P: memory::PtrNum<S> + Clone + Eq + Hash + FromStr + TryFrom<u64>,
+    where P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
         S: memory::Offset<P> {
     if let Ok(text_lbl) = ast::Label::from_str(text_str) {
         if let Some(ptr) = db.label_pointer(&text_lbl) {

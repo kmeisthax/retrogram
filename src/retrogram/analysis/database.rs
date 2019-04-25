@@ -3,10 +3,8 @@
 
 use std::{fs, io};
 use std::collections::HashMap;
-use std::hash::Hash;
-use std::ops::{Add, Sub};
 use std::fmt::{Display, Formatter, Result, UpperHex};
-use crate::retrogram::{ast, memory, project};
+use crate::retrogram::{ast, memory, project, analysis};
 
 #[derive(Copy, Clone, Debug)]
 pub enum ReferenceKind {
@@ -30,7 +28,7 @@ impl Display for ReferenceKind {
 
 /// A repository of information obtained from the program under analysis.
 #[derive(Clone, Debug)]
-pub struct Database<P> where P: Eq + Hash {
+pub struct Database<P> where P: analysis::Mappable {
     /// A list of all labels in the program.
     labels: HashMap<ast::Label, memory::Pointer<P>>,
     
@@ -38,7 +36,7 @@ pub struct Database<P> where P: Eq + Hash {
     pointers: HashMap<memory::Pointer<P>, ast::Label>
 }
 
-impl<P> Database<P> where P: Clone + Eq + Hash {
+impl<P> Database<P> where P: analysis::Mappable {
     pub fn new() -> Self {
         Database {
             labels: HashMap::new(),

@@ -1,15 +1,32 @@
 //! High-level CLI routines
 
 use std::{io, fs};
-use std::ops::{Add, Sub};
-use std::hash::Hash;
 use std::str::FromStr;
 use std::convert::TryFrom;
 use std::fmt::{Display, LowerHex, UpperHex};
 use crate::retrogram::{asm, ast, arch, analysis, project, platform, input, memory};
 
+/// Guard trait for pointer values users can input to us and we can output.
+/// 
+/// Effectively, this covers all of the operations we need to do in order for
+/// both the program and it's users to be able to name locations within a
+/// program.
+/// 
+/// The trait bounds, in plain english, require that we can:
+/// 
+///  * Parse the value from a string
+///  * Display the value, with upper or lowercase hexdecimal notation if needed
+///  + Attempt to convert the value from a u64 (for user input contexts)
+pub trait Nameable : Clone + FromStr + Display + LowerHex + UpperHex + TryFrom<u64> {
+
+}
+
+impl<T> Nameable for T where T: Clone + FromStr + Display + LowerHex + UpperHex + TryFrom<u64> {
+
+}
+
 fn dis_inner<I, F, P, MV, S, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P>, bus: &memory::Memory<P, MV, S, IO>, disassemble_block: DIS) -> io::Result<ast::Assembly<I, F, P>>
-    where P: memory::PtrNum<S> + Clone + Eq + Hash + FromStr + Display + LowerHex + UpperHex + TryFrom<u64>,
+    where P: memory::PtrNum<S> + analysis::Mappable + Nameable,
         S: memory::Offset<P>,
         I: Clone + Display,
         F: Clone + Display,

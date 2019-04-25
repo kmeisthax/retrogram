@@ -2,7 +2,9 @@
 
 mod database;
 mod passes;
+mod traits;
 
+pub use traits::*;
 pub use database::Database;
 pub use database::ReferenceKind;
 pub use passes::replace_labels;
