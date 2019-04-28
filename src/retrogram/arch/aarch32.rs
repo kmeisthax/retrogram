@@ -82,6 +82,17 @@ pub type Operand = ast::Operand<Offset, Value, f32, Pointer>;
 /// The AST type which represents a disassembled instruction.
 pub type Instruction = ast::Instruction<Offset, Value, f32, Pointer>;
 
+fn shift_symbol(shift: u32, shift_imm: u32) -> &'static str {
+    match (shift, shift_imm) {
+        (0, _) => "LSL",
+        (1, _) => "LSR",
+        (2, _) => "ASR",
+        (3, 0) => "RRX",
+        (3, _) => "ROR",
+        _ => panic!("This isn't a valid shift symbol...")
+    }
+}
+
 fn shifter_operand(rn: Aarch32Register, rd: Aarch32Register, immediate_bit: u32, shifter_operand: u32) -> Vec<Operand> {
     let rotate_imm = (shifter_operand & 0x00000F00) >> 8 * 2; //Rotate immediate. Is shifted for some reason
     let shift_imm = (shifter_operand & 0x00000F80) >> 7;
@@ -90,20 +101,11 @@ fn shifter_operand(rn: Aarch32Register, rd: Aarch32Register, immediate_bit: u32,
     let rm = Aarch32Register::from_instr((shifter_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
     let immed_8 = (shifter_operand & 0x000000FF) >> 0; //Data Immediate
 
-    match (immediate_bit, shift, shift_imm, is_shift_immed) {
-        (1, _, _, _) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::int(immed_8 << rotate_imm)),
-        (0, 0, 0, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("LSL")),
-        (0, 0, _, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("LSL"), Operand::int(shift_imm)),
-        (0, 0, _, 1) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("LSL"), Operand::sym(&rm.to_string())),
-        (0, 1, 0, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("LSR")),
-        (0, 1, _, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("LSR"), Operand::int(shift_imm)),
-        (0, 1, _, 1) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("LSR"), Operand::sym(&rm.to_string())),
-        (0, 2, 0, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("ASR")),
-        (0, 2, _, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("ASR"), Operand::int(shift_imm)),
-        (0, 2, _, 1) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("ASR"), Operand::sym(&rm.to_string())),
-        (0, 3, 0, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("RRX")),
-        (0, 3, _, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("ROR"), Operand::int(shift_imm)),
-        (0, 3, _, 1) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym("ROR"), Operand::sym(&rm.to_string())),
+    match (immediate_bit, shift_imm, is_shift_immed) {
+        (1, _, _) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::int(immed_8 << rotate_imm)),
+        (0, 0, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm))),
+        (0, _, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)),
+        (0, _, 1) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm)), Operand::sym(&rm.to_string())),
         _ => vec!(Operand::miss())
     }
 }
@@ -192,17 +194,29 @@ pub fn ls_opcode(opcode: u32, immediate_bit: u32) -> &'static str {
 }
 
 fn address_operand(rn: Aarch32Register, rd: Aarch32Register, opcode: u32, immediate_bit: u32, address_operand: u32) -> Vec<Operand> {
+    let shift_imm = (address_operand & 0x00000F80) >> 7;
+    let shift = (address_operand & 0x00000060) >> 5; //Shift type
+    let rm = Aarch32Register::from_instr((address_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
+    let is_shifted = shift_imm != 0 || shift != 0;
     let is_preindex = opcode & 0x10 == 0x10;
     let is_offsetadd = opcode & 0x08 == 0x08;
     let is_wbit = opcode & 0x02 == 0x02;
+
     let offset12 = match is_offsetadd {
         true => (address_operand & 0xFFF) as i32,
         false => (address_operand & 0xFFF) as i32 * -1
     };
     
-    match (immediate_bit, is_preindex, is_wbit) {
-        (0, _, _) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::sym(&rn.to_string()), ast::Operand::sint(offset12)],
-        (1, true, false) => panic!("unimp"),
+    match (immediate_bit, is_preindex, is_wbit, is_shifted) {
+        (0, true, true, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::suff(ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sint(offset12)], "]"), "!")],
+        (1, true, true, true) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::suff(ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)], "]"), "!")],
+        (1, true, true, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::suff(ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sym(&rm.to_string())], "]"), "!")],
+        (0, true, false, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sint(offset12)], "]")],
+        (1, true, false, true) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)], "]")],
+        (1, true, false, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sym(&rm.to_string())], "]")],
+        (0, false, _, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string())], "]"), ast::Operand::sint(offset12)],
+        (1, false, _, true) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string())], "]"), ast::Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)],
+        (1, false, _, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string())], "]"), ast::Operand::sym(&rm.to_string())],
         _ => panic!("not yet")
     }
 }
@@ -242,10 +256,10 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
             (_, 1) if is_misc & is_undefine => (None, 0, false), //Undefined (as of ARM DDI 0100I)
             (_, 1) if is_misc => (None, 0, false), //Move to status register
             (_, 1) => (Some(Instruction::new(&format!("{}{}", dp_opcode(opcode), condcode(cond)), shifter_operand(rn, rd, 1, lsimmed))), 4, true), //Data processing with immediate
-            (_, 2) => (None, 0, false), //Load/store with immediate offset
+            (_, 2) => (Some(Instruction::new(&format!("{}{}", dp_opcode(opcode), condcode(cond)), address_operand(rn, rd, opcode, 0, lsimmed))), 4, true), //Load/store with immediate offset
             (_, 3) if is_archudef => (None, 0, false), //Architecturally undefined space
             (_, 3) if is_mediabit => (None, 0, false), //Media extension space
-            (_, 3) => (None, 0, false), //Load/store with register offset
+            (_, 3) => (Some(Instruction::new(&format!("{}{}", dp_opcode(opcode), condcode(cond)), address_operand(rn, rd, opcode, 1, lsimmed))), 4, true), //Load/store with register offset
             (_, 4) => (None, 0, false), //Load/store multiple
             (_, 5) => (None, 0, false), //Branch with or without link
             (_, 6) => (None, 0, false), //Coprocessor load/store and doubleword xfrs
