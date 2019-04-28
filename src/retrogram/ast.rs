@@ -50,6 +50,12 @@ pub enum Operand<I, S, F, P> {
     /// The addition of two operands
     Add(Box<Operand<I, S, F, P>>, Box<Operand<I, S, F, P>>),
 
+    ///A symbol prefixed to an operand
+    PrefixSymbol(String, Box<Operand<I, S, F, P>>),
+
+    ///A symbol suffixed to an operand
+    SuffixSymbol(Box<Operand<I, S, F, P>>, String),
+
     //TODO: Symbolized memory references
 }
 
@@ -119,6 +125,8 @@ impl<I, S, F, P> fmt::Display for Operand<I, S, F, P> where I: fmt::Display, S: 
             Operand::CodeReference(op) => write!(f, "{}", op),
             Operand::Indirect(op) => write!(f, "[{}]", op),
             Operand::Add(op1, op2) => write!(f, "{} + {}", op1, op2),
+            Operand::PrefixSymbol(s, op) => write!(f, "{} {}", s, op),
+            Operand::SuffixSymbol(s, op) => write!(f, "{} {}", op, s),
         }
     }
 }
