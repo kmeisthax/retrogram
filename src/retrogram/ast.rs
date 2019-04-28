@@ -55,8 +55,9 @@ pub enum Operand<I, S, F, P> {
 
     ///A symbol suffixed to an operand
     SuffixSymbol(Box<Operand<I, S, F, P>>, String),
-
-    //TODO: Symbolized memory references
+    
+    ///A symbol that wraps an operand
+    WrapperSymbol(String, Box<Operand<I, S, F, P>>, String),
 }
 
 impl<I, S, F, P> Operand<I, S, F, P> {
@@ -107,6 +108,18 @@ impl<I, S, F, P> Operand<I, S, F, P> {
     pub fn add(op1: Self, op2: Self) -> Self {
         Operand::Add(Box::new(op1), Box::new(op2))
     }
+
+    pub fn pref(sym: &str, op: Self) -> Self {
+        Operand::PrefixSymbol(sym.to_string(), Box::new(op))
+    }
+
+    pub fn suff(op: Self, sym: &str) -> Self {
+        Operand::SuffixSymbol(Box::new(op), sym.to_string())
+    }
+
+    pub fn wrap(sym1: &str, op: Self, sym2: &str) -> Self {
+        Operand::WrapperSymbol(sym1.to_string(), Box::new(op), sym2.to_string())
+    }
 }
 
 impl<I, S, F, P> fmt::Display for Operand<I, S, F, P> where I: fmt::Display, S: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
@@ -127,6 +140,7 @@ impl<I, S, F, P> fmt::Display for Operand<I, S, F, P> where I: fmt::Display, S: 
             Operand::Add(op1, op2) => write!(f, "{} + {}", op1, op2),
             Operand::PrefixSymbol(s, op) => write!(f, "{} {}", s, op),
             Operand::SuffixSymbol(s, op) => write!(f, "{} {}", op, s),
+            Operand::WrapperSymbol(s1, op, s2) => write!(f, "{}{}{}", s1, op, s2),
         }
     }
 }

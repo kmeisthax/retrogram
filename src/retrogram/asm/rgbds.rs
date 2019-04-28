@@ -119,6 +119,11 @@ impl<'a, I, S, F, P> RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: 
             ast::Operand::SuffixSymbol(op, s) => {
                 self.write_operand(&op, f)?;
                 write!(f, " {}", s)?;
+            },
+            ast::Operand::WrapperSymbol(s1, op, s2) => {
+                write!(f, "{}", s1)?;
+                self.write_operand(&op, f)?;
+                write!(f, "{}", s2)?;
             }
         };
 
