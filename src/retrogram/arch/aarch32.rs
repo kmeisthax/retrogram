@@ -108,6 +108,67 @@ fn shifter_operand(rn: Aarch32Register, rd: Aarch32Register, immediate_bit: u32,
     }
 }
 
+/// Decode a 5-bit opcode field as if it was for a data processing instruction
+fn dp_opcode(instr: u32) -> &'static str {
+    match instr {
+        0 => "AND",
+        1 => "ANDS",
+        2 => "EOR",
+        3 => "EORS",
+        4 => "SUB",
+        5 => "SUBS",
+        6 => "RSB",
+        7 => "RSBS",
+        8 => "ADD",
+        9 => "ADDS",
+        10 => "ADC",
+        11 => "ADCS",
+        12 => "SBC",
+        13 => "SBCS",
+        14 => "RSC",
+        15 => "RSCS",
+        16 => panic!("This is not a data processing instruction (TST without S)"),
+        17 => "TST",
+        18 => panic!("This is not a data processing instruction (TEQ without S)"),
+        19 => "TEQ",
+        20 => panic!("This is not a data processing instruction (CMP without S)"),
+        21 => "CMP",
+        22 => panic!("This is not a data processing instruction (CMN without S)"),
+        23 => "CMN",
+        24 => "ORR",
+        25 => "ORRS",
+        26 => "MOV",
+        27 => "MOVS",
+        28 => "BIC",
+        29 => "BICS",
+        30 => "MVN",
+        31 => "MVNS",
+        _ => panic!("Wait, why did you try to decode an AArch32 opcode longer than 5 bits?")
+    }
+}
+
+fn condcode(instr: u32) -> &'static str {
+    match instr {
+        0 => "EQ",
+        1 => "NE",
+        2 => "CS",
+        3 => "CC",
+        4 => "MI",
+        5 => "PL",
+        6 => "VS",
+        7 => "VC",
+        8 => "HI",
+        9 => "LS",
+        10 => "GE",
+        11 => "LT",
+        12 => "GT",
+        13 => "LE",
+        14 => "AL",
+        15 => panic!("Condition code not valid for conditional instruction"),
+        _ => panic!("Not a valid condition code")
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -123,25 +184,36 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
     if let Some(instr) = instr.into_concrete() {
         let cond = (instr & 0xF0000000) >> 28;
         let opcat = (instr & 0x0E000000) >> 25;
-        let linkbit = (instr & 0x01000000) >> 24;
-        let opcode = (instr & 0x01E00000) >> 21; //Opcode for data-processing instructions
-        let sbit = (instr & 0x00100000) >> 20; //Bit which indicates if condition codes update or no
+        let opcode = (instr & 0x01F00000) >> 20;
         let rn = Aarch32Register::from_instr((instr & 0x000F0000) >> 16).expect("What the heck? The register definitely should have parsed");
         let rd = Aarch32Register::from_instr((instr & 0x0000F000) >> 12).expect("What the heck? The register definitely should have parsed");
-        let rs = Aarch32Register::from_instr((instr & 0x00000F00) >> 8).expect("What the heck? The register definitely should have parsed");
-        let braimmed = (instr & 0x00FFFFFF) >> 0;//Branch Immediate (24bit)
         let lsimmed = (instr & 0x00000FFF) >> 0; //Load-Store Immediate (12bit)
+        let is_misc = opcode & 0x19 == 0x10; //invalid S bit for opcode
+        let is_multiply = lsimmed & 0x90 == 0x90; //invalid shifter operand
+        let is_mediabit = lsimmed & 0x10 == 0x10; //also is for indicating a coprocessor register xfr
+        let is_undefine = opcode & 0x1B == 0x10; //invalid S bit and not mov-imm
+        let is_archudef = opcode == 0x1F && lsimmed & 0x0F0 == 0x0F0;
+        let is_swilink_ = opcode & 0x10 == 0x10; //Upper bit of opcode indicates link and SWI
 
         match (cond, opcat) {
             (0xF, _) => (None, 0, false), //Unconditionally executed extension space
-            (_, 0) => (Some(Instruction::new("blah", shifter_operand(rn, rd, 0, lsimmed))), 4, true), //Data processing with shift
-            (_, 1) => (Some(Instruction::new("blah", shifter_operand(rn, rd, 1, lsimmed))), 4, true), //Data processing with immediate
+            (_, 0) if is_multiply => (None, 0, false), //Multiply/LS extension space
+            (_, 0) if is_misc => (None, 0, false), //Misc extension space
+            //TODO: Misc is supposed to be opcode 0b10xx, but the ARM ARM instruction encoding also says some bits of the shift operand should be set too.
+            (_, 0) => (Some(Instruction::new(&format!("{}{}", dp_opcode(opcode), condcode(cond)), shifter_operand(rn, rd, 0, lsimmed))), 4, true), //Data processing with shift
+            (_, 1) if is_misc & is_undefine => (None, 0, false), //Undefined (as of ARM DDI 0100I)
+            (_, 1) if is_misc => (None, 0, false), //Move to status register
+            (_, 1) => (Some(Instruction::new(&format!("{}{}", dp_opcode(opcode), condcode(cond)), shifter_operand(rn, rd, 1, lsimmed))), 4, true), //Data processing with immediate
             (_, 2) => (None, 0, false), //Load/store with immediate offset
+            (_, 3) if is_archudef => (None, 0, false), //Architecturally undefined space
+            (_, 3) if is_mediabit => (None, 0, false), //Media extension space
             (_, 3) => (None, 0, false), //Load/store with register offset
             (_, 4) => (None, 0, false), //Load/store multiple
             (_, 5) => (None, 0, false), //Branch with or without link
             (_, 6) => (None, 0, false), //Coprocessor load/store and doubleword xfrs
-            (_, 7) => (None, 0, false), //Coprocessor data processing, register xfr, and SWI
+            (_, 7) if is_swilink_ => (None, 0, false), //Software interrupt
+            (_, 7) if is_mediabit => (None, 0, false), //Coprocessor register transfer
+            (_, 7) => (None, 0, false), //Coprocessor data processing
             _ => (None, 0, false)
         }
     } else {
