@@ -169,6 +169,38 @@ fn condcode(instr: u32) -> &'static str {
     }
 }
 
+pub fn ls_opcode(opcode: u32, immediate_bit: u32) -> &'static str {
+    let is_load = opcode & 0x01 == 0x01;
+    let is_byte = opcode & 0x04 == 0x04;
+    let is_preindex = opcode & 0x10 == 0x10;
+    let is_wbit = opcode & 0x02 == 0x02;
+
+    match (is_load, is_byte, is_preindex, is_wbit) {
+        (true, true, true, _) => "LDRB",
+        (true, false, true, _) => "LDR",
+        (false, true, true, _) => "STRB",
+        (false, false, true, _) => "STR",
+        (true, true, false, true) => "LDRBT",
+        (true, false, false, true) => "LDRT",
+        (false, true, false, true) => "STRBT",
+        (false, false, false, true) => "STRT",
+        (true, true, false, false) => "LDRB",
+        (true, false, false, false) => "LDR",
+        (false, true, false, false) => "STRB",
+        (false, false, false, false) => "STR"
+    }
+}
+
+fn address_operand(rn: Aarch32Register, rd: Aarch32Register, opcode: u32, immediate_bit: u32, address_operand: u32) -> Vec<Operand> {
+    let is_preindex = opcode & 0x10 == 0x10;
+    let is_offsetadd = opcode & 0x08 == 0x08;
+    
+    match (immediate_bit) {
+        (1) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::sym(&rn.to_string())],
+        _ => panic!("not yet")
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
