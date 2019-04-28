@@ -120,9 +120,20 @@ impl<'a, I, S, F, P> RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: 
                 self.write_operand(&op, f)?;
                 write!(f, " {}", s)?;
             },
-            ast::Operand::WrapperSymbol(s1, op, s2) => {
+            ast::Operand::WrapperSymbol(s1, ops, s2) => {
                 write!(f, "{}", s1)?;
-                self.write_operand(&op, f)?;
+
+                let mut first = true;
+                for op in ops {
+                    if first {
+                        first = false;
+                    } else {
+                        write!(f, ", ")?;
+                    }
+                    
+                    self.write_operand(&op, f)?;
+                }
+
                 write!(f, "{}", s2)?;
             }
         };
