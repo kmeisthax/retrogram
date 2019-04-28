@@ -25,12 +25,13 @@ impl<T> Nameable for T where T: Clone + FromStr + Display + LowerHex + UpperHex 
 
 }
 
-fn dis_inner<I, F, P, MV, S, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P>, bus: &memory::Memory<P, MV, S, IO>, disassemble_block: DIS) -> io::Result<ast::Assembly<I, F, P>>
-    where P: memory::PtrNum<S> + analysis::Mappable + Nameable,
-        S: memory::Offset<P>,
+fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P>, bus: &memory::Memory<P, MV, MS, IO>, disassemble_block: DIS) -> io::Result<ast::Assembly<I, S, F, P>>
+    where P: memory::PtrNum<MS> + analysis::Mappable + Nameable,
+        MS: memory::Offset<P>,
         I: Clone + Display,
+        S: Clone + Display,
         F: Clone + Display,
-        DIS: Fn(Option<memory::Pointer<P>>, &memory::Memory<P, MV, S, IO>) -> io::Result<ast::Assembly<I, F, P>> {
+        DIS: Fn(Option<memory::Pointer<P>>, &memory::Memory<P, MV, MS, IO>) -> io::Result<ast::Assembly<I, S, F, P>> {
     let start_pc = input::parse_ptr(start_spec, db, bus);
     let orig_asm = disassemble_block(start_pc, bus)?;
 

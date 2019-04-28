@@ -62,7 +62,7 @@ impl ToString for Aarch32Register {
 }
 
 /// The type which represents a value contained in an ARM AArch32 register.
-type Value = u32;
+type Value = i32;
 
 /// The type which represents an ARM AArch32 memory address.
 type Pointer = u32;
@@ -77,10 +77,10 @@ type Data = u8;
 pub type Bus = memory::Memory<Pointer, Data, Offset>;
 
 /// The AST type which represents a disassembled operand.
-pub type Operand = ast::Operand<Offset, f32, Pointer>;
+pub type Operand = ast::Operand<Offset, Value, f32, Pointer>;
 
 /// The AST type which represents a disassembled instruction.
-pub type Instruction = ast::Instruction<Offset, f32, Pointer>;
+pub type Instruction = ast::Instruction<Offset, Value, f32, Pointer>;
 
 fn shifter_operand(rn: Aarch32Register, rd: Aarch32Register, immediate_bit: u32, shifter_operand: u32) -> Vec<Operand> {
     let rotate_imm = (shifter_operand & 0x00000F00) >> 8 * 2; //Rotate immediate. Is shifted for some reason
@@ -194,9 +194,15 @@ pub fn ls_opcode(opcode: u32, immediate_bit: u32) -> &'static str {
 fn address_operand(rn: Aarch32Register, rd: Aarch32Register, opcode: u32, immediate_bit: u32, address_operand: u32) -> Vec<Operand> {
     let is_preindex = opcode & 0x10 == 0x10;
     let is_offsetadd = opcode & 0x08 == 0x08;
+    let is_wbit = opcode & 0x02 == 0x02;
+    let offset12 = match is_offsetadd {
+        true => (address_operand & 0xFFF) as i32,
+        false => (address_operand & 0xFFF) as i32 * -1
+    };
     
-    match (immediate_bit) {
-        (1) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::sym(&rn.to_string())],
+    match (immediate_bit, is_preindex, is_wbit) {
+        (0, _, _) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::sym(&rn.to_string()), ast::Operand::sint(offset12)],
+        (1, true, false) => panic!("unimp"),
         _ => panic!("not yet")
     }
 }

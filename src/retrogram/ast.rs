@@ -4,16 +4,13 @@ use std::{fmt, slice, str};
 use crate::retrogram::memory;
 
 ///A literal value, such as an integer, pointer, or other kind of reference.
-/// 
-///Ordinarily, one would keep this enum as-is. The integer and float
-///representations may be changed out for other representations, but doing so
-///will define a different, potentially incompatible AST. (Besides, what
-///architecture are you using that needs `u128` pointers? AS/400 TIMI doesn't
-///count.)
 #[derive(Clone, Debug)]
-pub enum Literal<I, F, P = I> {
-    /// Some kind of integer constant
+pub enum Literal<I, S, F, P = I> {
+    /// Unsigned integer constant
     Integer(I),
+
+    /// Signed integer constant
+    SignedInteger(S),
 
     /// Some kind of floating-point constant
     Float(F),
@@ -29,40 +26,44 @@ pub enum Literal<I, F, P = I> {
 }
 
 #[derive(Clone, Debug)]
-pub enum Operand<I, F, P> {
+pub enum Operand<I, S, F, P> {
     /// The name of an architecturally defined register, or some derivative of
     /// that register, or another non-register operand defined by the
     /// architecture.
     Symbol(String),
 
     /// A literal constant value.
-    Literal(Literal<I, F, P>),
+    Literal(Literal<I, S, F, P>),
 
     /// A reference to a user-defined label.
     Label(Label),
 
     /// An operand which constitutes a data reference.
-    DataReference(Box<Operand<I, F, P>>),
+    DataReference(Box<Operand<I, S, F, P>>),
 
     /// An operand which constitutes a code reference.
-    CodeReference(Box<Operand<I, F, P>>),
+    CodeReference(Box<Operand<I, S, F, P>>),
 
     /// The indirection of the given operand. (e.g. HL to [HL])
-    Indirect(Box<Operand<I, F, P>>),
+    Indirect(Box<Operand<I, S, F, P>>),
 
     /// The addition of two operands
-    Add(Box<Operand<I, F, P>>, Box<Operand<I, F, P>>),
+    Add(Box<Operand<I, S, F, P>>, Box<Operand<I, S, F, P>>),
 
     //TODO: Symbolized memory references
 }
 
-impl<I, F, P> Operand<I, F, P> {
+impl<I, S, F, P> Operand<I, S, F, P> {
     pub fn sym(sym: &str) -> Self {
         Operand::Symbol(sym.to_string())
     }
 
     pub fn int<MI>(int: MI) -> Self where I: From<MI> {
         Operand::Literal(Literal::Integer(I::from(int)))
+    }
+
+    pub fn sint<MI>(int: MI) -> Self where S: From<MI> {
+        Operand::Literal(Literal::SignedInteger(S::from(int)))
     }
 
     pub fn float<MF>(flot: MF) -> Self where F: From<MF> {
@@ -102,11 +103,12 @@ impl<I, F, P> Operand<I, F, P> {
     }
 }
 
-impl<I, F, P> fmt::Display for Operand<I, F, P> where I: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
+impl<I, S, F, P> fmt::Display for Operand<I, S, F, P> where I: fmt::Display, S: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Operand::Symbol(s) => write!(f, "{}", s),
             Operand::Literal(Literal::Integer(i)) => write!(f, "{}", i),
+            Operand::Literal(Literal::SignedInteger(i)) => write!(f, "{}", i),
             Operand::Literal(Literal::Float(fl)) => write!(f, "{}", fl),
             Operand::Literal(Literal::Pointer(p)) => write!(f, "${:x}", p),
             Operand::Literal(Literal::String(s)) => write!(f, "{}", s),
@@ -122,15 +124,15 @@ impl<I, F, P> fmt::Display for Operand<I, F, P> where I: fmt::Display, F: fmt::D
 }
 
 #[derive(Clone, Debug)]
-pub struct Instruction<I, F, P> {
+pub struct Instruction<I, S, F, P> {
     /// The instruction being executed
     opcode: String,
     /// Operands for the instruction, if any
-    operands: Vec<Operand<I, F, P>>
+    operands: Vec<Operand<I, S, F, P>>
 }
 
-impl<I, F, P> Instruction<I, F, P> {
-    pub fn new(opcode: &str, operands: Vec<Operand<I, F, P>>) -> Self {
+impl<I, S, F, P> Instruction<I, S, F, P> {
+    pub fn new(opcode: &str, operands: Vec<Operand<I, S, F, P>>) -> Self {
         Instruction {
             opcode: opcode.to_string(),
             operands: operands
@@ -141,12 +143,12 @@ impl<I, F, P> Instruction<I, F, P> {
         &self.opcode
     }
 
-    pub fn iter_operands(&self) -> slice::Iter<Operand<I, F, P>> {
+    pub fn iter_operands(&self) -> slice::Iter<Operand<I, S, F, P>> {
         self.operands.iter()
     }
 }
 
-impl<I, F, P> fmt::Display for Instruction<I, F, P> where Operand<I, F, P>: fmt::Display {
+impl<I, S, F, P> fmt::Display for Instruction<I, S, F, P> where Operand<I, S, F, P>: fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.operands.len() == 0 {
             write!(f, "{}", self.opcode)
@@ -233,14 +235,14 @@ impl fmt::Display for Label {
 }
 
 #[derive(Clone, Debug)]
-pub struct Line<I = u64, F = f64, P = I> {
+pub struct Line<I, S, F, P> {
     label: Option<Label>,
-    instruction: Option<Instruction<I, F, P>>,
+    instruction: Option<Instruction<I, S, F, P>>,
     comment: Option<String>,
     source_address: memory::Pointer<P>,
 }
 
-impl<I, F, P> fmt::Display for Line<I, F, P> where Instruction<I, F, P>: fmt::Display {
+impl<I, S, F, P> fmt::Display for Line<I, S, F, P> where Instruction<I, S, F, P>: fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref label) = self.label {
             write!(f, "{} ", label)?;
@@ -258,8 +260,8 @@ impl<I, F, P> fmt::Display for Line<I, F, P> where Instruction<I, F, P>: fmt::Di
     }
 }
 
-impl<I, F, P> Line<I, F, P> {
-    pub fn new(label: Option<Label>, instruction: Option<Instruction<I, F, P>>, comment: Option<String>, source_address: memory::Pointer<P>) -> Self {
+impl<I, S, F, P> Line<I, S, F, P> {
+    pub fn new(label: Option<Label>, instruction: Option<Instruction<I, S, F, P>>, comment: Option<String>, source_address: memory::Pointer<P>) -> Self {
         Line {
             label: label,
             instruction: instruction,
@@ -276,7 +278,7 @@ impl<I, F, P> Line<I, F, P> {
         }
     }
 
-    pub fn instr(&self) -> Option<&Instruction<I, F, P>> {
+    pub fn instr(&self) -> Option<&Instruction<I, S, F, P>> {
         if let Some(ref instruction) = self.instruction {
             Some(instruction)
         } else {
@@ -296,33 +298,33 @@ impl<I, F, P> Line<I, F, P> {
         &self.source_address
     }
 
-    pub fn into_parts(self) -> (Option<Label>, Option<Instruction<I, F, P>>, Option<String>, memory::Pointer<P>) {
+    pub fn into_parts(self) -> (Option<Label>, Option<Instruction<I, S, F, P>>, Option<String>, memory::Pointer<P>) {
         (self.label, self.instruction, self.comment, self.source_address)
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Assembly<I = u64, F = f64, P = I> {
-    lines: Vec<Line<I, F, P>>
+pub struct Assembly<I, S, F, P> {
+    lines: Vec<Line<I, S, F, P>>
 }
 
-impl<I, F, P> Assembly<I, F, P> {
+impl<I, S, F, P> Assembly<I, S, F, P> {
     pub fn new() -> Self {
         Assembly {
             lines: Vec::new()
         }
     }
 
-    pub fn iter_lines(&self) -> slice::Iter<Line<I, F, P>> {
+    pub fn iter_lines(&self) -> slice::Iter<Line<I, S, F, P>> {
         self.lines.iter()
     }
 
-    pub fn append_line(&mut self, line: Line<I, F, P>) {
+    pub fn append_line(&mut self, line: Line<I, S, F, P>) {
         self.lines.push(line);
     }
 }
 
-impl<I, F, P> fmt::Display for Assembly<I, F, P> where Line<I, F, P>: fmt::Display {
+impl<I, S, F, P> fmt::Display for Assembly<I, S, F, P> where Line<I, S, F, P>: fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for line in self.iter_lines() {
             write!(f, "{}", line)?;

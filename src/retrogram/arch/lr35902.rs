@@ -26,6 +26,9 @@ pub type Pointer = u16;
 /// The type which represents a positive memory offset.
 pub type Offset = u16;
 
+/// The type which represents a signed value contained in an LR35902 register or register pair.
+pub type SignedValue = i16;
+
 /// The type which represents data stored in memory as seen by the processor.
 pub type Data = u8;
 
@@ -35,17 +38,17 @@ pub type Bus = memory::Memory<Pointer, Data, Offset>;
 /// The AST type which represents a disassembled operand.
 /// 
 /// TODO: When ! is stable, replace the floating-point type with !.
-pub type Operand = ast::Operand<Offset, f32, Pointer>;
+pub type Operand = ast::Operand<Offset, SignedValue, f32, Pointer>;
 
 /// The AST type which represents a disassembled instruction.
 /// 
 /// TODO: When ! is stable, replace the floating-point type with !.
-pub type Instruction = ast::Instruction<Offset, f32, Pointer>;
+pub type Instruction = ast::Instruction<Offset, SignedValue, f32, Pointer>;
 
 /// The AST type which represents disassembled code.
 /// 
 /// TODO: When ! is stable, replace the floating-point type with !.
-pub type Assembly = ast::Assembly<Offset, f32, Pointer>;
+pub type Assembly = ast::Assembly<Offset, SignedValue, f32, Pointer>;
 
 fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {

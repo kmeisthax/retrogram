@@ -76,23 +76,24 @@ pub fn parse_symbol_file<F>(file: F, db: &mut Database<lr35902::Pointer>) -> io:
     Ok(())
 }
 
-pub struct RGBDSAstFormatee<'a, I, F, P> {
-    tree: &'a ast::Assembly<I, F, P>
+pub struct RGBDSAstFormatee<'a, I, S, F, P> {
+    tree: &'a ast::Assembly<I, S, F, P>
 }
 
-impl<'a, I, F, P> RGBDSAstFormatee<'a, I, F, P> {
-    pub fn wrap(tree: &'a ast::Assembly<I, F, P>) -> Self {
+impl<'a, I, S, F, P> RGBDSAstFormatee<'a, I, S, F, P> {
+    pub fn wrap(tree: &'a ast::Assembly<I, S, F, P>) -> Self {
         RGBDSAstFormatee {
             tree: tree
         }
     }
 }
 
-impl<'a, I, F, P> RGBDSAstFormatee<'a, I, F, P> where I: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
-    fn write_operand(&self, operand: &ast::Operand<I, F, P>, f: &mut fmt::Formatter) -> fmt::Result {
+impl<'a, I, S, F, P> RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
+    fn write_operand(&self, operand: &ast::Operand<I, S, F, P>, f: &mut fmt::Formatter) -> fmt::Result {
         match operand {
             ast::Operand::Symbol(s) => write!(f, "{}", s)?,
             ast::Operand::Literal(ast::Literal::Integer(i)) => write!(f, "{}", i)?,
+            ast::Operand::Literal(ast::Literal::SignedInteger(i)) => write!(f, "{}", i)?,
             ast::Operand::Literal(ast::Literal::Float(fl)) => write!(f, "{}", fl)?,
             ast::Operand::Literal(ast::Literal::Pointer(p)) => write!(f, "${:x}", p)?,
             ast::Operand::Literal(ast::Literal::String(s)) => write!(f, "{}", s)?,
@@ -117,7 +118,7 @@ impl<'a, I, F, P> RGBDSAstFormatee<'a, I, F, P> where I: fmt::Display, F: fmt::D
     }
 }
 
-impl<'a, I, F, P> fmt::Display for RGBDSAstFormatee<'a, I, F, P> where I: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
+impl<'a, I, S, F, P> fmt::Display for RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for line in self.tree.iter_lines() {
             if let Some(ref label) = line.label() {
