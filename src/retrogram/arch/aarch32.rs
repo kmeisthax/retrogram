@@ -206,18 +206,25 @@ fn address_operand(rn: Aarch32Register, rd: Aarch32Register, opcode: u32, immedi
         true => (address_operand & 0xFFF) as i32,
         false => (address_operand & 0xFFF) as i32 * -1
     };
+
+    let rd_operand = ast::Operand::sym(&rd.to_string());
+    let rn_operand = ast::Operand::sym(&rn.to_string());
+    let rm_operand = match is_offsetadd {
+        true => ast::Operand::sym(&rm.to_string()),
+        false => ast::Operand::pref("-", ast::Operand::sym(&rm.to_string()))
+    };
     
     match (immediate_bit, is_preindex, is_wbit, is_shifted) {
-        (0, true, true, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::suff(ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sint(offset12)], "]"), "!")],
-        (1, true, true, true) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::suff(ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)], "]"), "!")],
-        (1, true, true, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::suff(ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sym(&rm.to_string())], "]"), "!")],
-        (0, true, false, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sint(offset12)], "]")],
-        (1, true, false, true) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)], "]")],
-        (1, true, false, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string()), ast::Operand::sym(&rm.to_string())], "]")],
-        (0, false, _, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string())], "]"), ast::Operand::sint(offset12)],
-        (1, false, _, true) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string())], "]"), ast::Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)],
-        (1, false, _, false) => vec![ast::Operand::sym(&rd.to_string()), ast::Operand::wrap("[", vec![ast::Operand::sym(&rn.to_string())], "]"), ast::Operand::sym(&rm.to_string())],
-        _ => panic!("not yet")
+        (0, true, true, false) => vec![rd_operand, ast::Operand::suff(ast::Operand::wrap("[", vec![rn_operand, ast::Operand::sint(offset12)], "]"), "!")],
+        (1, true, true, true) => vec![rd_operand, ast::Operand::suff(ast::Operand::wrap("[", vec![rn_operand, rm_operand, Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)], "]"), "!")],
+        (1, true, true, false) => vec![rd_operand, ast::Operand::suff(ast::Operand::wrap("[", vec![rn_operand, rm_operand], "]"), "!")],
+        (0, true, false, false) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand, ast::Operand::sint(offset12)], "]")],
+        (1, true, false, true) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand, rm_operand, Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)], "]")],
+        (1, true, false, false) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand, rm_operand], "]")],
+        (0, false, _, false) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand], "]"), ast::Operand::sint(offset12)],
+        (1, false, _, true) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand], "]"), rm_operand, Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)],
+        (1, false, _, false) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand], "]"), rm_operand],
+        _ => panic!("Invalid instruction parsing detected. Please contact your system administrator.")
     }
 }
 
