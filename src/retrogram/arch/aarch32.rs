@@ -171,7 +171,10 @@ fn condcode(instr: u32) -> &'static str {
     }
 }
 
-pub fn ls_opcode(opcode: u32, immediate_bit: u32) -> &'static str {
+/// Load/Store Word/Byte opcode field decoding.
+/// 
+/// Returns a static string reference to the opcode 
+pub fn lsw_opcode(opcode: u32, immediate_bit: u32) -> &'static str {
     let is_load = opcode & 0x01 == 0x01;
     let is_byte = opcode & 0x04 == 0x04;
     let is_preindex = opcode & 0x10 == 0x10;
@@ -193,6 +196,7 @@ pub fn ls_opcode(opcode: u32, immediate_bit: u32) -> &'static str {
     }
 }
 
+/// 
 fn address_operand(rn: Aarch32Register, rd: Aarch32Register, opcode: u32, immediate_bit: u32, address_operand: u32) -> Vec<Operand> {
     let shift_imm = (address_operand & 0x00000F80) >> 7;
     let shift = (address_operand & 0x00000060) >> 5; //Shift type
@@ -263,10 +267,10 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
             (_, 1) if is_misc & is_undefine => (None, 0, false), //Undefined (as of ARM DDI 0100I)
             (_, 1) if is_misc => (None, 0, false), //Move to status register
             (_, 1) => (Some(Instruction::new(&format!("{}{}", dp_opcode(opcode), condcode(cond)), shifter_operand(rn, rd, 1, lsimmed))), 4, true), //Data processing with immediate
-            (_, 2) => (Some(Instruction::new(&format!("{}{}", dp_opcode(opcode), condcode(cond)), address_operand(rn, rd, opcode, 0, lsimmed))), 4, true), //Load/store with immediate offset
+            (_, 2) => (Some(Instruction::new(&format!("{}{}", lsw_opcode(opcode, 0), condcode(cond)), address_operand(rn, rd, opcode, 0, lsimmed))), 4, true), //Load/store with immediate offset
             (_, 3) if is_archudef => (None, 0, false), //Architecturally undefined space
             (_, 3) if is_mediabit => (None, 0, false), //Media extension space
-            (_, 3) => (Some(Instruction::new(&format!("{}{}", dp_opcode(opcode), condcode(cond)), address_operand(rn, rd, opcode, 1, lsimmed))), 4, true), //Load/store with register offset
+            (_, 3) => (Some(Instruction::new(&format!("{}{}", lsw_opcode(opcode, 1), condcode(cond)), address_operand(rn, rd, opcode, 1, lsimmed))), 4, true), //Load/store with register offset
             (_, 4) => (None, 0, false), //Load/store multiple
             (_, 5) => (None, 0, false), //Branch with or without link
             (_, 6) => (None, 0, false), //Coprocessor load/store and doubleword xfrs
