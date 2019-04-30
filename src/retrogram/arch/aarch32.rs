@@ -196,7 +196,7 @@ pub fn lsw_opcode(opcode: u32, immediate_bit: u32) -> &'static str {
     }
 }
 
-/// 
+/// Decode the address operand into the operands for a given instruction.
 fn address_operand(rn: Aarch32Register, rd: Aarch32Register, opcode: u32, immediate_bit: u32, address_operand: u32) -> Vec<Operand> {
     let shift_imm = (address_operand & 0x00000F80) >> 7;
     let shift = (address_operand & 0x00000060) >> 5; //Shift type
@@ -230,6 +230,49 @@ fn address_operand(rn: Aarch32Register, rd: Aarch32Register, opcode: u32, immedi
         (1, false, _, false) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand], "]"), rm_operand],
         _ => panic!("Invalid instruction parsing detected. Please contact your system administrator.")
     }
+}
+
+/// Decode an instruction in the LDM/STM instruction space.
+fn decode_ldmstm(rn: Aarch32Register, opcode: u32, cond: u32, reglist: u32) -> (Option<Instruction>, Offset, bool) {
+    let op = match opcode & 0x01 {
+        0x00 => "STM",
+        0x01 => "LDM",
+        _ => return (None, 0, false)
+    };
+
+    let p_string = match opcode & 0x10 {
+        0x00 => "A",
+        0x10 => "B",
+        _ => return (None, 0, false)
+    };
+
+    let u_string = match opcode & 0x08 {
+        0x00 => "D",
+        0x08 => "I",
+        _ => return (None, 0, false)
+    };
+
+    let rn_operand = match opcode & 0x02 {
+        0x00 => ast::Operand::sym(&rn.to_string()),
+        0x02 => ast::Operand::suff(ast::Operand::sym(&rn.to_string()), "!"),
+        _ => return (None, 0, false)
+    };
+
+    let mut reglist_operand = Vec::new();
+
+    for i in 0..15 {
+        if reglist & (1 << i) != 0 {
+            reglist_operand.push(ast::Operand::sym(&Aarch32Register::from_instr(i).expect("Counting from 0 to 15 does not result in something from 0 to 15. Check your universe before proceeding.").to_string()));
+        }
+    }
+
+    let reglist_operand = match opcode & 0x04 {
+        0x00 => ast::Operand::wrap("{", reglist_operand, "}"),
+        0x40 => ast::Operand::suff(ast::Operand::wrap("{", reglist_operand, "}"), "^"),
+        _ => return (None, 0, false)
+    };
+
+    (Some(Instruction::new(&format!("{}{}{}{}", op, condcode(cond), u_string, p_string), vec![rn_operand, reglist_operand])), 0, false)
 }
 
 /// Disassemble the instruction at `p` in `mem`.
@@ -271,7 +314,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
             (_, 3) if is_archudef => (None, 0, false), //Architecturally undefined space
             (_, 3) if is_mediabit => (None, 0, false), //Media extension space
             (_, 3) => (Some(Instruction::new(&format!("{}{}", lsw_opcode(opcode, 1), condcode(cond)), address_operand(rn, rd, opcode, 1, lsimmed))), 4, true), //Load/store with register offset
-            (_, 4) => (None, 0, false), //Load/store multiple
+            (_, 4) => decode_ldmstm(rn, opcode, cond, instr & 0x0000FFFF), //Load/store multiple
             (_, 5) => (None, 0, false), //Branch with or without link
             (_, 6) => (None, 0, false), //Coprocessor load/store and doubleword xfrs
             (_, 7) if is_swilink_ => (None, 0, false), //Software interrupt
