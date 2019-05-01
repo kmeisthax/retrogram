@@ -111,8 +111,8 @@ fn shifter_operand(rn: Aarch32Register, rd: Aarch32Register, immediate_bit: u32,
 }
 
 /// Decode a 5-bit opcode field as if it was for a data processing instruction
-fn dp_opcode(instr: u32) -> &'static str {
-    match instr {
+fn decode_dpinst(cond: u32, immediate_bit: u32, opcode: u32, rn: Aarch32Register, rd: Aarch32Register, address_operand: u32) -> (Option<Instruction>, Offset, bool) {
+    let dp_opcode = match opcode {
         0 => "AND",
         1 => "ANDS",
         2 => "EOR",
@@ -146,7 +146,9 @@ fn dp_opcode(instr: u32) -> &'static str {
         30 => "MVN",
         31 => "MVNS",
         _ => panic!("Wait, why did you try to decode an AArch32 opcode longer than 5 bits?")
-    }
+    };
+
+    (Some(Instruction::new(&format!("{}{}", dp_opcode, condcode(cond)), shifter_operand(rn, rd, immediate_bit, address_operand))), 4, true)
 }
 
 fn condcode(instr: u32) -> &'static str {
@@ -171,40 +173,17 @@ fn condcode(instr: u32) -> &'static str {
     }
 }
 
-/// Load/Store Word/Byte opcode field decoding.
-/// 
-/// Returns a static string reference to the opcode 
-pub fn lsw_opcode(opcode: u32, immediate_bit: u32) -> &'static str {
-    let is_load = opcode & 0x01 == 0x01;
-    let is_byte = opcode & 0x04 == 0x04;
-    let is_preindex = opcode & 0x10 == 0x10;
-    let is_wbit = opcode & 0x02 == 0x02;
-
-    match (is_load, is_byte, is_preindex, is_wbit) {
-        (true, true, true, _) => "LDRB",
-        (true, false, true, _) => "LDR",
-        (false, true, true, _) => "STRB",
-        (false, false, true, _) => "STR",
-        (true, true, false, true) => "LDRBT",
-        (true, false, false, true) => "LDRT",
-        (false, true, false, true) => "STRBT",
-        (false, false, false, true) => "STRT",
-        (true, true, false, false) => "LDRB",
-        (true, false, false, false) => "LDR",
-        (false, true, false, false) => "STRB",
-        (false, false, false, false) => "STR"
-    }
-}
-
-/// Decode the address operand into the operands for a given instruction.
-fn address_operand(rn: Aarch32Register, rd: Aarch32Register, opcode: u32, immediate_bit: u32, address_operand: u32) -> Vec<Operand> {
+fn decode_ldst(cond: u32, immediate_bit: u32, opcode: u32, rn: Aarch32Register, rd: Aarch32Register, address_operand: u32) -> (Option<Instruction>, Offset, bool) {
     let shift_imm = (address_operand & 0x00000F80) >> 7;
     let shift = (address_operand & 0x00000060) >> 5; //Shift type
     let rm = Aarch32Register::from_instr((address_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
     let is_shifted = shift_imm != 0 || shift != 0;
-    let is_preindex = opcode & 0x10 == 0x10;
-    let is_offsetadd = opcode & 0x08 == 0x08;
+
+    let is_load = opcode & 0x01 == 0x01;
     let is_wbit = opcode & 0x02 == 0x02;
+    let is_byte = opcode & 0x04 == 0x04;
+    let is_offsetadd = opcode & 0x08 == 0x08;
+    let is_preindex = opcode & 0x10 == 0x10;
 
     let offset12 = match is_offsetadd {
         true => (address_operand & 0xFFF) as i32,
@@ -217,8 +196,23 @@ fn address_operand(rn: Aarch32Register, rd: Aarch32Register, opcode: u32, immedi
         true => ast::Operand::sym(&rm.to_string()),
         false => ast::Operand::pref("-", ast::Operand::sym(&rm.to_string()))
     };
+
+    let lsw_opcode = match (is_load, is_byte, is_preindex, is_wbit) {
+        (true, true, true, _) => "LDRB",
+        (true, false, true, _) => "LDR",
+        (false, true, true, _) => "STRB",
+        (false, false, true, _) => "STR",
+        (true, true, false, true) => "LDRBT",
+        (true, false, false, true) => "LDRT",
+        (false, true, false, true) => "STRBT",
+        (false, false, false, true) => "STRT",
+        (true, true, false, false) => "LDRB",
+        (true, false, false, false) => "LDR",
+        (false, true, false, false) => "STRB",
+        (false, false, false, false) => "STR"
+    };
     
-    match (immediate_bit, is_preindex, is_wbit, is_shifted) {
+    let address_operand = match (immediate_bit, is_preindex, is_wbit, is_shifted) {
         (0, true, true, false) => vec![rd_operand, ast::Operand::suff(ast::Operand::wrap("[", vec![rn_operand, ast::Operand::sint(offset12)], "]"), "!")],
         (1, true, true, true) => vec![rd_operand, ast::Operand::suff(ast::Operand::wrap("[", vec![rn_operand, rm_operand, Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)], "]"), "!")],
         (1, true, true, false) => vec![rd_operand, ast::Operand::suff(ast::Operand::wrap("[", vec![rn_operand, rm_operand], "]"), "!")],
@@ -229,11 +223,13 @@ fn address_operand(rn: Aarch32Register, rd: Aarch32Register, opcode: u32, immedi
         (1, false, _, true) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand], "]"), rm_operand, Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)],
         (1, false, _, false) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand], "]"), rm_operand],
         _ => panic!("Invalid instruction parsing detected. Please contact your system administrator.")
-    }
+    };
+
+    (Some(Instruction::new(&format!("{}{}", lsw_opcode, condcode(cond)), address_operand)), 4, true)
 }
 
 /// Decode an instruction in the LDM/STM instruction space.
-fn decode_ldmstm(rn: Aarch32Register, opcode: u32, cond: u32, reglist: u32) -> (Option<Instruction>, Offset, bool) {
+fn decode_ldmstm(cond: u32, opcode: u32, rn: Aarch32Register, reglist: u32) -> (Option<Instruction>, Offset, bool) {
     let op = match opcode & 0x01 {
         0x00 => "STM",
         0x01 => "LDM",
@@ -317,15 +313,15 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
             (_, 0) if is_multiply => (None, 0, false), //Multiply/LS extension space
             (_, 0) if is_misc => (None, 0, false), //Misc extension space
             //TODO: Misc is supposed to be opcode 0b10xx, but the ARM ARM instruction encoding also says some bits of the shift operand should be set too.
-            (_, 0) => (Some(Instruction::new(&format!("{}{}", dp_opcode(opcode), condcode(cond)), shifter_operand(rn, rd, 0, lsimmed))), 4, true), //Data processing with shift
+            (_, 0) => decode_dpinst(cond, 0, opcode, rn, rd, lsimmed), //Data processing with shift
             (_, 1) if is_misc & is_undefine => (None, 0, false), //Undefined (as of ARM DDI 0100I)
             (_, 1) if is_misc => (None, 0, false), //Move to status register
-            (_, 1) => (Some(Instruction::new(&format!("{}{}", dp_opcode(opcode), condcode(cond)), shifter_operand(rn, rd, 1, lsimmed))), 4, true), //Data processing with immediate
-            (_, 2) => (Some(Instruction::new(&format!("{}{}", lsw_opcode(opcode, 0), condcode(cond)), address_operand(rn, rd, opcode, 0, lsimmed))), 4, true), //Load/store with immediate offset
+            (_, 1) => decode_dpinst(cond, 1, opcode, rn, rd, lsimmed), //Data processing with immediate
+            (_, 2) => decode_ldst(cond, 0, opcode, rn, rd, lsimmed), //Load/store with immediate offset
             (_, 3) if is_archudef => (None, 0, false), //Architecturally undefined space
             (_, 3) if is_mediabit => (None, 0, false), //Media extension space
-            (_, 3) => (Some(Instruction::new(&format!("{}{}", lsw_opcode(opcode, 1), condcode(cond)), address_operand(rn, rd, opcode, 1, lsimmed))), 4, true), //Load/store with register offset
-            (_, 4) => decode_ldmstm(rn, opcode, cond, instr & 0x0000FFFF), //Load/store multiple
+            (_, 3) => decode_ldst(cond, 1, opcode, rn, rd, lsimmed), //Load/store with register offset
+            (_, 4) => decode_ldmstm(cond, opcode, rn, instr & 0x0000FFFF), //Load/store multiple
             (_, 5) => decode_bl(*p.as_pointer(), cond, instr), //Branch with or without link
             (_, 6) => (None, 0, false), //Coprocessor load/store and doubleword xfrs
             (_, 7) if is_swilink_ => (None, 0, false), //Software interrupt
