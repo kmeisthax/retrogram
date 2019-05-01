@@ -271,14 +271,57 @@ fn decode_ldmstm(cond: u32, opcode: u32, rn: Aarch32Register, reglist: u32) -> (
     (Some(Instruction::new(&format!("{}{}{}{}", op, condcode(cond), u_string, p_string), vec![rn_operand, reglist_operand])), 0, false)
 }
 
-pub fn decode_bl(pc: Pointer, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool) {
+fn decode_bl(pc: Pointer, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool) {
     let is_link = (offset & 0x01000000) != 0;
     let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
     let target = pc.wrapping_add((offset & 0x007FFFFF) | signbit);
 
     match is_link {
         true => (Some(ast::Instruction::new(&format!("BL{}", condcode(cond)), vec![ast::Operand::cptr(target)])), 4, true),
-        false => (Some(ast::Instruction::new(&format!("BL{}", condcode(cond)), vec![ast::Operand::cptr(target)])), 4, false)
+        false => (Some(ast::Instruction::new(&format!("B{}", condcode(cond)), vec![ast::Operand::cptr(target)])), 4, false)
+    }
+}
+
+fn decode_swi(cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool) {
+    let target = (offset & 0x00FFFFFF);
+
+    (Some(ast::Instruction::new(&format!("SWI{}", condcode(cond)), vec![ast::Operand::int(target)])), 4, true)
+}
+
+/// Decode a multiply instruction.
+/// 
+/// Please note that the instruction space for multiplies specifies the
+/// registers in a different order from most instructions. Specifically, `rn`
+/// and `rd` are swapped.
+fn decode_mul(cond: u32, opcode: u32, rd: Aarch32Register, rn: Aarch32Register, mult_operand: u32) -> (Option<Instruction>, Offset, bool) {
+    let rs = Aarch32Register::from_instr((mult_operand & 0x00000F00) >> 8).expect("Could not parse RS... somehow?!");
+    let rm = Aarch32Register::from_instr((mult_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
+
+    let rd_operand = ast::Operand::sym(&rd.to_string());
+    let rn_operand = ast::Operand::sym(&rn.to_string());
+    let rs_operand = ast::Operand::sym(&rs.to_string());
+    let rm_operand = ast::Operand::sym(&rm.to_string());
+
+    let is_long = opcode & 0x08 != 0;
+    let is_unsigned = opcode & 0x04 != 0;
+    let is_fma = opcode & 0x02 != 0;
+    let is_status = opcode & 0x01 != 0;
+
+    match (is_long, is_unsigned, is_fma, is_status) {
+        (true, true, true, true) => (Some(Instruction::new(&format!("SMLAL{}S", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand])), 4, true),
+        (true, true, true, false) => (Some(Instruction::new(&format!("SMLAL{}", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand])), 4, true),
+        (true, true, false, true) => (Some(Instruction::new(&format!("SMULL{}S", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand])), 4, true),
+        (true, true, false, false) => (Some(Instruction::new(&format!("SMULL{}", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand])), 4, true),
+        (true, false, true, true) => (Some(Instruction::new(&format!("UMLAL{}S", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand])), 4, true),
+        (true, false, true, false) => (Some(Instruction::new(&format!("UMLAL{}", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand])), 4, true),
+        (true, false, false, true) => (Some(Instruction::new(&format!("UMULL{}S", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand])), 4, true),
+        (true, false, false, false) => (Some(Instruction::new(&format!("UMULL{}", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand])), 4, true),
+        (false, true, false, false) => (Some(Instruction::new(&format!("UMAAL{}", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand])), 4, true),
+        (false, false, true, true) => (Some(Instruction::new(&format!("MLA{}S", condcode(cond)), vec![rd_operand, rm_operand, rs_operand, rn_operand])), 4, true),
+        (false, false, true, false) => (Some(Instruction::new(&format!("MLA{}", condcode(cond)), vec![rd_operand, rm_operand, rs_operand, rn_operand])), 4, true),
+        (false, false, false, true) => (Some(Instruction::new(&format!("MUL{}S", condcode(cond)), vec![rd_operand, rm_operand, rs_operand])), 4, true),
+        (false, false, false, false) => (Some(Instruction::new(&format!("MUL{}", condcode(cond)), vec![rd_operand, rm_operand, rs_operand])), 4, true),
+        _ => (None, 0, false)
     }
 }
 
@@ -310,7 +353,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
 
         match (cond, opcat) {
             (0xF, _) => (None, 0, false), //Unconditionally executed extension space
-            (_, 0) if is_multiply => (None, 0, false), //Multiply/LS extension space
+            (_, 0) if is_multiply => decode_mul(cond, opcode, rn, rd, lsimmed), //Multiply/LS extension space
             (_, 0) if is_misc => (None, 0, false), //Misc extension space
             //TODO: Misc is supposed to be opcode 0b10xx, but the ARM ARM instruction encoding also says some bits of the shift operand should be set too.
             (_, 0) => decode_dpinst(cond, 0, opcode, rn, rd, lsimmed), //Data processing with shift
@@ -324,7 +367,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
             (_, 4) => decode_ldmstm(cond, opcode, rn, instr & 0x0000FFFF), //Load/store multiple
             (_, 5) => decode_bl(*p.as_pointer(), cond, instr), //Branch with or without link
             (_, 6) => (None, 0, false), //Coprocessor load/store and doubleword xfrs
-            (_, 7) if is_swilink_ => (None, 0, false), //Software interrupt
+            (_, 7) if is_swilink_ => decode_swi(cond, instr), //Software interrupt
             (_, 7) if is_mediabit => (None, 0, false), //Coprocessor register transfer
             (_, 7) => (None, 0, false), //Coprocessor data processing
             _ => (None, 0, false)
