@@ -237,8 +237,8 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
     }
 }
 
-pub fn disassemble_block(start_pc: Option<memory::Pointer<Pointer>>, plat: &Bus) -> io::Result<Assembly> {
-    let mut pc = start_pc.unwrap_or(memory::Pointer::from(0x0100));
+pub fn disassemble_block(start_pc: memory::Pointer<Pointer>, plat: &Bus) -> io::Result<Assembly> {
+    let mut pc = start_pc;
     let mut asm = ast::Assembly::new();
 
     loop {

@@ -4,6 +4,7 @@
 //! A properly configured platform is required in order to analyze a program.
 
 pub mod gb;
+pub mod agb;
 
 use std::str;
 use serde::Serialize;
@@ -11,7 +12,8 @@ use serde::Serialize;
 /// Enumeration of all platforms that ship with Retrogram.
 #[derive(Copy, Clone, Serialize, Debug)]
 pub enum PlatformName {
-    GB
+    GB,
+    AGB,
 }
 
 impl str::FromStr for PlatformName {
@@ -20,6 +22,8 @@ impl str::FromStr for PlatformName {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_ref() {
             "gb" => Ok(PlatformName::GB),
+            "gba" => Ok(PlatformName::AGB),
+            "agb" => Ok(PlatformName::AGB),
             _ => Err(())
         }
     }

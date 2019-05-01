@@ -1,6 +1,7 @@
 //! A special-purpose type for modeling the address decoding of a particular
 //! platform.
 
+use std::io;
 use std::ops::{Add, Sub, Not, BitOr, Shl};
 use std::convert::TryFrom;
 use std::cmp::PartialOrd;
@@ -9,7 +10,10 @@ use std::fmt::Debug;
 use num::traits::{Bounded, One};
 use crate::retrogram::{reg, mynums, memory};
 use crate::retrogram::reg::Convertable;
-use crate::retrogram::memory::{Image, Behavior, Pointer, UnknownImage};
+use crate::retrogram::mynums::CheckedSub;
+use crate::retrogram::memory::bss::UnknownImage;
+use crate::retrogram::memory::rombin::ROMBinaryImage;
+use crate::retrogram::memory::{Image, Behavior, Pointer};
 
 /// Models a region of memory visible to the program under analysis.
 /// 
@@ -87,7 +91,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
     where P: memory::PtrNum<S> + 'static, S: memory::Offset<P>,
-        IO: From<<P as Sub>::Output> + 'static, MV: 'static {
+        IO: memory::Offset<P> + 'static, MV: 'static {
     pub fn install_mem(&mut self, start: P, length: S) {
         self.views.push(Region {
             start: start,
@@ -113,6 +117,21 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
             memtype: Behavior::Invalid,
             image: Box::new(UnknownImage::new())
         });
+    }
+}
+
+impl<P, MV, S> Memory<P, MV, S, usize>
+    where P: Clone + CheckedSub + 'static, usize: memory::Offset<P>,
+        MV: From<u8> + 'static {
+    pub fn install_rom<F>(&mut self, start: P, length: S, file: &mut F) -> io::Result<()> where F: io::Read {
+        self.views.push(Region {
+            start: start,
+            length: length,
+            memtype: Behavior::Storage,
+            image: Box::new(ROMBinaryImage::read_bytes(file)?)
+        });
+
+        Ok(())
     }
 }
 

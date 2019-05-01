@@ -2,6 +2,7 @@
 //! 
 //! This only covers 32-bit ARM, now known as AArch32.
 
+use std::io;
 use std::string::ToString;
 use crate::retrogram::{memory, ast, reg};
 
@@ -81,6 +82,9 @@ pub type Operand = ast::Operand<Offset, Value, f32, Pointer>;
 
 /// The AST type which represents a disassembled instruction.
 pub type Instruction = ast::Instruction<Offset, Value, f32, Pointer>;
+
+/// The AST type which represents disassembled code.
+pub type Assembly = ast::Assembly<Offset, Value, f32, Pointer>;
 
 fn shift_symbol(shift: u32, shift_imm: u32) -> &'static str {
     match (shift, shift_imm) {
@@ -335,7 +339,7 @@ fn decode_mul(cond: u32, opcode: u32, rd: Aarch32Register, rn: Aarch32Register, 
 ///  * True, if execution would continue at the instruction following this one,
 ///    or false if the instruction terminates the current basic block
 pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instruction>, Offset, bool) {
-    let instr : reg::Symbolic<u32> = mem.read_leword(p);
+    let instr : reg::Symbolic<u32> = mem.read_leword(&p);
 
     if let Some(instr) = instr.into_concrete() {
         let cond = (instr & 0xF0000000) >> 28;
@@ -374,5 +378,24 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
         }
     } else {
         (None, 0, false)
+    }
+}
+
+pub fn disassemble_block(start_pc: memory::Pointer<Pointer>, plat: &Bus) -> io::Result<Assembly> {
+    let mut pc = start_pc;
+    let mut asm = ast::Assembly::new();
+
+    loop {
+        match disassemble(&pc, &plat) {
+            (Some(instr), size, is_nonfinal) => {
+                asm.append_line(ast::Line::new(None, Some(instr), None, pc.clone().into_ptr()));
+                pc += size;
+
+                if !is_nonfinal {
+                    return Ok(asm);
+                }
+            },
+            (None, _, _) => return Ok(asm)
+        }
     }
 }

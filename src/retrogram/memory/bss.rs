@@ -2,9 +2,10 @@
 //! unknown.
 
 use std::marker::PhantomData;
+use std::convert::TryFrom;
 use std::ops::Sub;
 use crate::retrogram::mynums::CheckedSub;
-use crate::retrogram::memory::{Image, Pointer};
+use crate::retrogram::memory::{Image, Pointer, PtrNum, Offset};
 use crate::retrogram::reg;
 
 /// Models a range of memory whose contents are unknown.
@@ -26,7 +27,7 @@ impl<P, MV, IO> UnknownImage<P, MV, IO> {
     }
 }
 
-impl<P, MV, IO> Image for UnknownImage<P, MV, IO> where P: CheckedSub + Clone, IO: From<<P as Sub>::Output> {
+impl<P, MV, IO> Image for UnknownImage<P, MV, IO> where P: Clone + CheckedSub, IO: Offset<P> {
     type Pointer = P;
     type Offset = IO;
     type Data = MV;
@@ -36,7 +37,10 @@ impl<P, MV, IO> Image for UnknownImage<P, MV, IO> where P: CheckedSub + Clone, I
     }
 
     fn decode_addr(&self, ptr: &Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset> {
-        base.checked_sub(ptr.as_pointer()).map(|p| IO::from(p))
+        match base.checked_sub(ptr.as_pointer()) {
+            Some(p) => IO::try_from(p).ok(),
+            None => None
+        }
     }
 
     fn minimize_context(&self, ptr: Pointer<Self::Pointer>) -> Pointer<Self::Pointer> {
@@ -66,7 +70,7 @@ impl<P, MV, IO> UnknownBankedImage<P, MV, IO> {
     }
 }
 
-impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: CheckedSub + Clone, IO: From<<P as Sub>::Output> {
+impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: Clone + CheckedSub, IO: Offset<P> {
     type Pointer = P;
     type Offset = IO;
     type Data = MV;
@@ -76,7 +80,10 @@ impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: CheckedSub + Cl
     }
 
     fn decode_addr(&self, ptr: &Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset> {
-        base.checked_sub(ptr.as_pointer()).map(|p| IO::from(p))
+        match base.checked_sub(ptr.as_pointer()) {
+            Some(p) => IO::try_from(p).ok(),
+            None => None
+        }
     }
 
     fn minimize_context(&self, ptr: Pointer<Self::Pointer>) -> Pointer<Self::Pointer> {
