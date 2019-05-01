@@ -275,6 +275,17 @@ fn decode_ldmstm(rn: Aarch32Register, opcode: u32, cond: u32, reglist: u32) -> (
     (Some(Instruction::new(&format!("{}{}{}{}", op, condcode(cond), u_string, p_string), vec![rn_operand, reglist_operand])), 0, false)
 }
 
+pub fn decode_bl(pc: Pointer, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool) {
+    let is_link = (offset & 0x01000000) != 0;
+    let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
+    let target = pc.wrapping_add((offset & 0x007FFFFF) | signbit);
+
+    match is_link {
+        true => (Some(ast::Instruction::new(&format!("BL{}", condcode(cond)), vec![ast::Operand::cptr(target)])), 4, true),
+        false => (Some(ast::Instruction::new(&format!("BL{}", condcode(cond)), vec![ast::Operand::cptr(target)])), 4, false)
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -315,7 +326,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
             (_, 3) if is_mediabit => (None, 0, false), //Media extension space
             (_, 3) => (Some(Instruction::new(&format!("{}{}", lsw_opcode(opcode, 1), condcode(cond)), address_operand(rn, rd, opcode, 1, lsimmed))), 4, true), //Load/store with register offset
             (_, 4) => decode_ldmstm(rn, opcode, cond, instr & 0x0000FFFF), //Load/store multiple
-            (_, 5) => (None, 0, false), //Branch with or without link
+            (_, 5) => decode_bl(*p.as_pointer(), cond, instr), //Branch with or without link
             (_, 6) => (None, 0, false), //Coprocessor load/store and doubleword xfrs
             (_, 7) if is_swilink_ => (None, 0, false), //Software interrupt
             (_, 7) if is_mediabit => (None, 0, false), //Coprocessor register transfer
