@@ -11,12 +11,12 @@ pub fn construct_platform<F>(file: &mut F) -> io::Result<aarch32::Bus> where F: 
     //Furthermore, it's execute-only; reads are open-bus and we can't model that
     //yet.
     bus.install_mem(0x00000000, 0x00004000); //BIOS
-    bus.install_mem(0x02000000, 0x02040000); //EWRAM
-    bus.install_mem(0x03000000, 0x03008000); //IOWRAM
-    bus.install_io(0x04000000, 0x040003FF); //IOREG
-    bus.install_mem(0x05000000, 0x05000400); //CGRAM
-    bus.install_mem(0x06000000, 0x06018000); //VRAM
-    bus.install_mem(0x07000000, 0x07000400); //OAM
+    bus.install_mem(0x02000000, 0x00040000); //EWRAM
+    bus.install_mem(0x03000000, 0x00008000); //IOWRAM
+    bus.install_io(0x04000000, 0x000003FF); //IOREG
+    bus.install_mem(0x05000000, 0x00000400); //CGRAM
+    bus.install_mem(0x06000000, 0x00018000); //VRAM
+    bus.install_mem(0x07000000, 0x00000400); //OAM
     bus.install_rom(0x08000000, 0x02000000, file)?;
     bus.install_rom(0x0A000000, 0x02000000, file)?;
     bus.install_rom(0x0C000000, 0x02000000, file)?;
