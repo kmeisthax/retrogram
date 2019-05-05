@@ -85,7 +85,7 @@ pub type Operand = ast::Operand<Offset, Value, f32, Pointer>;
 pub type Instruction = ast::Instruction<Offset, Value, f32, Pointer>;
 
 /// The AST type which represents disassembled code.
-pub type Assembly = ast::Assembly<Offset, Value, f32, Pointer>;
+pub type Section = ast::Section<Offset, Value, f32, Pointer>;
 
 fn shift_symbol(shift: u32, shift_imm: u32) -> &'static str {
     match (shift, shift_imm) {

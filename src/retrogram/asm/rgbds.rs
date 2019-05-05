@@ -77,11 +77,11 @@ pub fn parse_symbol_file<F>(file: F, db: &mut Database<lr35902::Pointer, lr35902
 }
 
 pub struct RGBDSAstFormatee<'a, I, S, F, P> {
-    tree: &'a ast::Assembly<I, S, F, P>
+    tree: &'a ast::Section<I, S, F, P>
 }
 
 impl<'a, I, S, F, P> RGBDSAstFormatee<'a, I, S, F, P> {
-    pub fn wrap(tree: &'a ast::Assembly<I, S, F, P>) -> Self {
+    pub fn wrap(tree: &'a ast::Section<I, S, F, P>) -> Self {
         RGBDSAstFormatee {
             tree: tree
         }
@@ -142,7 +142,7 @@ impl<'a, I, S, F, P> RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: 
     }
 }
 
-impl<'a, I, S, F, P> fmt::Display for RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
+impl<'a, I, S, F, P> fmt::Display for RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: fmt::Display, F: fmt::Display, P: Clone + fmt::Display + fmt::LowerHex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for line in self.tree.iter_lines() {
             if let Some(ref label) = line.label() {

@@ -252,13 +252,17 @@ impl<I, S, F, P> Line<I, S, F, P> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Assembly<I, S, F, P> {
+pub struct Section<I, S, F, P> {
+    name: String,
+    loc: memory::Pointer<P>,
     lines: Vec<Line<I, S, F, P>>
 }
 
-impl<I, S, F, P> Assembly<I, S, F, P> {
-    pub fn new() -> Self {
-        Assembly {
+impl<I, S, F, P> Section<I, S, F, P> where P: Clone {
+    pub fn new(name: &str, loc: &memory::Pointer<P>) -> Self {
+        Section {
+            name: name.to_string(),
+            loc: loc.clone(),
             lines: Vec::new()
         }
     }
@@ -269,5 +273,13 @@ impl<I, S, F, P> Assembly<I, S, F, P> {
 
     pub fn append_line(&mut self, line: Line<I, S, F, P>) {
         self.lines.push(line);
+    }
+
+    pub fn section_name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn section_loc(&self) -> &memory::Pointer<P> {
+        &self.loc
     }
 }

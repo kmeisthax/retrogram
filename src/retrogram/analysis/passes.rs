@@ -1,7 +1,7 @@
 //! Analysis passes responsible for transforming AST output from the
 //! disassemblers.
 
-use std::io;
+use std::{fmt, io};
 use std::collections::HashSet;
 use std::fmt::UpperHex;
 use crate::retrogram::analysis::{Database, ReferenceKind};
@@ -17,11 +17,11 @@ use crate::retrogram::{ast, memory, analysis};
 ///    to the offsets provided by the disassembler function.
 ///  * Disassembly continues until the program unconditionally jumps to another
 ///    location, returns, or executes an invalid instruction.
-pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<(ast::Assembly<I, SI, F, P>, HashSet<Option<P>>)>
-    where P: memory::PtrNum<S> + analysis::Mappable, S: memory::Offset<P>,
+pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<(ast::Section<I, SI, F, P>, HashSet<Option<P>>)>
+    where P: memory::PtrNum<S> + analysis::Mappable + fmt::Display, S: memory::Offset<P>,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, Vec<Option<P>>) {
     let mut pc = start_pc;
-    let mut asm = ast::Assembly::new();
+    let mut asm = ast::Section::new(&format!("Untitled Section at {}", pc.as_pointer()), &pc);
     let mut targets = HashSet::new();
 
     loop {
@@ -74,13 +74,13 @@ pub fn replace_operand_with_label<I, S, F, P, AMV, AS, AIO>(src_operand: ast::Op
 /// 
 /// If a given pointer has no matching label, then a temporary label will be
 /// automatically generated and added to the database.
-pub fn replace_labels<I, S, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, S, F, P>, db: &mut Database<P, AS>, memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Assembly<I, S, F, P>
+pub fn replace_labels<I, S, F, P, AMV, AS, AIO>(src_assembly: ast::Section<I, S, F, P>, db: &mut Database<P, AS>, memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Section<I, S, F, P>
     where P: memory::PtrNum<AS> + analysis::Mappable + Clone + UpperHex,
         AS: memory::Offset<P> + Clone,
         I: Clone,
         S: Clone,
         F: Clone {
-    let mut dst_assembly = ast::Assembly::new();
+    let mut dst_assembly = ast::Section::new(src_assembly.section_name(), src_assembly.section_loc());
 
     for line in src_assembly.iter_lines() {
         if let Some(instr) = line.instr() {
@@ -103,9 +103,9 @@ pub fn replace_labels<I, S, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, S
 
 /// Given an Assembly, create a new Assembly with all labels inserted from the
 /// database.
-pub fn inject_labels<I, S, F, P, MS>(src_assembly: ast::Assembly<I, S, F, P>, db: &Database<P, MS>) -> ast::Assembly<I, S, F, P>
+pub fn inject_labels<I, S, F, P, MS>(src_assembly: ast::Section<I, S, F, P>, db: &Database<P, MS>) -> ast::Section<I, S, F, P>
     where P: analysis::Mappable, I: Clone, S: Clone, F: Clone {
-    let mut dst_assembly = ast::Assembly::new();
+    let mut dst_assembly = ast::Section::new(src_assembly.section_name(), src_assembly.section_loc());
     
     for line in src_assembly.iter_lines() {
         if let None = line.label() {

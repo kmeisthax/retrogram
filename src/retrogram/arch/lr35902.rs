@@ -48,7 +48,7 @@ pub type Instruction = ast::Instruction<Offset, SignedValue, f32, Pointer>;
 /// The AST type which represents disassembled code.
 /// 
 /// TODO: When ! is stable, replace the floating-point type with !.
-pub type Assembly = ast::Assembly<Offset, SignedValue, f32, Pointer>;
+pub type Section = ast::Section<Offset, SignedValue, f32, Pointer>;
 
 fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {

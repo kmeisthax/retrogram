@@ -25,7 +25,7 @@ impl<T> Nameable for T where T: Clone + FromStr + Display + LowerHex + UpperHex 
 
 }
 
-fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P, MS>, bus: &memory::Memory<P, MV, MS, IO>, disassemble: &DIS) -> io::Result<ast::Assembly<I, S, F, P>>
+fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P, MS>, bus: &memory::Memory<P, MV, MS, IO>, disassemble: &DIS) -> io::Result<ast::Section<I, S, F, P>>
     where P: memory::PtrNum<MS> + analysis::Mappable + Nameable,
         MS: memory::Offset<P>,
         I: Clone + Display,
