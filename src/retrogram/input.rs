@@ -44,7 +44,7 @@ pub fn parse_ptr<P, MV, S, IO>(text_str: &str, db: &analysis::Database<P, S>, bu
         let pval = P::try_from(*pival).ok()?;
         let ptr = memory::Pointer::from(pval);
 
-        Some(bus.insert_user_context(ptr, &v[1..]))
+        Some(bus.insert_user_context(ptr, &v[..v.len() - 1]))
     } else {
         None
     }
