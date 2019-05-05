@@ -2,6 +2,7 @@
 
 use std::{io, fmt};
 use std::ops::{Shl, BitOr};
+use std::cmp::PartialOrd;
 use crate::retrogram::ast;
 use crate::retrogram::arch::lr35902;
 use crate::retrogram::platform::gb;
@@ -142,19 +143,55 @@ impl<'a, I, S, F, P> RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: 
     }
 }
 
-impl<'a, I, S, F, P> fmt::Display for RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: fmt::Display, F: fmt::Display, P: Clone + fmt::Display + fmt::LowerHex {
+impl<'a, I, S, F, P> fmt::Display for RGBDSAstFormatee<'a, I, S, F, P>
+    where I: fmt::Display, S: fmt::Display, F: fmt::Display,
+        P: Clone + From<u16> + fmt::Display + PartialOrd + fmt::LowerHex + fmt::UpperHex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let loc = self.tree.section_loc();
+
+        if *loc.as_pointer() < P::from(0x4000 as u16) {
+            write!(f, "SECTION \"{}\", ROM0[${:X}]\n", self.tree.section_name(), loc.as_pointer())?;
+        } else if *loc.as_pointer() < P::from(0x8000 as u16) {
+            if let Some(bank) = loc.get_platform_context("R").into_concrete() {
+                write!(f, "SECTION \"{}\", ROMX[${:X}], BANK[${:X}]\n", self.tree.section_name(), loc.as_pointer(), bank)?;
+            } else {
+                write!(f, "SECTION \"{}\", ROMX[${:X}]\n", self.tree.section_name(), loc.as_pointer())?;
+            }
+        } else if *loc.as_pointer() < P::from(0xA000 as u16) {
+            if let Some(bank) = loc.get_platform_context("V").into_concrete() {
+                write!(f, "SECTION \"{}\", VRAM[${:X}], BANK[${:X}]\n", self.tree.section_name(), loc.as_pointer(), bank)?;
+            } else {
+                write!(f, "SECTION \"{}\", VRAM[${:X}]\n", self.tree.section_name(), loc.as_pointer())?;
+            }
+        } else if *loc.as_pointer() < P::from(0xC000 as u16) {
+            if let Some(bank) = loc.get_platform_context("S").into_concrete() {
+                write!(f, "SECTION \"{}\", SRAM[${:X}], BANK[${:X}]\n", self.tree.section_name(), loc.as_pointer(), bank)?;
+            } else {
+                write!(f, "SECTION \"{}\", SRAM[${:X}]\n", self.tree.section_name(), loc.as_pointer())?;
+            }
+        } else if *loc.as_pointer() < P::from(0xD000 as u16) {
+            write!(f, "SECTION \"{}\", WRAM0[${:X}]\n", self.tree.section_name(), loc.as_pointer())?;
+        } else if *loc.as_pointer() < P::from(0xE000 as u16) {
+            if let Some(bank) = loc.get_platform_context("W").into_concrete() {
+                write!(f, "SECTION \"{}\", WRAMX[${:X}], BANK[${:X}]\n", self.tree.section_name(), loc.as_pointer(), bank)?;
+            } else {
+                write!(f, "SECTION \"{}\", WRAMX[${:X}]\n", self.tree.section_name(), loc.as_pointer())?;
+            }
+        } else {
+            write!(f, "SECTION \"{}\", HRAM[${:X}]\n", self.tree.section_name(), loc.as_pointer())?;
+        }
+
         for line in self.tree.iter_lines() {
             if let Some(ref label) = line.label() {
                 if let Some(_parent_label) = label.parent_name() {
-                    write!(f, ".{}:", label.name())?;
+                    write!(f, ".{}:\n", label.name())?;
                 } else {
-                    write!(f, "{}:", label.name())?;
+                    write!(f, "{}:\n", label.name())?;
                 }
             }
 
             if let Some(ref instr) = line.instr() {
-                write!(f, "{}", instr.opcode())?;
+                write!(f, "    {}", instr.opcode())?;
 
                 let mut has_written_operand = false;
                 for operand in instr.iter_operands() {
