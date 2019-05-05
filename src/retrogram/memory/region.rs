@@ -169,7 +169,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     /// determines how many atomic memory units are required to be read in order
     /// to populate the expected value type.
     pub fn read_leword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
-        where EV: memory::Desegmentable<MV>,
+        where EV: memory::Desegmentable<MV> + reg::Concretizable,
+            MV: reg::Concretizable,
+            <EV as Shl<usize>>::Output: reg::Concretizable,
             reg::Symbolic<EV>: Shl<usize>,
             reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output> {
         let units_reqd = (EV::bound_width() as f32 / MV::bound_width() as f32).round() as usize;
@@ -194,7 +196,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     /// determines how many atomic memory units are required to be read in order
     /// to populate the expected value type.
     pub fn read_beword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
-        where EV: memory::Desegmentable<MV>,
+        where EV: memory::Desegmentable<MV> + reg::Concretizable,
+            MV: reg::Concretizable,
+            <EV as Shl<usize>>::Output: reg::Concretizable,
             reg::Symbolic<EV>: Shl<usize>,
             reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output> {
         let units_reqd = (EV::bound_width() as f32 / MV::bound_width() as f32).round() as usize;

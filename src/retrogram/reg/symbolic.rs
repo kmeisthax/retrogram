@@ -54,29 +54,40 @@ impl<T> From<T> for Symbolic<T> where T: Symbolizable {
     }
 }
 
-impl<T, R> Convertable<R> for Symbolic<T> where T: From<R> {
+impl<T, R> Convertable<R> for Symbolic<T> where T: From<R> + Concretizable, R: Concretizable {
     fn convert_from(v: Symbolic<R>) -> Self {
+        let zero_extension = T::from(!T::from(R::from(!R::zero())));
+        
         Symbolic {
             lower_bound: T::from(v.lower_bound),
             upper_bound: T::from(v.upper_bound),
             bits_set: T::from(v.bits_set),
-            bits_cleared: T::from(v.bits_cleared),
+            bits_cleared: T::from(zero_extension | T::from(v.bits_cleared)),
         }
     }
 }
 
 impl<T> Symbolic<T> where T: Concretizable {
+    fn is_bound_concrete(&self) -> bool {
+        self.lower_bound == self.upper_bound
+    }
+
+    fn is_bits_concrete(&self) -> bool {
+        T::from(self.bits_set.clone() | self.bits_cleared.clone()) == T::from(!T::zero())
+    }
     /// Returns true if only one valid T exists for this register
     ///
     /// TODO: This is nonexaustive, contrived cases exist which have one
     /// satisfying value but not by way of one bound mechanism or the other.
     pub fn is_concrete(&self) -> bool {
-        (self.lower_bound == self.upper_bound) || T::from(self.bits_set.clone() | self.bits_cleared.clone()) == T::from(!T::zero())
+        self.is_bound_concrete() || self.is_bits_concrete()
     }
 
     pub fn into_concrete(self) -> Option<T> {
-        if self.is_concrete() {
+        if self.is_bound_concrete() {
             Some(self.lower_bound)
+        } else if self.is_bits_concrete() {
+            Some(self.bits_set)
         } else {
             None
         }

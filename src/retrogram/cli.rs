@@ -28,12 +28,21 @@ impl<T> Nameable for T where T: Clone + FromStr + Display + LowerHex + UpperHex 
 fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P, MS>, bus: &memory::Memory<P, MV, MS, IO>, disassemble: &DIS) -> io::Result<ast::Section<I, S, F, P>>
     where P: memory::PtrNum<MS> + analysis::Mappable + Nameable,
         MS: memory::Offset<P>,
+        memory::Pointer<P>: std::fmt::Debug,
         I: Clone + Display,
         S: Clone + Display,
         F: Clone + Display,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, MS, IO>) -> (Option<ast::Instruction<I, S, F, P>>, MS, bool, Vec<Option<memory::Pointer<P>>>) {
     let start_pc = input::parse_ptr(start_spec, db, bus);
     let (orig_asm, targets) = analysis::disassemble_block(start_pc.expect("Must specify a valid address to analyze"), bus, disassemble)?;
+
+    for target in targets {
+        if let Some(target) = target {
+            if let None = db.pointer_label(&target) {
+                db.insert_placeholder_label(target, analysis::ReferenceKind::Code);
+            }
+        }
+    }
 
     match orig_asm.iter_lines().next() {
         Some(line) => {

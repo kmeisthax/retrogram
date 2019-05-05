@@ -1,6 +1,6 @@
 //! My number traits
 
-use std::ops::Sub;
+use std::ops::{Shl, Sub};
 
 /// A trait which indicates the number of left shifts of the given type's
 /// smallest value (1) are required in order to overflow that type.
@@ -24,7 +24,7 @@ use std::ops::Sub;
 /// would thus indicate how many *digits* wide your type was (instead of bits)
 /// and it would be possible to segment and join these decimal values into a
 /// decimally-valued memory and processor architecture for analysis.
-pub trait BoundWidth<RHS = Self> {
+pub trait BoundWidth<RHS = Self> : Shl<RHS> {
     fn bound_width() -> RHS;
 }
 

@@ -2,6 +2,7 @@
 
 use std::ops::{Sub, Not, BitAnd, BitOr, Shl, Shr};
 use std::cmp::{min, max, PartialEq, PartialOrd};
+use std::fmt::Debug;
 use num::traits::Zero;
 use crate::retrogram::reg;
 
@@ -43,11 +44,11 @@ impl<T> Symbolizable for T where T: Clone + Not + From<<T as Not>::Output> {
 /// that it is possible to generate an "all bits set" value by way of inverting
 /// Zero. If your type implements Concretizable but does not satisfy this bound
 /// then using it as a symbolic type may cause errors.
-pub trait Concretizable: Clone + PartialEq + BitOr + Not + Zero + From<<Self as BitOr>::Output> + From<<Self as Not>::Output> {
+pub trait Concretizable: Clone + Debug + PartialEq + BitOr + Not + Zero + From<<Self as BitOr>::Output> + From<<Self as Not>::Output> {
 
 }
 
-impl<T> Concretizable for T where T: Clone + PartialEq + BitOr + Not + Zero + From<<Self as BitOr>::Output> + From<<Self as Not>::Output> {
+impl<T> Concretizable for T where T: Clone + Debug + PartialEq + BitOr + Not + Zero + From<<Self as BitOr>::Output> + From<<Self as Not>::Output> {
 
 }
 

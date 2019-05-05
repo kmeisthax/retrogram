@@ -156,10 +156,11 @@ impl<'a, I, S, F, P> fmt::Display for RGBDSAstFormatee<'a, I, S, F, P> where I: 
             if let Some(ref instr) = line.instr() {
                 write!(f, "{}", instr.opcode())?;
 
-                let has_written_operand = false;
+                let mut has_written_operand = false;
                 for operand in instr.iter_operands() {
                     if !has_written_operand {
                         write!(f, " ")?;
+                        has_written_operand = true;
                     } else {
                         write!(f, ", ")?;
                     }
