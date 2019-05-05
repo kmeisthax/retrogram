@@ -36,7 +36,7 @@ fn str2hex<I>(thestr: &str) -> Option<I> where I: From<u8> + Shl + From<<I as Sh
 }
 
 /// Read the symbols from an RGBDS symbol file.
-pub fn parse_symbol_file<F>(file: F, db: &mut Database<lr35902::Pointer>) -> io::Result<()> where F: io::BufRead {
+pub fn parse_symbol_file<F>(file: F, db: &mut Database<lr35902::Pointer, lr35902::Offset>) -> io::Result<()> where F: io::BufRead {
     for line in file.lines() {
         let line = line?;
         let mut split = line.split(" ");
@@ -130,7 +130,7 @@ impl<'a, I, S, F, P> RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: 
                     } else {
                         write!(f, ", ")?;
                     }
-                    
+
                     self.write_operand(&op, f)?;
                 }
 

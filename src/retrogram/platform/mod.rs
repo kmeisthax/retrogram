@@ -13,7 +13,7 @@ use serde::Serialize;
 #[derive(Copy, Clone, Serialize, Debug)]
 pub enum PlatformName {
     GB,
-    AGB,
+    AGB
 }
 
 impl str::FromStr for PlatformName {

@@ -11,7 +11,7 @@ use crate::retrogram::{ast, memory, project, analysis};
 
 /// Given an operand, replace all Pointer literals with Label operands obtained
 /// from the Database.
-pub fn replace_operand_with_label<I, S, F, P, AMV, AS, AIO>(src_operand: ast::Operand<I, S, F, P>, db: &mut Database<P>, start_addr: &memory::Pointer<P>, memory: &memory::Memory<P, AMV, AS, AIO>, refkind: ReferenceKind) -> ast::Operand<I, S, F, P>
+pub fn replace_operand_with_label<I, S, F, P, AMV, AS, AIO>(src_operand: ast::Operand<I, S, F, P>, db: &mut Database<P, AS>, start_addr: &memory::Pointer<P>, memory: &memory::Memory<P, AMV, AS, AIO>, refkind: ReferenceKind) -> ast::Operand<I, S, F, P>
     where P: memory::PtrNum<AS> + analysis::Mappable + Clone + UpperHex,
         AS: memory::Offset<P> + Clone,
         I: Clone,
@@ -40,7 +40,7 @@ pub fn replace_operand_with_label<I, S, F, P, AMV, AS, AIO>(src_operand: ast::Op
 /// 
 /// If a given pointer has no matching label, then a temporary label will be
 /// automatically generated and added to the database.
-pub fn replace_labels<I, S, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, S, F, P>, db: &mut Database<P>, memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Assembly<I, S, F, P>
+pub fn replace_labels<I, S, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, S, F, P>, db: &mut Database<P, AS>, memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Assembly<I, S, F, P>
     where P: memory::PtrNum<AS> + analysis::Mappable + Clone + UpperHex,
         AS: memory::Offset<P> + Clone,
         I: Clone,
@@ -69,7 +69,7 @@ pub fn replace_labels<I, S, F, P, AMV, AS, AIO>(src_assembly: ast::Assembly<I, S
 
 /// Given an Assembly, create a new Assembly with all labels inserted from the
 /// database.
-pub fn inject_labels<I, S, F, P>(src_assembly: ast::Assembly<I, S, F, P>, db: &Database<P>) -> ast::Assembly<I, S, F, P>
+pub fn inject_labels<I, S, F, P, MS>(src_assembly: ast::Assembly<I, S, F, P>, db: &Database<P, MS>) -> ast::Assembly<I, S, F, P>
     where P: analysis::Mappable, I: Clone, S: Clone, F: Clone {
     let mut dst_assembly = ast::Assembly::new();
     

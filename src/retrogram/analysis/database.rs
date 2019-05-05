@@ -26,26 +26,49 @@ impl Display for ReferenceKind {
     }
 }
 
+#[derive(Clone, Debug)]
+enum AnnotationTyping {
+    /// Indicates that the annotated region forms a single string of
+    /// instructions with no breaks.
+    BasicBlock,
+
+    /// Indicates that the annotated region constitutes a single subroutine,
+    /// consisting of at least one BasicBlock.
+    Subroutine
+}
+
+#[derive(Clone, Debug)]
+struct Annotation<P, S> where P: analysis::Mappable {
+    start: memory::Pointer<P>,
+    length: S,
+    antype: AnnotationTyping,
+    label: Option<ast::Label>
+}
+
 /// A repository of information obtained from the program under analysis.
 #[derive(Clone, Debug)]
-pub struct Database<P> where P: analysis::Mappable {
+pub struct Database<P, S> where P: analysis::Mappable {
     /// A list of all labels in the program.
     labels: HashMap<ast::Label, memory::Pointer<P>>,
     
     /// A list of all pointer values in the program which have a label.
-    pointers: HashMap<memory::Pointer<P>, ast::Label>
+    pointers: HashMap<memory::Pointer<P>, ast::Label>,
+
+    /// A list of program regions.
+    subs: Vec<Annotation<P, S>>
 }
 
-impl<P> Database<P> where P: analysis::Mappable {
+impl<P, S> Database<P, S> where P: analysis::Mappable {
     pub fn new() -> Self {
         Database {
             labels: HashMap::new(),
-            pointers: HashMap::new()
+            pointers: HashMap::new(),
+            subs: Vec::new()
         }
     }
 
     pub fn for_program<PS>(prog: &project::Program, parse_symbol_file: PS) -> io::Result<Self>
-        where PS: Fn(io::BufReader<fs::File>, &mut Database<P>) -> io::Result<()> {
+        where PS: Fn(io::BufReader<fs::File>, &mut Database<P, S>) -> io::Result<()> {
         let mut db = Self::new();
 
         for symbol_file in prog.iter_symbol_files() {
