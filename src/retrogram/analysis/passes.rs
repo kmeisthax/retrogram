@@ -1,13 +1,11 @@
 //! Analysis passes responsible for transforming AST output from the
 //! disassemblers.
 
-use std::{fs, io};
-use std::collections::HashMap;
-use std::hash::Hash;
-use std::ops::{Add, Sub};
-use std::fmt::{Display, Formatter, Result, UpperHex};
+use std::io;
+use std::collections::HashSet;
+use std::fmt::UpperHex;
 use crate::retrogram::analysis::{Database, ReferenceKind};
-use crate::retrogram::{ast, memory, project, analysis};
+use crate::retrogram::{ast, memory, analysis};
 
 /// Given memory and a pointer, disassemble a basic block of instructions and
 /// return them.
@@ -19,23 +17,28 @@ use crate::retrogram::{ast, memory, project, analysis};
 ///    to the offsets provided by the disassembler function.
 ///  * Disassembly continues until the program unconditionally jumps to another
 ///    location, returns, or executes an invalid instruction.
-pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<ast::Assembly<I, SI, F, P>>
-    where P: memory::PtrNum<S>, S: memory::Offset<P>,
+pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<(ast::Assembly<I, SI, F, P>, HashSet<Option<P>>)>
+    where P: memory::PtrNum<S> + analysis::Mappable, S: memory::Offset<P>,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, Vec<Option<P>>) {
     let mut pc = start_pc;
     let mut asm = ast::Assembly::new();
+    let mut targets = HashSet::new();
 
     loop {
         match disassemble(&pc, &plat) {
-            (Some(instr), size, is_nonfinal, targets) => {
+            (Some(instr), size, is_nonfinal, instr_targets) => {
                 asm.append_line(ast::Line::new(None, Some(instr), None, pc.clone().into_ptr()));
                 pc = pc.contextualize(P::from(pc.as_pointer().clone() + size));
 
+                for target in instr_targets {
+                    targets.insert(target);
+                }
+
                 if !is_nonfinal {
-                    return Ok(asm);
+                    return Ok((asm, targets));
                 }
             },
-            (None, _, _, _) => return Ok(asm)
+            (None, _, _, _) => return Ok((asm, targets))
         }
     }
 }
