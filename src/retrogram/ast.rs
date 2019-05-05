@@ -1,6 +1,6 @@
 //!An abstract syntax tree representation of disassembled code
 
-use std::{fmt, slice, str};
+use std::{slice, str};
 use crate::retrogram::memory;
 
 ///A literal value, such as an integer, pointer, or other kind of reference.
@@ -122,43 +122,6 @@ impl<I, S, F, P> Operand<I, S, F, P> {
     }
 }
 
-impl<I, S, F, P> fmt::Display for Operand<I, S, F, P> where I: fmt::Display, S: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Operand::Symbol(s) => write!(f, "{}", s),
-            Operand::Literal(Literal::Integer(i)) => write!(f, "{}", i),
-            Operand::Literal(Literal::SignedInteger(i)) => write!(f, "{}", i),
-            Operand::Literal(Literal::Float(fl)) => write!(f, "{}", fl),
-            Operand::Literal(Literal::Pointer(p)) => write!(f, "${:x}", p),
-            Operand::Literal(Literal::String(s)) => write!(f, "{}", s),
-            Operand::Literal(Literal::Missing) => write!(f, "?"),
-            Operand::Label(lbl) if lbl.parent_name == None => write!(f, "{}", lbl.name),
-            Operand::Label(lbl) => write!(f, ".{}", lbl.name),
-            Operand::DataReference(op) => write!(f, "{}", op),
-            Operand::CodeReference(op) => write!(f, "{}", op),
-            Operand::Indirect(op) => write!(f, "[{}]", op),
-            Operand::Add(op1, op2) => write!(f, "{} + {}", op1, op2),
-            Operand::PrefixSymbol(s, op) => write!(f, "{} {}", s, op),
-            Operand::SuffixSymbol(s, op) => write!(f, "{} {}", op, s),
-            Operand::WrapperSymbol(s1, ops, s2) => {
-                write!(f, "{}", s1)?;
-
-                let mut first = true;
-                for op in ops {
-                    if first {
-                        first = false;
-                        write!(f, "{}", op)?;
-                    } else {
-                        write!(f, ", {}", op)?;
-                    }
-                }
-
-                write!(f, "{}", s2)
-            }
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct Instruction<I, S, F, P> {
     /// The instruction being executed
@@ -181,29 +144,6 @@ impl<I, S, F, P> Instruction<I, S, F, P> {
 
     pub fn iter_operands(&self) -> slice::Iter<Operand<I, S, F, P>> {
         self.operands.iter()
-    }
-}
-
-impl<I, S, F, P> fmt::Display for Instruction<I, S, F, P> where Operand<I, S, F, P>: fmt::Display {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.operands.len() == 0 {
-            write!(f, "{}", self.opcode)
-        } else {
-            let mut first = true;
-            write!(f, "{} ", self.opcode)?;
-
-            for operand in &self.operands {
-                if first {
-                    first = false;
-                    write!(f, "{}", operand)?;
-                    continue;
-                }
-
-                write!(f, ", {}", operand)?;
-            }
-
-            Ok(())
-        }
     }
 }
 
@@ -260,40 +200,12 @@ impl str::FromStr for Label {
     }
 }
 
-impl fmt::Display for Label {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(_parent_label) = &self.parent_name {
-            write!(f, ".{}:", self.name)
-        } else {
-            write!(f, "{}:", self.name)
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct Line<I, S, F, P> {
     label: Option<Label>,
     instruction: Option<Instruction<I, S, F, P>>,
     comment: Option<String>,
     source_address: memory::Pointer<P>,
-}
-
-impl<I, S, F, P> fmt::Display for Line<I, S, F, P> where Instruction<I, S, F, P>: fmt::Display {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(ref label) = self.label {
-            write!(f, "{} ", label)?;
-        }
-
-        if let Some(ref instruction) = self.instruction {
-            write!(f, "{} ", instruction)?;
-        }
-
-        if let Some(ref comment) = self.comment {
-            write!(f, ";{}", comment)?;
-        }
-
-        write!(f, "\n")
-    }
 }
 
 impl<I, S, F, P> Line<I, S, F, P> {
@@ -357,15 +269,5 @@ impl<I, S, F, P> Assembly<I, S, F, P> {
 
     pub fn append_line(&mut self, line: Line<I, S, F, P>) {
         self.lines.push(line);
-    }
-}
-
-impl<I, S, F, P> fmt::Display for Assembly<I, S, F, P> where Line<I, S, F, P>: fmt::Display {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for line in self.iter_lines() {
-            write!(f, "{}", line)?;
-        }
-
-        Ok(())
     }
 }
