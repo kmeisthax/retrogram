@@ -25,15 +25,15 @@ impl<T> Nameable for T where T: Clone + FromStr + Display + LowerHex + UpperHex 
 
 }
 
-fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P, MS>, bus: &memory::Memory<P, MV, MS, IO>, disassemble_block: DIS) -> io::Result<ast::Assembly<I, S, F, P>>
+fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P, MS>, bus: &memory::Memory<P, MV, MS, IO>, disassemble: &DIS) -> io::Result<ast::Assembly<I, S, F, P>>
     where P: memory::PtrNum<MS> + analysis::Mappable + Nameable,
         MS: memory::Offset<P>,
         I: Clone + Display,
         S: Clone + Display,
         F: Clone + Display,
-        DIS: Fn(memory::Pointer<P>, &memory::Memory<P, MV, MS, IO>) -> io::Result<ast::Assembly<I, S, F, P>> {
+        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, MS, IO>) -> (Option<ast::Instruction<I, S, F, P>>, MS, bool, Vec<Option<P>>) {
     let start_pc = input::parse_ptr(start_spec, db, bus);
-    let orig_asm = disassemble_block(start_pc.expect("Must specify a valid address to analyze"), bus)?;
+    let orig_asm = analysis::disassemble_block(start_pc.expect("Must specify a valid address to analyze"), bus, disassemble)?;
 
     match orig_asm.iter_lines().next() {
         Some(line) => {
@@ -68,7 +68,7 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
                 _ => return Err(io::Error::new(io::ErrorKind::Other, "Invalid platform for architecture"))
             };
 
-            let asm = dis_inner(start_spec, &mut db, &bus, arch::lr35902::disassemble_block)?;
+            let asm = dis_inner(start_spec, &mut db, &bus, &arch::lr35902::disassemble)?;
 
             match prog.assembler() {
                 Some(asm::AssemblerName::RGBDS) => println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm)),
@@ -82,7 +82,7 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
                 _ => return Err(io::Error::new(io::ErrorKind::Other, "Invalid platform for architecture"))
             };
 
-            let asm = dis_inner(start_spec, &mut db, &bus, arch::aarch32::disassemble_block)?;
+            let asm = dis_inner(start_spec, &mut db, &bus, &arch::aarch32::disassemble)?;
 
             match prog.assembler() {
                 Some(asm::AssemblerName::RGBDS) => println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm)),

@@ -7,5 +7,6 @@ mod traits;
 pub use traits::*;
 pub use database::Database;
 pub use database::ReferenceKind;
+pub use passes::disassemble_block;
 pub use passes::replace_labels;
 pub use passes::inject_labels;

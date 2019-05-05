@@ -9,6 +9,37 @@ use std::fmt::{Display, Formatter, Result, UpperHex};
 use crate::retrogram::analysis::{Database, ReferenceKind};
 use crate::retrogram::{ast, memory, project, analysis};
 
+/// Given memory and a pointer, disassemble a basic block of instructions and
+/// return them.
+/// 
+/// A basic block consists of an unbroken string of instructions with the
+/// following properties:
+/// 
+///  * Every instruction in the block naturally "follows" one another, according
+///    to the offsets provided by the disassembler function.
+///  * Disassembly continues until the program unconditionally jumps to another
+///    location, returns, or executes an invalid instruction.
+pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<ast::Assembly<I, SI, F, P>>
+    where P: memory::PtrNum<S>, S: memory::Offset<P>,
+        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, Vec<Option<P>>) {
+    let mut pc = start_pc;
+    let mut asm = ast::Assembly::new();
+
+    loop {
+        match disassemble(&pc, &plat) {
+            (Some(instr), size, is_nonfinal, targets) => {
+                asm.append_line(ast::Line::new(None, Some(instr), None, pc.clone().into_ptr()));
+                pc = pc.contextualize(P::from(pc.as_pointer().clone() + size));
+
+                if !is_nonfinal {
+                    return Ok(asm);
+                }
+            },
+            (None, _, _, _) => return Ok(asm)
+        }
+    }
+}
+
 /// Given an operand, replace all Pointer literals with Label operands obtained
 /// from the Database.
 pub fn replace_operand_with_label<I, S, F, P, AMV, AS, AIO>(src_operand: ast::Operand<I, S, F, P>, db: &mut Database<P, AS>, start_addr: &memory::Pointer<P>, memory: &memory::Memory<P, AMV, AS, AIO>, refkind: ReferenceKind) -> ast::Operand<I, S, F, P>
