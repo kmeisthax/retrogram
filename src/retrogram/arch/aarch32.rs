@@ -116,7 +116,7 @@ fn shifter_operand(rn: Aarch32Register, rd: Aarch32Register, immediate_bit: u32,
 }
 
 /// Decode a 5-bit opcode field as if it was for a data processing instruction
-fn decode_dpinst(cond: u32, immediate_bit: u32, opcode: u32, rn: Aarch32Register, rd: Aarch32Register, address_operand: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<Pointer>>) {
+fn decode_dpinst(cond: u32, immediate_bit: u32, opcode: u32, rn: Aarch32Register, rd: Aarch32Register, address_operand: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<memory::Pointer<Pointer>>>) {
     let dp_opcode = match opcode {
         0 => "AND",
         1 => "ANDS",
@@ -190,7 +190,7 @@ fn condcode(instr: u32) -> &'static str {
     }
 }
 
-fn decode_ldst(cond: u32, immediate_bit: u32, opcode: u32, rn: Aarch32Register, rd: Aarch32Register, address_operand: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<Pointer>>) {
+fn decode_ldst(cond: u32, immediate_bit: u32, opcode: u32, rn: Aarch32Register, rd: Aarch32Register, address_operand: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<memory::Pointer<Pointer>>>) {
     let shift_imm = (address_operand & 0x00000F80) >> 7;
     let shift = (address_operand & 0x00000060) >> 5; //Shift type
     let rm = Aarch32Register::from_instr((address_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
@@ -257,7 +257,7 @@ fn decode_ldst(cond: u32, immediate_bit: u32, opcode: u32, rn: Aarch32Register, 
 }
 
 /// Decode an instruction in the LDM/STM instruction space.
-fn decode_ldmstm(cond: u32, opcode: u32, rn: Aarch32Register, reglist: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<Pointer>>) {
+fn decode_ldmstm(cond: u32, opcode: u32, rn: Aarch32Register, reglist: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<memory::Pointer<Pointer>>>) {
     let op = match opcode & 0x01 {
         0x00 => "STM",
         0x01 => "LDM",
@@ -308,21 +308,25 @@ fn decode_ldmstm(cond: u32, opcode: u32, rn: Aarch32Register, reglist: u32) -> (
     (Some(Instruction::new(&format!("{}{}{}{}", op, condcode(cond), u_string, p_string), vec![rn_operand, reglist_operand])), 0, false, targets)
 }
 
-fn decode_bl(pc: Pointer, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<Pointer>>) {
+fn decode_bl(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<memory::Pointer<Pointer>>>) {
     let is_link = (offset & 0x01000000) != 0;
     let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
-    let target = pc.wrapping_add((offset & 0x007FFFFF) | signbit);
+    let target = pc.as_pointer().wrapping_add((offset & 0x007FFFFF) | signbit);
 
     match is_link {
-        true => (Some(ast::Instruction::new(&format!("BL{}", condcode(cond)), vec![ast::Operand::cptr(target)])), 4, true, vec![Some(target)]),
-        false => (Some(ast::Instruction::new(&format!("B{}", condcode(cond)), vec![ast::Operand::cptr(target)])), 4, false, vec![Some(target)])
+        true => (Some(ast::Instruction::new(&format!("BL{}", condcode(cond)), vec![ast::Operand::cptr(target)])), 4, true, vec![Some(pc.contextualize(target))]),
+        false => (Some(ast::Instruction::new(&format!("B{}", condcode(cond)), vec![ast::Operand::cptr(target)])), 4, false, vec![Some(pc.contextualize(target))])
     }
 }
 
-fn decode_swi(cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<Pointer>>) {
-    let target = (offset & 0x00FFFFFF);
+fn decode_swi(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<memory::Pointer<Pointer>>>) {
+    let target = offset & 0x00FFFFFF;
 
-    (Some(ast::Instruction::new(&format!("SWI{}", condcode(cond)), vec![ast::Operand::int(target)])), 4, true, vec![Some(target)])
+    //TODO: when we add THUMB state context, the jump target for SWI needs to be
+    //stripped of it's THUMB state.
+
+    //TODO: The jump target can be in high RAM, how do we handle that?
+    (Some(ast::Instruction::new(&format!("SWI{}", condcode(cond)), vec![ast::Operand::int(target)])), 4, true, vec![Some(pc.contextualize(0x00000008))])
 }
 
 /// Decode a multiply instruction.
@@ -330,7 +334,7 @@ fn decode_swi(cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool, Vec
 /// Please note that the instruction space for multiplies specifies the
 /// registers in a different order from most instructions. Specifically, `rn`
 /// and `rd` are swapped.
-fn decode_mul(cond: u32, opcode: u32, rd: Aarch32Register, rn: Aarch32Register, mult_operand: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<Pointer>>) {
+fn decode_mul(cond: u32, opcode: u32, rd: Aarch32Register, rn: Aarch32Register, mult_operand: u32) -> (Option<Instruction>, Offset, bool, Vec<Option<memory::Pointer<Pointer>>>) {
     let rs = Aarch32Register::from_instr((mult_operand & 0x00000F00) >> 8).expect("Could not parse RS... somehow?!");
     let rm = Aarch32Register::from_instr((mult_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
 
@@ -390,7 +394,7 @@ fn decode_mul(cond: u32, opcode: u32, rd: Aarch32Register, rn: Aarch32Register, 
 ///    from the instruction. The list should not include the next instruction,
 ///    which is implied by the previous two instructions. Instructions with
 ///    dynamic or unknown jump targets must be expressed as None.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instruction>, Offset, bool, Vec<Option<Pointer>>) {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instruction>, Offset, bool, Vec<Option<memory::Pointer<Pointer>>>) {
     let instr : reg::Symbolic<u32> = mem.read_leword(&p);
 
     if let Some(instr) = instr.into_concrete() {
@@ -421,9 +425,9 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
             (_, 3) if is_mediabit => (None, 0, false, vec![]), //Media extension space
             (_, 3) => decode_ldst(cond, 1, opcode, rn, rd, lsimmed), //Load/store with register offset
             (_, 4) => decode_ldmstm(cond, opcode, rn, instr & 0x0000FFFF), //Load/store multiple
-            (_, 5) => decode_bl(*p.as_pointer(), cond, instr), //Branch with or without link
+            (_, 5) => decode_bl(&p, cond, instr), //Branch with or without link
             (_, 6) => (None, 0, false, vec![]), //Coprocessor load/store and doubleword xfrs
-            (_, 7) if is_swilink_ => decode_swi(cond, instr), //Software interrupt
+            (_, 7) if is_swilink_ => decode_swi(&p, cond, instr), //Software interrupt
             (_, 7) if is_mediabit => (None, 0, false, vec![]), //Coprocessor register transfer
             (_, 7) => (None, 0, false, vec![]), //Coprocessor data processing
             _ => (None, 0, false, vec![])

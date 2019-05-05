@@ -66,9 +66,9 @@ fn dptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     op::miss()
 }
 
-fn cptr_target(p: &memory::Pointer<Pointer>, mem: &Bus) -> Option<Pointer> {
+fn cptr_target(p: &memory::Pointer<Pointer>, mem: &Bus) -> Option<memory::Pointer<Pointer>> {
     if let Some(lobit) = mem.read_leword::<u16>(p).into_concrete() {
-        return Some(lobit);
+        return Some(p.contextualize(lobit));
     }
 
     None
@@ -76,7 +76,7 @@ fn cptr_target(p: &memory::Pointer<Pointer>, mem: &Bus) -> Option<Pointer> {
 
 fn cptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     match cptr_target(p, mem) {
-        Some(target) => op::cptr(target),
+        Some(target) => op::cptr(target.into_pointer()),
         None => op::miss()
     }
 }
@@ -89,9 +89,9 @@ fn int_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     op::miss()
 }
 
-fn pcrel_target(p: &memory::Pointer<Pointer>, mem: &Bus) -> Option<Pointer> {
+fn pcrel_target(p: &memory::Pointer<Pointer>, mem: &Bus) -> Option<memory::Pointer<Pointer>> {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
-        return Some(((p.as_pointer() - 1) as i16 + (lobit as i8) as i16) as u16);
+        return Some(p.contextualize(((p.as_pointer() - 1) as i16 + (lobit as i8) as i16) as u16));
     }
 
     None
@@ -99,7 +99,7 @@ fn pcrel_target(p: &memory::Pointer<Pointer>, mem: &Bus) -> Option<Pointer> {
 
 fn pcrel_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     match pcrel_target(p, mem) {
-        Some(target) => op::cptr(target),
+        Some(target) => op::cptr(target.into_pointer()),
         None => op::miss()
     }
 }
@@ -158,7 +158,7 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///    from the instruction. The list should not include the next instruction,
 ///    which is implied by the previous two instructions. Instructions with
 ///    dynamic or unknown jump targets must be expressed as None.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instruction>, Offset, bool, Vec<Option<Pointer>>) {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instruction>, Offset, bool, Vec<Option<memory::Pointer<Pointer>>>) {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
             //TODO: CB prefix
@@ -247,7 +247,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
                 (3, _, 0, 5) => (Some(inst::new("push", vec![op::sym(stackpair)])), 1, true, vec![]),
                 (3, _, 1, 5) => (None, 0, false, vec![]),
                 (3, _, _, 6) => (Some(inst::new(aluop, vec![op::sym("a"), int_op8(&(p.clone()+1), mem)])), 2, true, vec![]),
-                (3, _, _, 7) => (Some(inst::new("rst", vec![op::cptr(op & 0x38)])), 1, true, vec![Some((op & 0x38) as u16)]),
+                (3, _, _, 7) => (Some(inst::new("rst", vec![op::cptr(op & 0x38)])), 1, true, vec![Some(p.contextualize((op & 0x38) as u16))]),
 
                 _ => (None, 0, false, vec![])
             }

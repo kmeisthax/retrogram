@@ -17,9 +17,9 @@ use crate::retrogram::{ast, memory, analysis};
 ///    to the offsets provided by the disassembler function.
 ///  * Disassembly continues until the program unconditionally jumps to another
 ///    location, returns, or executes an invalid instruction.
-pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<(ast::Section<I, SI, F, P>, HashSet<Option<P>>)>
+pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<(ast::Section<I, SI, F, P>, HashSet<Option<memory::Pointer<P>>>)>
     where P: memory::PtrNum<S> + analysis::Mappable + fmt::Display, S: memory::Offset<P>,
-        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, Vec<Option<P>>) {
+        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, Vec<Option<memory::Pointer<P>>>) {
     let mut pc = start_pc;
     let mut asm = ast::Section::new(&format!("Untitled Section at {}", pc.as_pointer()), &pc);
     let mut targets = HashSet::new();
