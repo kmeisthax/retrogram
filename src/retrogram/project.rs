@@ -84,9 +84,16 @@ impl Program {
     }
 }
 
+fn default_db_filename() -> String {
+    "retrogram.db".to_string()
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Project {
-    programs: HashMap<String, Program>
+    programs: HashMap<String, Program>,
+
+    #[serde(default="default_db_filename")]
+    database_path: String
 }
 
 impl Project {
@@ -105,5 +112,9 @@ impl Project {
     /// Get the project's default program.
     pub fn default_program(&self) -> Option<(&String, &Program)> {
         self.programs.iter().next()
+    }
+
+    pub fn database_path(&self) -> &str {
+        &self.database_path
     }
 }
