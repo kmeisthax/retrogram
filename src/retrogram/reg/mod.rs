@@ -8,3 +8,6 @@ mod traits;
 pub use symbolic::Symbolic;
 pub use state::State;
 pub use traits::*;
+
+#[cfg(test)]
+mod tests;
