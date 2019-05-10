@@ -91,7 +91,7 @@ fn int_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
 
 fn pcrel_target(p: &memory::Pointer<Pointer>, mem: &Bus) -> Option<memory::Pointer<Pointer>> {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
-        return Some(p.contextualize(((p.as_pointer() - 1) as i16 + (lobit as i8) as i16) as u16));
+        return Some(p.contextualize(((p.as_pointer() + 1) as i16 + (lobit as i8) as i16) as u16));
     }
 
     None
