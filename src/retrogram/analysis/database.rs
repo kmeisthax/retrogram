@@ -45,6 +45,12 @@ struct Annotation<P, S> where P: analysis::Mappable {
     label: Option<ast::Label>
 }
 
+#[derive(Clone, Debug)]
+struct Crossref<P> {
+    from: memory::Pointer<P>,
+    to: memory::Pointer<P>
+}
+
 /// A repository of information obtained from the program under analysis.
 #[derive(Clone, Debug)]
 pub struct Database<P, S> where P: analysis::Mappable {
@@ -55,7 +61,10 @@ pub struct Database<P, S> where P: analysis::Mappable {
     pointers: HashMap<memory::Pointer<P>, ast::Label>,
 
     /// A list of program regions.
-    subs: Vec<Annotation<P, S>>
+    subs: Vec<Annotation<P, S>>,
+
+    /// A list of all cross-references in the program.
+    xrefs: Vec<Crossref<P>>
 }
 
 impl<P, S> Database<P, S> where P: analysis::Mappable {
@@ -63,7 +72,8 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
         Database {
             labels: HashMap::new(),
             pointers: HashMap::new(),
-            subs: Vec::new()
+            subs: Vec::new(),
+            xrefs: Vec::new()
         }
     }
 
@@ -102,6 +112,10 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
         self.insert_label(ast::Label::new(&name, None), ptr);
 
         ast::Label::new(&name, None)
+    }
+
+    pub fn insert_crossreference(&mut self, from: memory::Pointer<P>, to: memory::Pointer<P>) {
+        self.xrefs.push(Crossref{from, to});
     }
 
     pub fn pointer_label(&self, ptr: &memory::Pointer<P>) -> Option<&ast::Label> {
