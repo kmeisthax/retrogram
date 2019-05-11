@@ -97,8 +97,8 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn read() -> io::Result<Self> {
-        let project_file = fs::File::open("retrogram.json")?;
+    pub fn read(filename: &str) -> io::Result<Self> {
+        let project_file = fs::File::open(filename)?;
         let project = serde_json::from_reader(project_file)?;
 
         Ok(project)

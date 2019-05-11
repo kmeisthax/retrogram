@@ -29,6 +29,7 @@ fn main() -> io::Result<()> {
     let mut start_pc : String = "".to_string();
     let mut version : Option<String> = None;
     let mut prog = project::Program::default();
+    let mut project_filename = "retrogram.json".to_string();
 
     {
         let mut ap = argparse::ArgumentParser::new();
@@ -36,12 +37,13 @@ fn main() -> io::Result<()> {
         ap.refer(&mut command).add_argument("command", argparse::StoreOption, "The command to run.");
         ap.refer(&mut start_pc).add_argument("start_pc", argparse::Store, "The PC value to start analysis from");
         ap.refer(&mut version).add_option(&["--program"], argparse::StoreOption, "Which program to analyze");
+        ap.refer(&mut project_filename).add_option(&["--project"], argparse::Store, "The project file to load (usually not needed)");
         prog.refer_args(&mut ap);
 
         ap.parse_args_or_exit();
     }
 
-    match project::Project::read() {
+    match project::Project::read(&project_filename) {
         Ok(project) => if let Some(version) = version {
             match project.program(&version) {
                 Some(project_program) => prog = project_program.apply_override(&prog),
