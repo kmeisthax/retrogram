@@ -56,4 +56,8 @@ impl<P> Reference<P> {
     pub fn as_target(&self) -> &Option<memory::Pointer<P>> {
         &self.to
     }
+
+    pub fn kind(&self) -> ReferenceKind {
+        self.reftype
+    }
 }

@@ -39,7 +39,7 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::D
     for xref in xrefs {
         if let Some(target) = xref.as_target() {
             if let None = db.pointer_label(&target) {
-                db.insert_placeholder_label(target.clone(), analysis::ReferenceKind::Code);
+                db.insert_placeholder_label(target.clone(), xref.kind());
             }
 
             db.insert_crossreference(xref);
