@@ -71,7 +71,7 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
 
         name = format!("{}_{:X}", name, ptr.as_pointer());
 
-        self.insert_label(ast::Label::new(&name, None), ptr);
+        self.insert_label(ast::Label::new_placeholder(&name, None), ptr);
 
         ast::Label::new(&name, None)
     }

@@ -154,14 +154,27 @@ pub struct Label {
 
     /// Name of the parent label (if any).
     /// If None, then the label is global.
-    parent_name: Option<String>
+    parent_name: Option<String>,
+
+    /// TRUE if the label is auto-generated, FALSE if the label came from user
+    /// input
+    is_autogen: bool,
 }
 
 impl Label {
     pub fn new(name: &str, parent_name: Option<&str>) -> Label {
         Label {
             name: name.to_string(),
-            parent_name: parent_name.map(|s| s.to_string())
+            parent_name: parent_name.map(|s| s.to_string()),
+            is_autogen: false
+        }
+    }
+
+    pub fn new_placeholder(name: &str, parent_name: Option<&str>) -> Label {
+        Label {
+            name: name.to_string(),
+            parent_name: parent_name.map(|s| s.to_string()),
+            is_autogen: true
         }
     }
 
@@ -176,6 +189,10 @@ impl Label {
             None
         }
     }
+
+    pub fn is_placeholder(&self) -> bool {
+        self.is_autogen
+    }
 }
 
 impl str::FromStr for Label {
@@ -189,11 +206,13 @@ impl str::FromStr for Label {
         match (maybe_parent, maybe_child) {
             (Some(parent), Some(child)) => Ok(Label {
                 name: child.to_string(),
-                parent_name: Some(parent.to_string())
+                parent_name: Some(parent.to_string()),
+                is_autogen: false
             }),
             (Some(parent), None) => Ok(Label {
                 name: parent.to_string(),
-                parent_name: None
+                parent_name: None,
+                is_autogen: false
             }),
             _ => Err(())
         }
