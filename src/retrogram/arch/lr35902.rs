@@ -1,7 +1,7 @@
 //! A Z80 derivative created by SHARP for use in the Nintendo Game Boy
 
 use std::io;
-use crate::retrogram::{memory, ast};
+use crate::retrogram::{memory, ast, analysis};
 use crate::retrogram::ast::Operand as op;
 use crate::retrogram::ast::Instruction as inst;
 
@@ -66,17 +66,17 @@ fn dptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     op::miss()
 }
 
-fn cptr_target(p: &memory::Pointer<Pointer>, mem: &Bus) -> Option<memory::Pointer<Pointer>> {
+fn cptr_target(p: &memory::Pointer<Pointer>, mem: &Bus, kind: analysis::ReferenceKind) -> analysis::Reference<Pointer> {
     if let Some(lobit) = mem.read_leword::<u16>(p).into_concrete() {
-        return Some(p.contextualize(lobit));
+        return analysis::Reference::new_static_ref(p.clone() - 1, p.contextualize(lobit), kind);
     }
 
-    None
+    return analysis::Reference::new_dyn_ref(p.clone() - 1, kind)
 }
 
 fn cptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
-    match cptr_target(p, mem) {
-        Some(target) => op::cptr(target.into_pointer()),
+    match mem.read_leword::<u16>(p).into_concrete() {
+        Some(target) => op::cptr(target),
         None => op::miss()
     }
 }
@@ -89,17 +89,18 @@ fn int_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     op::miss()
 }
 
-fn pcrel_target(p: &memory::Pointer<Pointer>, mem: &Bus) -> Option<memory::Pointer<Pointer>> {
+fn pcrel_target(p: &memory::Pointer<Pointer>, mem: &Bus, kind: analysis::ReferenceKind) -> analysis::Reference<Pointer> {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
-        return Some(p.contextualize(((p.as_pointer() + 1) as i16 + (lobit as i8) as i16) as u16));
+        let target = ((p.as_pointer() + 1) as i16 + (lobit as i8) as i16) as u16;
+        return analysis::Reference::new_static_ref(p.clone() - 1, p.contextualize(target), kind);
     }
 
-    None
+    return analysis::Reference::new_dyn_ref(p.clone() - 1, kind)
 }
 
 fn pcrel_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
-    match pcrel_target(p, mem) {
-        Some(target) => op::cptr(target.into_pointer()),
+    match mem.read_unit(p).into_concrete() {
+        Some(target) => op::cptr(((p.as_pointer() + 1) as i16 + (target as i8) as i16) as u16),
         None => op::miss()
     }
 }
@@ -158,7 +159,7 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///    from the instruction. The list should not include the next instruction,
 ///    which is implied by the previous two instructions. Instructions with
 ///    dynamic or unknown jump targets must be expressed as None.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instruction>, Offset, bool, Vec<Option<memory::Pointer<Pointer>>>) {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instruction>, Offset, bool, Vec<analysis::Reference<Pointer>>) {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
             //TODO: CB prefix
@@ -183,15 +184,15 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
         Some(0x00) => (Some(inst::new("nop", vec![])), 1, true, vec![]),
         Some(0x08) => (Some(inst::new("ld", vec![op::indir(dptr_op16(p, mem)), op::sym("sp")])), 3, true, vec![]),
         Some(0x10) => (Some(inst::new("stop", vec![])), 1, true, vec![]),
-        Some(0x18) => (Some(inst::new("jr", vec![pcrel_op8(&(p.clone()+1), mem)])), 2, false, vec![pcrel_target(&(p.clone()+1), mem)]),
+        Some(0x18) => (Some(inst::new("jr", vec![pcrel_op8(&(p.clone()+1), mem)])), 2, false, vec![pcrel_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
         Some(0x76) => (Some(inst::new("halt", vec![])), 1, true, vec![]), //encoded as ld [hl], [hl]
 
-        Some(0xC3) => (Some(inst::new("jp", vec![cptr_op16(&(p.clone()+1), mem)])), 3, false, vec![cptr_target(&(p.clone()+1), mem)]),
-        Some(0xCD) => (Some(inst::new("call", vec![cptr_op16(&(p.clone()+1), mem)])), 3, true, vec![cptr_target(&(p.clone()+1), mem)]),
+        Some(0xC3) => (Some(inst::new("jp", vec![cptr_op16(&(p.clone()+1), mem)])), 3, false, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
+        Some(0xCD) => (Some(inst::new("call", vec![cptr_op16(&(p.clone()+1), mem)])), 3, true, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Subroutine)]),
 
         Some(0xC9) => (Some(inst::new("ret", vec![])), 1, false, vec![]),
         Some(0xD9) => (Some(inst::new("reti", vec![])), 1, false, vec![]),
-        Some(0xE9) => (Some(inst::new("jp", vec![op::indir(op::sym("hl"))])), 1, false, vec![None]),
+        Some(0xE9) => (Some(inst::new("jp", vec![op::indir(op::sym("hl"))])), 1, false, vec![analysis::Reference::new_dyn_ref(p.clone(), analysis::ReferenceKind::Code)]),
         Some(0xF9) => (Some(inst::new("ld", vec![op::sym("sp"), op::sym("hl")])), 1, true, vec![]),
 
         Some(0xE0) => (Some(inst::new("ldh", vec![op::indir(hram_op8(&(p.clone()+1), mem)), op::sym("a")])), 2, true, vec![]),
@@ -222,7 +223,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
             //the Z80's semiperiodic instruction encoding
             match ((op >> 6) & 0x03, (op >> 5) & 0x01, (op >> 3) & 0x01, op & 0x07) {
                 (0, 0, _, 0) => panic!("Instruction shouldn't be decoded here"), /* 00, 08, 10, 18 */
-                (0, 1, _, 0) => (Some(inst::new("jr", vec![op::sym(condcode), pcrel_op8(&(p.clone()+1), mem)])), 2, true, vec![pcrel_target(&(p.clone()+1), mem)]),
+                (0, 1, _, 0) => (Some(inst::new("jr", vec![op::sym(condcode), pcrel_op8(&(p.clone()+1), mem)])), 2, true, vec![pcrel_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
                 (0, _, 0, 1) => (Some(inst::new("ld", vec![op::sym(targetpair), int_op16(&(p.clone()+1), mem)])), 3, true, vec![]),
                 (0, _, 1, 1) => (Some(inst::new("add", vec![op::sym("hl"), op::sym(targetpair)])), 1, true, vec![]),
                 (0, _, 0, 2) => (Some(inst::new("ld", vec![op::indir(op::sym(targetmem)), op::sym("a")])), 1, true, vec![]),
@@ -239,15 +240,15 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
                 (3, 1, _, 0) => panic!("Instruction shouldn't be decoded here"), /* E0, E8, F0, F8 */
                 (3, _, 0, 1) => (Some(inst::new("pop", vec![op::sym(stackpair)])), 1, true, vec![]),
                 (3, _, 1, 1) => panic!("Instruction shouldn't be decoded here"), /* C9, D9, E9, F9 */
-                (3, 0, _, 2) => (Some(inst::new("jp", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, vec![cptr_target(&(p.clone()+1), mem)]),
+                (3, 0, _, 2) => (Some(inst::new("jp", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
                 (3, 1, _, 2) => panic!("Instruction shouldn't be decoded here"), /* E2, EA, F2, FA */
                 (3, _, _, 3) => (None, 0, false, vec![]),
-                (3, 0, _, 4) => (Some(inst::new("call", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, vec![cptr_target(&(p.clone()+1), mem)]),
+                (3, 0, _, 4) => (Some(inst::new("call", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Subroutine)]),
                 (3, 1, _, 4) => (None, 0, false, vec![]),
                 (3, _, 0, 5) => (Some(inst::new("push", vec![op::sym(stackpair)])), 1, true, vec![]),
                 (3, _, 1, 5) => (None, 0, false, vec![]),
                 (3, _, _, 6) => (Some(inst::new(aluop, vec![op::sym("a"), int_op8(&(p.clone()+1), mem)])), 2, true, vec![]),
-                (3, _, _, 7) => (Some(inst::new("rst", vec![op::cptr(op & 0x38)])), 1, true, vec![Some(p.contextualize((op & 0x38) as u16))]),
+                (3, _, _, 7) => (Some(inst::new("rst", vec![op::cptr(op & 0x38)])), 1, true, vec![analysis::Reference::new_static_ref(p.clone(), p.contextualize((op & 0x38) as u16), analysis::ReferenceKind::Subroutine)]),
 
                 _ => (None, 0, false, vec![])
             }

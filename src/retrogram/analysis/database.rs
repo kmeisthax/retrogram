@@ -2,53 +2,15 @@
 //! passes run on the program.
 
 use std::{fs, io};
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter, Result, UpperHex};
+use std::collections::{HashSet, HashMap};
+use std::fmt::UpperHex;
 use crate::retrogram::{ast, memory, project, analysis};
 
-#[derive(Copy, Clone, Debug)]
-pub enum ReferenceKind {
-    Unknown,
-    Data,
-    Code,
-    Subroutine
-}
-
-impl Display for ReferenceKind {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        //write!(f, "({}, {})", self.x, self.y)
-        match self {
-            ReferenceKind::Unknown => write!(f, "UNK"),
-            ReferenceKind::Data => write!(f, "DAT"),
-            ReferenceKind::Code => write!(f, "LOC"),
-            ReferenceKind::Subroutine => write!(f, "FUN")
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
-enum AnnotationTyping {
-    /// Indicates that the annotated region forms a single string of
-    /// instructions with no breaks.
-    BasicBlock,
-
-    /// Indicates that the annotated region constitutes a single subroutine,
-    /// consisting of at least one BasicBlock.
-    Subroutine
-}
-
-#[derive(Clone, Debug)]
-struct Annotation<P, S> where P: analysis::Mappable {
+struct Block<P, S> where P: analysis::Mappable {
     start: memory::Pointer<P>,
     length: S,
-    antype: AnnotationTyping,
-    label: Option<ast::Label>
-}
-
-#[derive(Clone, Debug)]
-struct Crossref<P> {
-    from: memory::Pointer<P>,
-    to: memory::Pointer<P>
+    exits: HashSet<Option<memory::Pointer<P>>>
 }
 
 /// A repository of information obtained from the program under analysis.
@@ -61,10 +23,10 @@ pub struct Database<P, S> where P: analysis::Mappable {
     pointers: HashMap<memory::Pointer<P>, ast::Label>,
 
     /// A list of program regions.
-    subs: Vec<Annotation<P, S>>,
+    blocks: Vec<Block<P, S>>,
 
     /// A list of all cross-references in the program.
-    xrefs: Vec<Crossref<P>>
+    xrefs: Vec<analysis::Reference<P>>
 }
 
 impl<P, S> Database<P, S> where P: analysis::Mappable {
@@ -72,7 +34,7 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
         Database {
             labels: HashMap::new(),
             pointers: HashMap::new(),
-            subs: Vec::new(),
+            blocks: Vec::new(),
             xrefs: Vec::new()
         }
     }
@@ -96,7 +58,7 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
     }
 
     /// Create a label for a location that is not named in the database.
-    pub fn insert_placeholder_label(&mut self, ptr: memory::Pointer<P>, kind: ReferenceKind) -> ast::Label
+    pub fn insert_placeholder_label(&mut self, ptr: memory::Pointer<P>, kind: analysis::ReferenceKind) -> ast::Label
         where P: UpperHex {
         let mut name = format!("{}", kind);
 
@@ -114,8 +76,8 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
         ast::Label::new(&name, None)
     }
 
-    pub fn insert_crossreference(&mut self, from: memory::Pointer<P>, to: memory::Pointer<P>) {
-        self.xrefs.push(Crossref{from, to});
+    pub fn insert_crossreference(&mut self, myref: analysis::Reference<P>) {
+        self.xrefs.push(myref);
     }
 
     pub fn pointer_label(&self, ptr: &memory::Pointer<P>) -> Option<&ast::Label> {
