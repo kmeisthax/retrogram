@@ -43,8 +43,10 @@ fn main() -> io::Result<()> {
         ap.parse_args_or_exit();
     }
 
+    //TODO: If the user specifies no program, we must select one from the DB,
+    //otherwise disassembly fails because the program is unnamed.
     match project::Project::read(&project_filename) {
-        Ok(project) => if let Some(version) = version {
+        Ok(mut project) => if let Some(version) = version {
             match project.program(&version) {
                 Some(project_program) => prog = project_program.apply_override(&prog),
                 None => eprintln!("The specified program version {} does not exist.", version)

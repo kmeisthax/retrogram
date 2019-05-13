@@ -40,17 +40,16 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
         }
     }
 
-    pub fn for_program<PS>(prog: &project::Program, parse_symbol_file: PS) -> io::Result<Self>
+    pub fn import_symbols<PS>(&mut self, prog: &project::Program, parse_symbol_file: PS) -> io::Result<()>
         where PS: Fn(io::BufReader<fs::File>, &mut Database<P, S>) -> io::Result<()> {
-        let mut db = Self::new();
 
         for symbol_file in prog.iter_symbol_files() {
             if let Ok(file) = fs::File::open(symbol_file) {
-                parse_symbol_file(io::BufReader::new(file), &mut db)?;
+                parse_symbol_file(io::BufReader::new(file), self)?;
             }
         }
 
-        Ok(db)
+        Ok(())
     }
 
     pub fn insert_label(&mut self, label: ast::Label, ptr: memory::Pointer<P>) {

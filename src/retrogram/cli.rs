@@ -73,7 +73,19 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
 
     match arch {
         arch::ArchName::LR35902 => {
-            let mut db = analysis::Database::for_program(prog, asm::rgbds::parse_symbol_file)?;
+            let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
+                Ok(pjdb) => pjdb,
+                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+                    eprintln!("Creating new database for project");
+                    project::ProjectDatabase::new()
+                },
+                Err(e) => return Err(e)
+            };
+
+            let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
+
+            db.import_symbols(prog, asm::rgbds::parse_symbol_file)?;
+
             let bus = match prog.platform() {
                 Some(platform::PlatformName::GB) => platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?,
                 _ => return Err(io::Error::new(io::ErrorKind::Other, "Invalid platform for architecture"))
@@ -85,9 +97,20 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
                 Some(asm::AssemblerName::RGBDS) => println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm)),
                 _ => eprintln!("Please specify an assembler to print with")
             };
+
+            pjdb.write(prog.as_database_path())?;
         },
         arch::ArchName::AARCH32 => {
-            let mut db = analysis::Database::new(); //analysis::Database::for_program(prog, asm::armips::parse_symbol_file)?;
+            let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
+                Ok(pjdb) => pjdb,
+                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+                    eprintln!("Creating new database for project");
+                    project::ProjectDatabase::new()
+                },
+                Err(e) => return Err(e)
+            };
+
+            let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
             let bus = match prog.platform() {
                 Some(platform::PlatformName::AGB) => platform::agb::construct_platform(&mut file)?,
                 _ => return Err(io::Error::new(io::ErrorKind::Other, "Invalid platform for architecture"))

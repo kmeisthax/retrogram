@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use argparse;
 use serde_json;
+use crate::retrogram::analysis;
 use crate::retrogram::platform::PlatformName;
 use crate::retrogram::arch::ArchName;
 use crate::retrogram::asm::AssemblerName;
@@ -16,8 +17,18 @@ pub struct Program {
     assembler: Option<AssemblerName>,
     images: Vec<String>,
 
+    #[serde(skip)]
+    name: Option<String>,
+
     #[serde(default)]
     symbol_files: Vec<String>,
+
+    #[serde(default="default_db_filename")]
+    database_path: String
+}
+
+fn default_db_filename() -> String {
+    "retrogram.db".to_string()
 }
 
 impl Default for Program {
@@ -27,7 +38,9 @@ impl Default for Program {
             arch: None,
             assembler: None,
             images: Vec::new(),
-            symbol_files: Vec::new()
+            name: None,
+            symbol_files: Vec::new(),
+            database_path: default_db_filename()
         }
     }
 }
@@ -67,11 +80,27 @@ impl Program {
         self.symbol_files.iter()
     }
 
+    pub fn as_database_path(&self) -> &str {
+        &self.database_path
+    }
+
+    pub fn as_name(&self) -> Option<&str> {
+        match &self.name {
+            Some(name) => Some(&name),
+            None => None
+        }
+    }
+
+    pub fn set_name(&mut self, name: &str) {
+        self.name = Some(name.to_string());
+    }
+
     pub fn apply_override(&self, other: &Program) -> Program {
         Program {
             platform: other.platform.or(self.platform),
             arch: other.arch.or(self.arch),
             assembler: other.assembler.or(self.assembler),
+            name: other.name.clone().or(self.name.clone()),
             images: match other.images.len() {
                 0 => self.images.clone(),
                 _ => other.images.clone()
@@ -80,20 +109,14 @@ impl Program {
                 0 => self.symbol_files.clone(),
                 _ => other.symbol_files.clone()
             },
+            database_path: default_db_filename()
         }
     }
 }
 
-fn default_db_filename() -> String {
-    "retrogram.db".to_string()
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Project {
-    programs: HashMap<String, Program>,
-
-    #[serde(default="default_db_filename")]
-    database_path: String
+    programs: HashMap<String, Program>
 }
 
 impl Project {
@@ -105,16 +128,61 @@ impl Project {
     }
 
     /// Get the program with the given name within the project.
-    pub fn program(&self, name: &str) -> Option<&Program> {
-        self.programs.get(name)
+    pub fn program(&mut self, name: &str) -> Option<&Program> {
+        let mut prog = self.programs.get_mut(name);
+
+        if let Some(prog) = prog {
+            prog.set_name(name);
+
+            return Some(prog);
+        }
+        
+        None
     }
 
     /// Get the project's default program.
     pub fn default_program(&self) -> Option<(&String, &Program)> {
         self.programs.iter().next()
     }
+}
 
-    pub fn database_path(&self) -> &str {
-        &self.database_path
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ProjectDatabase<P, S> where P: analysis::Mappable {
+    databases: HashMap<String, analysis::Database<P, S>>
+}
+
+impl<P, S> ProjectDatabase<P, S> where for <'dw> P: analysis::Mappable + Deserialize<'dw>, for <'dw> S: Deserialize<'dw> {
+    pub fn read(filename: &str) -> io::Result<Self> {
+        let db_file = fs::File::open(filename)?;
+        let dbs = serde_json::from_reader(db_file)?;
+
+        Ok(dbs)
+    }
+}
+
+impl<P, S> ProjectDatabase<P, S> where P: analysis::Mappable + Serialize, S: Serialize {
+    pub fn write(&self, filename: &str) -> io::Result<()> {
+        let db_file = fs::File::create(filename)?;
+        serde_json::to_writer(db_file, self).map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Encoding database failed with error: {}", e)))
+    }
+}
+
+impl<P, S> ProjectDatabase<P, S> where P: analysis::Mappable {
+    pub fn new() -> Self {
+        ProjectDatabase {
+            databases: HashMap::new()
+        }
+    }
+
+    pub fn get_database(&self, db_name: &str) -> Option<&analysis::Database<P, S>> {
+        self.databases.get(db_name)
+    }
+
+    pub fn get_database_mut(&mut self, db_name: &str) -> &mut analysis::Database<P, S> {
+        if !self.databases.contains_key(db_name) {
+            self.databases.insert(db_name.to_string(), analysis::Database::new());
+        }
+
+        self.databases.get_mut(db_name).expect("I just inserted it, it should be there.")
     }
 }
