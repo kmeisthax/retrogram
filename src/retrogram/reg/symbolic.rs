@@ -4,6 +4,7 @@
 use std::ops::{Sub, Not, BitAnd, BitOr, Shl, Shr};
 use std::cmp::{min, max, PartialEq, Ord};
 use num::traits::{Bounded, One};
+use serde::{Serialize, Deserialize};
 use crate::retrogram::reg::{Convertable, Symbolizable, Concretizable, Validatable};
 
 /// Represents a processor register bounded to a particular set of states.
@@ -24,7 +25,7 @@ use crate::retrogram::reg::{Convertable, Symbolizable, Concretizable, Validatabl
 /// If only one possible register value is valid, then the register is said to
 /// be concrete. A register with no valid state is said to be unsatisfiable. If
 /// multiple states are valid, then the register is said to be abstract.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Symbolic<T> {
     lower_bound: T,
     upper_bound: T,

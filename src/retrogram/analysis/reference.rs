@@ -3,9 +3,10 @@
 use std::cmp::{PartialEq, Eq};
 use std::hash::Hash;
 use std::fmt::{Display, Formatter, Result};
+use serde::{Serialize, Deserialize};
 use crate::retrogram::memory;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ReferenceKind {
     Unknown,
     Data,
@@ -25,7 +26,7 @@ impl Display for ReferenceKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Reference<P> {
     from: memory::Pointer<P>,
     to: Option<memory::Pointer<P>>,

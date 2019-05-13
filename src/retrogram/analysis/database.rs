@@ -4,9 +4,10 @@
 use std::{fs, io};
 use std::collections::{HashSet, HashMap};
 use std::fmt::UpperHex;
+use serde::{Serialize, Deserialize};
 use crate::retrogram::{ast, memory, project, analysis};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct Block<P, S> where P: analysis::Mappable {
     start: memory::Pointer<P>,
     length: S,
@@ -14,7 +15,7 @@ struct Block<P, S> where P: analysis::Mappable {
 }
 
 /// A repository of information obtained from the program under analysis.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Database<P, S> where P: analysis::Mappable {
     /// A list of all labels in the program.
     labels: HashMap<ast::Label, memory::Pointer<P>>,

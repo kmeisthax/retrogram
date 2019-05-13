@@ -7,11 +7,12 @@ use std::hash::{Hash, Hasher};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use num::traits::Bounded;
+use serde::{Serialize, Deserialize};
 use crate::retrogram::reg::Symbolic;
 
 /// A pointer bundled with the context necessary to resolve it to a concrete
 /// value.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Pointer<P, CV = u64> {
     pointer: P,
     context: HashMap<String, Symbolic<CV>>

@@ -1,6 +1,7 @@
 //!An abstract syntax tree representation of disassembled code
 
 use std::{slice, str};
+use serde::{Serialize, Deserialize};
 use crate::retrogram::memory;
 
 ///A literal value, such as an integer, pointer, or other kind of reference.
@@ -147,7 +148,7 @@ impl<I, S, F, P> Instruction<I, S, F, P> {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Label {
     /// Name of the label.
     name: String,
