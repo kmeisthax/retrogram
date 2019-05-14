@@ -14,14 +14,33 @@ struct Block<P, S> where P: analysis::Mappable {
     exits: HashSet<Option<memory::Pointer<P>>>
 }
 
+fn gimme_a_ptr<P>() -> HashMap<memory::Pointer<P>, ast::Label> where P: analysis::Mappable {
+    HashMap::new()
+}
+
+fn gimme_a_lbl<P>() -> HashMap<ast::Label, memory::Pointer<P>> where P: analysis::Mappable {
+    HashMap::new()
+}
+
+fn im_stale() -> bool {
+    true
+}
+
 /// A repository of information obtained from the program under analysis.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Database<P, S> where P: analysis::Mappable {
+    symbol_list: Vec<(ast::Label, memory::Pointer<P>)>,
+
     /// A list of all labels in the program.
+    #[serde(skip, default="gimme_a_lbl")]
     labels: HashMap<ast::Label, memory::Pointer<P>>,
     
     /// A list of all pointer values in the program which have a label.
+    #[serde(skip, default="gimme_a_ptr")]
     pointers: HashMap<memory::Pointer<P>, ast::Label>,
+
+    #[serde(skip, default="im_stale")]
+    was_deserialized: bool,
 
     /// A list of program regions.
     blocks: Vec<Block<P, S>>,
@@ -33,10 +52,26 @@ pub struct Database<P, S> where P: analysis::Mappable {
 impl<P, S> Database<P, S> where P: analysis::Mappable {
     pub fn new() -> Self {
         Database {
+            symbol_list: Vec::new(),
             labels: HashMap::new(),
             pointers: HashMap::new(),
+            was_deserialized: false,
             blocks: Vec::new(),
             xrefs: Vec::new()
+        }
+    }
+
+    /// Regenerate internal indexes that aren't serialized to disk
+    /// 
+    /// TODO: Find a way to get rid of this and do it alongside deserialization
+    pub fn update_indexes(&mut self) {
+        if self.was_deserialized {
+            for (lbl, ptr) in self.symbol_list.iter() {
+                self.labels.insert(lbl.clone(), ptr.clone());
+                self.pointers.insert(ptr.clone(), lbl.clone());
+            }
+
+            self.was_deserialized = false;
         }
     }
 
@@ -53,6 +88,7 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
     }
 
     pub fn insert_label(&mut self, label: ast::Label, ptr: memory::Pointer<P>) {
+        self.symbol_list.push((label.clone(), ptr.clone()));
         self.labels.insert(label.clone(), ptr.clone());
         self.pointers.insert(ptr, label);
     }

@@ -83,6 +83,7 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
             };
 
             let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
+            db.update_indexes();
 
             db.import_symbols(prog, asm::rgbds::parse_symbol_file)?;
 
@@ -111,6 +112,8 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
             };
 
             let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
+            db.update_indexes();
+            
             let bus = match prog.platform() {
                 Some(platform::PlatformName::AGB) => platform::agb::construct_platform(&mut file)?,
                 _ => return Err(io::Error::new(io::ErrorKind::Other, "Invalid platform for architecture"))
