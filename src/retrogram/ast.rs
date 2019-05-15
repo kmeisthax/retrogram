@@ -1,6 +1,6 @@
 //!An abstract syntax tree representation of disassembled code
 
-use std::{slice, str};
+use std::{slice, str, fmt};
 use serde::{Serialize, Deserialize};
 use crate::retrogram::memory;
 
@@ -148,7 +148,7 @@ impl<I, S, F, P> Instruction<I, S, F, P> {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Label {
     /// Name of the label.
     name: String,
@@ -203,14 +203,25 @@ impl str::FromStr for Label {
         let mut split = s.split(".");
         let maybe_parent = split.next();
         let maybe_child = split.next();
+        let maybe_autogen_flag = s.get(0..2);
 
-        match (maybe_parent, maybe_child) {
-            (Some(parent), Some(child)) => Ok(Label {
+        match (maybe_autogen_flag, maybe_parent, maybe_child) {
+            (Some("!!"), Some(parent), Some(child)) => Ok(Label {
+                name: child.to_string(),
+                parent_name: Some(parent.get(2..).expect("I expect that there's at least 2 characters in a string that matched two of them").to_string()),
+                is_autogen: true
+            }),
+            (Some("!!"), Some(parent), None) => Ok(Label {
+                name: parent.get(2..).expect("I expect that there's at least 2 characters in a string that matched two of them").to_string(),
+                parent_name: None,
+                is_autogen: true
+            }),
+            (None, Some(parent), Some(child)) => Ok(Label {
                 name: child.to_string(),
                 parent_name: Some(parent.to_string()),
                 is_autogen: false
             }),
-            (Some(parent), None) => Ok(Label {
+            (None, Some(parent), None) => Ok(Label {
                 name: parent.to_string(),
                 parent_name: None,
                 is_autogen: false
@@ -219,6 +230,23 @@ impl str::FromStr for Label {
         }
     }
 }
+
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.is_autogen {
+            write!(f, "!!")?;
+        }
+
+        if let Some(ref parent_name) = self.parent_name {
+            write!(f, "{}.", parent_name)?;
+        }
+
+        write!(f, "{}", self.name)
+    }
+}
+
+derive_deserialize_from_str!(Label, "valid label");
+derive_serialize_from_display!(Label);
 
 #[derive(Clone, Debug)]
 pub struct Line<I, S, F, P> {
