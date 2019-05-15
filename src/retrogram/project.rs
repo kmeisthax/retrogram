@@ -163,7 +163,7 @@ impl<P, S> ProjectDatabase<P, S> where for <'dw> P: analysis::Mappable + Deseria
 impl<P, S> ProjectDatabase<P, S> where P: analysis::Mappable + Serialize, S: Serialize {
     pub fn write(&self, filename: &str) -> io::Result<()> {
         let db_file = fs::File::create(filename)?;
-        serde_json::to_writer(db_file, self).map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Encoding database failed with error: {}", e)))
+        serde_json::to_writer_pretty(db_file, self).map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Encoding database failed with error: {}", e)))
     }
 }
 
