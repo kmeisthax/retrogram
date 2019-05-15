@@ -1,21 +1,23 @@
 //! "Contextual" pointers that contain any platform or architectural state
 //! necessary to understand them.
 
+use std::{fmt, str};
 use std::ops::{Add, AddAssign, Sub, SubAssign, BitAnd};
 use std::cmp::{PartialEq, PartialOrd, Ord, Ordering};
 use std::hash::{Hash, Hasher};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use num::traits::Bounded;
-use serde::{Serialize, Deserialize};
-use crate::retrogram::reg::Symbolic;
+use serde::{Serialize, Deserialize, Deserializer};
+use serde::de;
+use crate::retrogram::reg;
 
 /// A pointer bundled with the context necessary to resolve it to a concrete
 /// value.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Pointer<P, CV = u64> {
     pointer: P,
-    context: HashMap<String, Symbolic<CV>>
+    context: HashMap<String, reg::Symbolic<CV>>
 }
 
 impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
@@ -33,20 +35,20 @@ impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
     /// 
     /// Architectural contexts are prefixed with an `A` to avoid conflicts with
     /// platform-specific contexts.
-    pub fn get_arch_context(&self, context_name: &str) -> Symbolic<CV> {
+    pub fn get_arch_context(&self, context_name: &str) -> reg::Symbolic<CV> {
         let inner_name = format!("A{}", context_name);
         if let Some(val) = self.context.get(&inner_name) {
             return val.clone();
         }
 
-        Symbolic::default()
+        reg::Symbolic::default()
     }
 
     /// Set an architecturally-defined context.
     /// 
     /// Architectural contexts are prefixed with an `A` to avoid conflicts with
     /// platform-specific contexts.
-    pub fn set_arch_context(&mut self, context_name: &str, value: Symbolic<CV>) {
+    pub fn set_arch_context(&mut self, context_name: &str, value: reg::Symbolic<CV>) {
         let inner_name = format!("A{}", context_name);
         self.context.insert(inner_name, value);
     }
@@ -54,29 +56,29 @@ impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
     /// Reset an existing platform context.
     /// 
     /// The value attached to the context will be returned.
-    pub fn remove_arch_context(&mut self, context_name: &str) -> Symbolic<CV> {
+    pub fn remove_arch_context(&mut self, context_name: &str) -> reg::Symbolic<CV> {
         let inner_name = format!("A{}", context_name);
-        self.context.remove(&inner_name).unwrap_or(Symbolic::default())
+        self.context.remove(&inner_name).unwrap_or(reg::Symbolic::default())
     }
 
     /// Get a context specific to a given platform.
     /// 
     /// Platform contexts are prefixed with a `P` to avoid conflicts with
     /// architecturally defined contexts.
-    pub fn get_platform_context(&self, context_name: &str) -> Symbolic<CV> {
+    pub fn get_platform_context(&self, context_name: &str) -> reg::Symbolic<CV> {
         let inner_name = format!("P{}", context_name);
         if let Some(val) = self.context.get(&inner_name) {
             return val.clone();
         }
 
-        Symbolic::default()
+        reg::Symbolic::default()
     }
 
     /// Set a context specific to a given platform.
     /// 
     /// Platform contexts are prefixed with a `P` to avoid conflicts with
     /// architecturally defined contexts.
-    pub fn set_platform_context(&mut self, context_name: &str, value: Symbolic<CV>) {
+    pub fn set_platform_context(&mut self, context_name: &str, value: reg::Symbolic<CV>) {
         let inner_name = format!("P{}", context_name);
         self.context.insert(inner_name, value);
     }
@@ -84,9 +86,9 @@ impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
     /// Reset an existing platform context.
     /// 
     /// The value attached to the context will be returned.
-    pub fn remove_platform_context(&mut self, context_name: &str) -> Symbolic<CV> {
+    pub fn remove_platform_context(&mut self, context_name: &str) -> reg::Symbolic<CV> {
         let inner_name = format!("P{}", context_name);
-        self.context.remove(&inner_name).unwrap_or(Symbolic::default())
+        self.context.remove(&inner_name).unwrap_or(reg::Symbolic::default())
     }
 
     /// List all the contexts a given pointer has.
@@ -94,7 +96,7 @@ impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
     /// Yields a list of tuples of booleans, strings, and context values. The
     /// boolean indicates if the context is architectural or no; the string is
     /// the context key, and the value is the context value.
-    pub fn iter_contexts<'a>(&'a self) -> impl Iterator<Item = (bool, &'a str, &'a Symbolic<CV>)> + 'a {
+    pub fn iter_contexts<'a>(&'a self) -> impl Iterator<Item = (bool, &'a str, &'a reg::Symbolic<CV>)> + 'a {
         self.context.iter().map(|(k, v)| (k.chars().next() == Some('A'), &k[1..], v))
     }
 
@@ -209,5 +211,94 @@ impl<P, CV> Eq for Pointer<P, CV> where P: Eq {
 impl<P, CV> Ord for Pointer<P, CV> where P: Ord {
     fn cmp(&self, rhs: &Self) -> Ordering {
         self.pointer.cmp(&rhs.pointer)
+    }
+}
+
+pub enum PointerParseError<P, CV> where P: str::FromStr, CV: str::FromStr {
+    PointerWontParse(P::Err),
+    ContextWontParse(CV::Err),
+    EmptyContext,
+    MissingPointer
+}
+
+impl<P, CV> str::FromStr for Pointer<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + From<CV> {
+    type Err = PointerParseError<P, CV>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut contexts = HashMap::new();
+        
+        for kv_str in s.split("!") {
+            let mut kv_iter = kv_str.split("_");
+            let k = kv_iter.next();
+            let v = kv_iter.next();
+
+            match (k, v) {
+                (Some(key), Some("?")) => contexts.insert(key.to_string(), reg::Symbolic::default()),
+                (Some(key), Some(value)) => contexts.insert(key.to_string(), reg::Symbolic::from(CV::from_str(value).map_err(|e| PointerParseError::ContextWontParse(e) )?)),
+                (Some(ptr), None) => return Ok(Pointer{
+                    pointer: P::from_str(ptr).map_err(|e| PointerParseError::PointerWontParse(e))?,
+                    context: contexts
+                }),
+                _ => return Err(PointerParseError::EmptyContext)
+            };
+        }
+
+        Err(PointerParseError::MissingPointer)
+    }
+}
+
+impl<P, CV> fmt::Display for Pointer<P, CV> where P: fmt::Display, CV: fmt::Display + reg::Concretizable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (ckey, cval) in self.context.iter() {
+            if let Some(concrete) = cval.as_concrete() {
+                write!(f, "{}_{}!", ckey, concrete)?;
+            } else {
+                //TODO: Partial symbolic bounds are lost.
+                write!(f, "{}_?!", ckey)?;
+            }
+        }
+
+        write!(f, "{}", self.pointer)
+    }
+}
+
+//Oh look, serde_plain can't work with parametric types at all.
+//What a shame. Now I have to actually, uh, write a Deserializer by hand.
+//I have a confession to make: I don't understand the serde deserialization API
+//AT ALL - just the whole "let's define a struct and impl in the middle of a
+//function" thing deeply scares me, simply because I didn't even know or even
+//EXPECT Rust to have inner type syntax at all. However serde works it's black
+//magic, it does so by twisting Rust's otherwise workmanlike syntax into an
+//amalgamated monstrosity.
+impl<'de, P, CV> Deserialize<'de> for Pointer<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + From<CV>  {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+        struct V<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + From<CV> {
+            p: std::marker::PhantomData<P>,
+            cv: std::marker::PhantomData<CV>
+        }
+
+        impl<'de, P, CV> de::Visitor<'de> for V<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + From<CV> {
+            type Value = Pointer<P, CV>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("valid pointer")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Pointer<P, CV>, E> where E: de::Error {
+                value.parse().map_err(|_| de::Error::invalid_value(de::Unexpected::Str(value), &self))
+            }
+        }
+
+        deserializer.deserialize_str(V {
+            p: std::marker::PhantomData,
+            cv: std::marker::PhantomData
+        })
+    }
+}
+
+impl<P, CV> Serialize for Pointer<P, CV> where P: fmt::Display, CV: fmt::Display + reg::Concretizable {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: serde::ser::Serializer {
+        serializer.serialize_str(&self.to_string())
     }
 }

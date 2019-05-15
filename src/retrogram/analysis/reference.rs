@@ -4,7 +4,7 @@ use std::cmp::{PartialEq, Eq};
 use std::hash::Hash;
 use std::fmt::{Display, Formatter, Result};
 use serde::{Serialize, Deserialize};
-use crate::retrogram::memory;
+use crate::retrogram::{analysis, memory};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ReferenceKind {
@@ -27,13 +27,13 @@ impl Display for ReferenceKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Reference<P> {
+pub struct Reference<P> where P: analysis::Mappable {
     from: memory::Pointer<P>,
     to: Option<memory::Pointer<P>>,
     reftype: ReferenceKind
 }
 
-impl<P> Reference<P> {
+impl<P> Reference<P> where P: analysis::Mappable {
     pub fn new_static_ref(from: memory::Pointer<P>, to: memory::Pointer<P>, kind: ReferenceKind) -> Self {
         Reference {
             from: from,

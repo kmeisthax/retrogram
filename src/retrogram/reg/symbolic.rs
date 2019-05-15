@@ -93,6 +93,16 @@ impl<T> Symbolic<T> where T: Concretizable {
             None
         }
     }
+
+    pub fn as_concrete(&self) -> Option<&T> {
+        if self.is_bound_concrete() {
+            Some(&self.lower_bound)
+        } else if self.is_bits_concrete() {
+            Some(&self.bits_set)
+        } else {
+            None
+        }
+    }
 }
 
 impl<T> Symbolic<T> where T: Validatable {
