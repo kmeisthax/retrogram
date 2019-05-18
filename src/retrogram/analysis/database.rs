@@ -7,13 +7,6 @@ use std::fmt::UpperHex;
 use serde::{Serialize, Deserialize};
 use crate::retrogram::{ast, memory, project, analysis};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Block<P, S> where P: analysis::Mappable {
-    start: memory::Pointer<P>,
-    length: S,
-    exits: HashSet<Option<memory::Pointer<P>>>
-}
-
 fn gimme_a_ptr<P>() -> HashMap<memory::Pointer<P>, ast::Label> where P: analysis::Mappable {
     HashMap::new()
 }
@@ -35,7 +28,7 @@ pub struct Database<P, S> where P: analysis::Mappable {
     was_deserialized: bool,
 
     /// A list of program regions.
-    blocks: Vec<Block<P, S>>,
+    blocks: Vec<analysis::Block<P, S>>,
 
     /// A list of all cross-references in the program.
     xrefs: Vec<analysis::Reference<P>>,
@@ -124,11 +117,7 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
         self.labels.get(label)
     }
 
-    pub fn insert_block(&mut self, start: memory::Pointer<P>, length: S, exits: HashSet<Option<memory::Pointer<P>>>) {
-        self.blocks.insert(Block {
-            start: start,
-            length: length,
-            exits: exits
-        });
+    pub fn insert_block(&mut self, block: analysis::Block<P, S>) {
+        self.blocks.push(block)
     }
 }
