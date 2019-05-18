@@ -31,14 +31,6 @@ fn im_stale() -> bool {
 pub struct Database<P, S> where P: analysis::Mappable {
     symbol_list: Vec<(ast::Label, memory::Pointer<P>)>,
 
-    /// A list of all labels in the program.
-    #[serde(skip, default="gimme_a_lbl")]
-    labels: HashMap<ast::Label, memory::Pointer<P>>,
-    
-    /// A list of all pointer values in the program which have a label.
-    #[serde(skip, default="gimme_a_ptr")]
-    pointers: HashMap<memory::Pointer<P>, ast::Label>,
-
     #[serde(skip, default="im_stale")]
     was_deserialized: bool,
 
@@ -46,18 +38,26 @@ pub struct Database<P, S> where P: analysis::Mappable {
     blocks: Vec<Block<P, S>>,
 
     /// A list of all cross-references in the program.
-    xrefs: Vec<analysis::Reference<P>>
+    xrefs: Vec<analysis::Reference<P>>,
+
+    /// A list of all labels in the program.
+    #[serde(skip, default="gimme_a_lbl")]
+    labels: HashMap<ast::Label, memory::Pointer<P>>,
+    
+    /// A list of all pointer values in the program which have a label.
+    #[serde(skip, default="gimme_a_ptr")]
+    pointers: HashMap<memory::Pointer<P>, ast::Label>
 }
 
 impl<P, S> Database<P, S> where P: analysis::Mappable {
     pub fn new() -> Self {
         Database {
             symbol_list: Vec::new(),
-            labels: HashMap::new(),
-            pointers: HashMap::new(),
             was_deserialized: false,
             blocks: Vec::new(),
-            xrefs: Vec::new()
+            xrefs: Vec::new(),
+            labels: HashMap::new(),
+            pointers: HashMap::new()
         }
     }
 
@@ -122,5 +122,13 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
 
     pub fn label_pointer(&self, label: &ast::Label) -> Option<&memory::Pointer<P>> {
         self.labels.get(label)
+    }
+
+    pub fn insert_block(&mut self, start: memory::Pointer<P>, length: S, exits: HashSet<Option<memory::Pointer<P>>>) {
+        self.blocks.insert(Block {
+            start: start,
+            length: length,
+            exits: exits
+        });
     }
 }
