@@ -10,3 +10,13 @@ pub struct Block<P, S> where P: analysis::Mappable {
     length: S,
     exits: HashSet<Option<memory::Pointer<P>>>
 }
+
+impl<P, S> Block<P, S> where P: analysis::Mappable {
+    pub fn from_parts(start: memory::Pointer<P>, length: S, exits: HashSet<Option<memory::Pointer<P>>>) -> Self {
+        Block {
+            start: start,
+            length: length,
+            exits: exits
+        }
+    }
+}

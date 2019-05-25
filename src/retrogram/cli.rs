@@ -4,6 +4,7 @@ use std::{io, fs};
 use std::str::FromStr;
 use std::convert::TryFrom;
 use std::fmt::{Display, LowerHex, UpperHex};
+use std::collections::HashSet;
 use crate::retrogram::{asm, ast, arch, analysis, project, platform, input, memory};
 
 /// Guard trait for pointer values users can input to us and we can output.
@@ -34,7 +35,12 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::D
         F: Clone + Display,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, MS, IO>) -> (Option<ast::Instruction<I, S, F, P>>, MS, bool, Vec<analysis::Reference<P>>) {
     let start_pc = input::parse_ptr(start_spec, db, bus);
-    let (orig_asm, xrefs) = analysis::disassemble_block(start_pc.expect("Must specify a valid address to analyze"), bus, disassemble)?;
+    let start_pc = start_pc.expect("Must specify a valid address to analyze");
+    let (orig_asm, xrefs, pc_offset) = analysis::disassemble_block(start_pc.clone(), bus, disassemble)?;
+
+    if let Some(pc_offset) = pc_offset {
+        db.insert_block(analysis::Block::from_parts(start_pc, pc_offset, HashSet::new()));
+    }
 
     for xref in xrefs {
         if let Some(target) = xref.as_target() {

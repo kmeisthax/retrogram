@@ -17,10 +17,12 @@ use crate::retrogram::{ast, memory, analysis};
 ///    to the offsets provided by the disassembler function.
 ///  * Disassembly continues until the program unconditionally jumps to another
 ///    location, returns, or executes an invalid instruction.
-pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<(ast::Section<I, SI, F, P>, HashSet<analysis::Reference<P>>)>
+/// 
+/// This function also returns the offset to the end of the last instruction.
+pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<(ast::Section<I, SI, F, P>, HashSet<analysis::Reference<P>>, Option<S>)>
     where P: memory::PtrNum<S> + analysis::Mappable + fmt::Display, S: memory::Offset<P>,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, Vec<analysis::Reference<P>>) {
-    let mut pc = start_pc;
+    let mut pc = start_pc.clone();
     let mut asm = ast::Section::new(&format!("Untitled Section at {}", pc.as_pointer()), &pc);
     let mut targets = HashSet::new();
 
@@ -35,10 +37,10 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
                 }
 
                 if !is_nonfinal {
-                    return Ok((asm, targets));
+                    return Ok((asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok()));
                 }
             },
-            (None, _, _, _) => return Ok((asm, targets))
+            (None, _, _, _) => return Ok((asm, targets, None))
         }
     }
 }
