@@ -19,28 +19,42 @@ use crate::retrogram::{ast, memory, analysis};
 ///    location, returns, or executes an invalid instruction.
 /// 
 /// This function also returns the offset to the end of the last instruction.
-pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<(ast::Section<I, SI, F, P>, HashSet<analysis::Reference<P>>, Option<S>)>
+pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<(ast::Section<I, SI, F, P>, HashSet<analysis::Reference<P>>, Option<S>, Vec<analysis::Block<P, S>>)>
     where P: memory::PtrNum<S> + analysis::Mappable + fmt::Display, S: memory::Offset<P>,
-        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, Vec<analysis::Reference<P>>) {
+        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>) {
     let mut pc = start_pc.clone();
     let mut asm = ast::Section::new(&format!("Untitled Section at {}", pc.as_pointer()), &pc);
     let mut targets = HashSet::new();
+    let mut blocks = Vec::new();
+    let mut cur_block_pc = start_pc.clone();
+    let mut cur_blk_size = S::zero();
 
     loop {
         match disassemble(&pc, &plat) {
-            (Some(instr), size, is_nonfinal, instr_targets) => {
+            (Some(instr), size, is_nonfinal, is_nonbranching, instr_targets) => {
                 asm.append_line(ast::Line::new(None, Some(instr), None, pc.clone().into_ptr()));
                 pc = pc.contextualize(P::from(pc.as_pointer().clone() + size));
+                cur_blk_size = S::try_from(cur_blk_size + size).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, "Could not increase size of block by instruction offset"))?;
 
                 for target in instr_targets {
                     targets.insert(target);
                 }
 
+                if !is_nonbranching {
+                    blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
+                    cur_block_pc = pc.clone();
+                    cur_blk_size = S::zero();
+                }
+
                 if !is_nonfinal {
-                    return Ok((asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok()));
+                    if cur_blk_size > S::zero() {
+                        blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
+                    }
+
+                    return Ok((asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks));
                 }
             },
-            (None, _, _, _) => return Ok((asm, targets, None))
+            (None, _, _, _, _) => return Ok((asm, targets, None, Vec::new()))
         }
     }
 }

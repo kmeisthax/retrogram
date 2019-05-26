@@ -29,7 +29,9 @@ impl <T, S> PtrNum<S> for T
 /// 
 /// In plain english: An offset of a pointer must be orderable. The ordering of
 /// offsets is assumed to mean that greater offsets mean a further distance from
-/// the base pointer that birthed them.
+/// the base pointer that birthed them. It should also be possible to add two
+/// offsets, though not all offsets necessarily can be added. Offsets should
+/// also have an unconditionally provided zero type.
 /// 
 /// Offsets may be potentially convertable from the difference of two pointer
 /// types, as well as the runtime platform's preferred offset representation.
@@ -41,13 +43,13 @@ impl <T, S> PtrNum<S> for T
 /// encompass multiple disjoint address spaces; such as memory and I/O space, or
 /// program and data space. `TryFrom` allows the type system to signal that the
 /// difference of two pointers is undefined.
-pub trait Offset<P> : Clone + PartialOrd + TryFrom<<P as Sub>::Output> + TryFrom<usize>
+pub trait Offset<P> : Clone + PartialOrd + Add + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize> + TryFrom<<Self as Add>::Output>
     where P: Sub {
 
 }
 
 impl <T, P> Offset<P> for T
-    where T: Clone + PartialOrd + TryFrom<<P as Sub>::Output> + TryFrom<usize>,
+    where T: Clone + PartialOrd + Add + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize> + TryFrom<<Self as Add>::Output>,
         P: Sub {
 
 }

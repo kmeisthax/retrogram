@@ -33,13 +33,13 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::D
         I: Clone + Display,
         S: Clone + Display,
         F: Clone + Display,
-        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, MS, IO>) -> (Option<ast::Instruction<I, S, F, P>>, MS, bool, Vec<analysis::Reference<P>>) {
+        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, MS, IO>) -> (Option<ast::Instruction<I, S, F, P>>, MS, bool, bool, Vec<analysis::Reference<P>>) {
     let start_pc = input::parse_ptr(start_spec, db, bus);
     let start_pc = start_pc.expect("Must specify a valid address to analyze");
-    let (orig_asm, xrefs, pc_offset) = analysis::disassemble_block(start_pc.clone(), bus, disassemble)?;
+    let (orig_asm, xrefs, pc_offset, blocks) = analysis::disassemble_block(start_pc.clone(), bus, disassemble)?;
 
-    if let Some(pc_offset) = pc_offset {
-        db.insert_block(analysis::Block::from_parts(start_pc, pc_offset, HashSet::new()));
+    for block in blocks {
+        db.insert_block(block);
     }
 
     for xref in xrefs {
