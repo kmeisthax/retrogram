@@ -113,6 +113,35 @@ impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
     }
 }
 
+impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8>, reg::Symbolic<CV>: PartialEq {
+    /// Determines if this and another contextual pointer have the same context.
+    pub fn is_context_eq(&self, other: &Self) -> bool {
+        //TODO: For equivalent contexts we wind up testing each key twice. How
+        //do we prevent that?
+        for (key, val) in self.context.iter() {
+            if let Some(other_val) = other.context.get(key) {
+                if other_val == val {
+                    continue;
+                }
+            }
+
+            return false;
+        }
+
+        for (key, other_val) in other.context.iter() {
+            if let Some(val) = self.context.get(key) {
+                if other_val == val {
+                    continue;
+                }
+            }
+
+            return false;
+        }
+
+        true
+    }
+}
+
 impl<P, CV> Hash for Pointer<P, CV> where P: Hash {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.pointer.hash(state);

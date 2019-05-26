@@ -25,7 +25,7 @@ use crate::retrogram::reg::{Convertable, Symbolizable, Concretizable, Validatabl
 /// If only one possible register value is valid, then the register is said to
 /// be concrete. A register with no valid state is said to be unsatisfiable. If
 /// multiple states are valid, then the register is said to be abstract.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Symbolic<T> {
     lower_bound: T,
     upper_bound: T,
