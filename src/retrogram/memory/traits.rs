@@ -43,13 +43,13 @@ impl <T, S> PtrNum<S> for T
 /// encompass multiple disjoint address spaces; such as memory and I/O space, or
 /// program and data space. `TryFrom` allows the type system to signal that the
 /// difference of two pointers is undefined.
-pub trait Offset<P> : Clone + PartialOrd + Add + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize> + TryFrom<<Self as Add>::Output>
+pub trait Offset<P> : Clone + PartialOrd + Add + Sub + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize> + TryFrom<<Self as Add>::Output> + TryFrom<<Self as Sub>::Output>
     where P: Sub {
 
 }
 
 impl <T, P> Offset<P> for T
-    where T: Clone + PartialOrd + Add + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize> + TryFrom<<Self as Add>::Output>,
+    where T: Clone + PartialOrd + Add + Sub + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize> + TryFrom<<Self as Add>::Output> + TryFrom<<Self as Sub>::Output>,
         P: Sub {
 
 }

@@ -137,4 +137,35 @@ impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: me
 
         None
     }
+
+    /// Given a block number and a split point, split the block and return the
+    /// second block's location.
+    /// 
+    /// If the new block size would cause the current block to shrink, a new
+    /// block is created and it's id is returned. Otherwise, None is returned.
+    /// 
+    /// If an invalid block ID is given, this function also returns None.
+    pub fn split_block(&mut self, block_id: usize, new_size: S) -> Option<usize> {
+        let block = self.blocks.get_mut(block_id);
+
+        if let Some(block) = block {
+            if block.as_length() < &new_size {
+                let remaining_size = block.as_length().clone() - new_size.clone();
+
+                if let Ok(remaining_size) = S::try_from(remaining_size) {
+                    let new_block_start = block.as_start().contextualize(P::from(block.as_start().as_pointer().clone() + new_size));
+
+                    *block = analysis::Block::from_parts(block.as_start().clone(), remaining_size.clone());
+                    let new_block = analysis::Block::from_parts(new_block_start, remaining_size);
+
+                    let id = self.blocks.len();
+                    self.blocks.push(new_block);
+
+                    return Some(id);
+                }
+            }
+        }
+
+        None
+    }
 }

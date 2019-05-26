@@ -33,7 +33,7 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
         match disassemble(&pc, &plat) {
             (Some(instr), size, is_nonfinal, is_nonbranching, instr_targets) => {
                 asm.append_line(ast::Line::new(None, Some(instr), None, pc.clone().into_ptr()));
-                pc = pc.contextualize(P::from(pc.as_pointer().clone() + size));
+                pc = pc.contextualize(P::from(pc.as_pointer().clone() + size.clone()));
                 cur_blk_size = S::try_from(cur_blk_size + size).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, "Could not increase size of block by instruction offset"))?;
 
                 for target in instr_targets {
