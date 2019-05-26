@@ -4,7 +4,7 @@ mod database;
 mod passes;
 mod traits;
 mod reference;
-mod section;
+mod block;
 
 pub use traits::*;
 pub use database::Database;
@@ -13,4 +13,4 @@ pub use passes::replace_labels;
 pub use passes::inject_labels;
 pub use reference::ReferenceKind;
 pub use reference::Reference;
-pub use section::Block;
+pub use block::Block;
