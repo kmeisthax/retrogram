@@ -120,4 +120,21 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
     pub fn insert_block(&mut self, block: analysis::Block<P, S>) {
         self.blocks.push(block)
     }
+
+    pub fn block(&self, block_id: usize) -> Option<&analysis::Block<P, S>> {
+        self.blocks.get(block_id)
+    }
+}
+
+impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: memory::Offset<P> {
+    pub fn find_block_membership(&mut self, ptr: &memory::Pointer<P>) -> Option<usize> {
+        //TODO: This needs to be way higher performance than a linear scan
+        for (i, ref block) in self.blocks.iter().enumerate() {
+            if block.is_ptr_within_block(ptr) {
+                return Some(i);
+            }
+        }
+
+        None
+    }
 }
