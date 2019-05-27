@@ -37,16 +37,85 @@ impl<P, S> Block<P, S> where P: analysis::Mappable {
 
 impl<P, S> Block<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: memory::Offset<P> {
     pub fn is_ptr_within_block(&self, ptr: &memory::Pointer<P>) -> bool {
-        let diff = ptr.as_pointer().clone() - self.start.as_pointer().clone();
-        
-        if let Ok(diff) = S::try_from(diff) {
-            if diff < self.length.clone() {
-                if self.start.is_context_eq(ptr) {
-                    return true;
+        if self.start.as_pointer() <= ptr.as_pointer() {
+            let diff = ptr.as_pointer().clone() - self.start.as_pointer().clone();
+            
+            if let Ok(diff) = S::try_from(diff) {
+                if diff < self.length.clone() {
+                    if self.start.is_context_eq(ptr) {
+                        return true;
+                    }
                 }
             }
         }
 
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::retrogram::analysis::Block;
+    use crate::retrogram::memory::Pointer;
+    use crate::retrogram::reg::Symbolic;
+
+    #[test]
+    fn block_within() {
+        let block = Block::from_parts(Pointer::from(0x100), 0x50);
+
+        assert!(block.is_ptr_within_block(&Pointer::from(0x105)));
+    }
+
+    #[test]
+    fn block_edge() {
+        let block = Block::from_parts(Pointer::from(0x100), 0x50);
+
+        assert!(!block.is_ptr_within_block(&Pointer::from(0x150)));
+    }
+
+    #[test]
+    fn block_underflow() {
+        let block = Block::from_parts(Pointer::from(0x100), 0x50);
+
+        assert!(!block.is_ptr_within_block(&Pointer::from(0x50)));
+    }
+
+    #[test]
+    fn block_separate_arch_context() {
+        let mut base = Pointer::from(0x100);
+        base.set_arch_context("T", Symbolic::from(0));
+
+        let mut tgt = Pointer::from(0x105);
+        tgt.set_arch_context("T", Symbolic::from(1));
+
+        let block = Block::from_parts(base, 0x50);
+
+        assert!(!block.is_ptr_within_block(&tgt));
+    }
+
+    #[test]
+    fn block_separate_plat_context() {
+        let mut base = Pointer::from(0x100);
+        base.set_platform_context("R", Symbolic::from(0));
+
+        let mut tgt = Pointer::from(0x105);
+        tgt.set_platform_context("R", Symbolic::from(1));
+
+        let block = Block::from_parts(base, 0x50);
+
+        assert!(!block.is_ptr_within_block(&tgt));
+    }
+
+    #[test]
+    fn block_separate_context() {
+        let mut base = Pointer::from(0x100);
+        base.set_arch_context("T", Symbolic::from(0));
+
+        let mut tgt = Pointer::from(0x105);
+        tgt.set_platform_context("R", Symbolic::from(1));
+
+        let block = Block::from_parts(base, 0x50);
+
+        assert!(!block.is_ptr_within_block(&tgt));
     }
 }
