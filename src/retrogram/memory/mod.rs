@@ -13,3 +13,6 @@ pub use region::Memory;
 pub use image::Image;
 pub use cptr::Pointer;
 pub use traits::*;
+
+#[cfg(test)]
+mod tests;

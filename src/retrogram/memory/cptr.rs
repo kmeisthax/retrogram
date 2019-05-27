@@ -5,7 +5,7 @@ use std::{fmt, str};
 use std::ops::{Add, AddAssign, Sub, SubAssign, BitAnd};
 use std::cmp::{PartialEq, PartialOrd, Ord, Ordering};
 use std::hash::{Hash, Hasher};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use num::traits::Bounded;
 use serde::{Serialize, Deserialize, Deserializer};
@@ -221,24 +221,145 @@ impl<P, CV> BitAnd<P> for Pointer<P, CV> where P: BitAnd {
     }
 }
 
-impl<P, CV> PartialEq for Pointer<P, CV> where P: PartialEq {
+impl<P, CV> PartialEq for Pointer<P, CV> where P: PartialEq, CV: PartialEq {
     fn eq(&self, rhs: &Self) -> bool {
-        self.pointer == rhs.pointer
+        let core_eq = self.pointer == rhs.pointer;
+        let mut context_eq = true;
+
+        for (ckey, cval) in self.context.iter() {
+            context_eq = context_eq && Some(cval) == rhs.context.get(ckey);
+        }
+
+        for (foreign_ckey, foreign_cval) in rhs.context.iter() {
+            context_eq = context_eq && Some(foreign_cval) == self.context.get(foreign_ckey);
+        }
+
+        core_eq && context_eq
     }
 }
 
-impl<P, CV> PartialOrd for Pointer<P, CV> where P: PartialOrd {
+/// Implement partial ordering for pointers.
+/// 
+/// The sort order of a pointer is as follows:
+/// 
+/// 1. For all architectual contexts held by either pointer, in alphabetical
+///    order of context keys, sort pointers without the context before pointers
+///    with the context. Multiple pointers with the context are sorted by their
+///    context values.
+/// 2. For all platform contexts held by either pointer, in alphabetical order
+///    of context keys, sort pointers without the context before pointers with
+///    the context. Multiple pointers with the context are sorted by their
+///    context values.
+/// 3. Pointers with the same contexts sort according to their underlying
+///    address type.
+/// 
+/// The only case in which this partial ordering returns None is if the
+/// underlying address or context type's partial ordering would do the same.
+impl<P, CV> PartialOrd for Pointer<P, CV> where P: PartialOrd, CV: PartialOrd + reg::Concretizable {
     fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
+        let mut keys = HashSet::new();
+
+        for key in self.context.keys() {
+            keys.insert(key);
+        }
+
+        for key in rhs.context.keys() {
+            keys.insert(key);
+        }
+
+        let mut keys : Vec<&String> = keys.drain().collect();
+        keys.sort();
+        
+        for key in keys {
+            let lhs_kval = self.context.get(key);
+            if let None = lhs_kval {
+                return Some(Ordering::Less);
+            }
+
+            let lhs_kconcrete = lhs_kval.unwrap().as_concrete();
+            if let None = lhs_kconcrete {
+                return Some(Ordering::Less);
+            }
+
+            let rhs_kval = rhs.context.get(key);
+            if let None = rhs_kval {
+                return Some(Ordering::Greater);
+            }
+
+            let rhs_kconcrete = rhs_kval.unwrap().as_concrete();
+            if let None = rhs_kconcrete {
+                return Some(Ordering::Greater);
+            }
+
+            let ordering = lhs_kconcrete.unwrap().partial_cmp(rhs_kconcrete.unwrap());
+            if ordering != Some(Ordering::Equal) {
+                return ordering;
+            }
+        }
+
         self.pointer.partial_cmp(&rhs.pointer)
     }
 }
 
-impl<P, CV> Eq for Pointer<P, CV> where P: Eq {
+impl<P, CV> Eq for Pointer<P, CV> where P: Eq, CV: Eq {
 
 }
-
-impl<P, CV> Ord for Pointer<P, CV> where P: Ord {
+/// Implement total ordering for pointers.
+/// 
+/// The sort order of a pointer is as follows:
+/// 
+/// 1. For all architectual contexts held by either pointer, in alphabetical
+///    order of context keys, sort pointers without the context before pointers
+///    with the context. Multiple pointers with the context are sorted by their
+///    context values.
+/// 2. For all platform contexts held by either pointer, in alphabetical order
+///    of context keys, sort pointers without the context before pointers with
+///    the context. Multiple pointers with the context are sorted by their
+///    context values.
+/// 3. Pointers with the same contexts sort according to their underlying
+///    address type.
+impl<P, CV> Ord for Pointer<P, CV> where P: Ord, CV: Ord + reg::Concretizable {
     fn cmp(&self, rhs: &Self) -> Ordering {
+        let mut keys = HashSet::new();
+
+        for key in self.context.keys() {
+            keys.insert(key);
+        }
+
+        for key in rhs.context.keys() {
+            keys.insert(key);
+        }
+
+        let mut keys : Vec<&String> = keys.drain().collect();
+        keys.sort();
+        
+        for key in keys {
+            let lhs_kval = self.context.get(key);
+            if let None = lhs_kval {
+                return Ordering::Less;
+            }
+
+            let lhs_kconcrete = lhs_kval.unwrap().as_concrete();
+            if let None = lhs_kconcrete {
+                return Ordering::Less;
+            }
+
+            let rhs_kval = rhs.context.get(key);
+            if let None = rhs_kval {
+                return Ordering::Greater;
+            }
+
+            let rhs_kconcrete = rhs_kval.unwrap().as_concrete();
+            if let None = rhs_kconcrete {
+                return Ordering::Greater;
+            }
+
+            let ordering = lhs_kconcrete.unwrap().cmp(rhs_kconcrete.unwrap());
+            if ordering != Ordering::Equal {
+                return ordering;
+            }
+        }
+
         self.pointer.cmp(&rhs.pointer)
     }
 }
