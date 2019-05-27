@@ -149,13 +149,13 @@ impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: me
         let block = self.blocks.get_mut(block_id);
 
         if let Some(block) = block {
-            if block.as_length() < &new_size {
+            if &new_size < block.as_length() {
                 let remaining_size = block.as_length().clone() - new_size.clone();
 
                 if let Ok(remaining_size) = S::try_from(remaining_size) {
-                    let new_block_start = block.as_start().contextualize(P::from(block.as_start().as_pointer().clone() + new_size));
+                    let new_block_start = block.as_start().contextualize(P::from(block.as_start().as_pointer().clone() + new_size.clone()));
 
-                    *block = analysis::Block::from_parts(block.as_start().clone(), remaining_size.clone());
+                    *block = analysis::Block::from_parts(block.as_start().clone(), new_size);
                     let new_block = analysis::Block::from_parts(new_block_start, remaining_size);
 
                     let id = self.blocks.len();
@@ -167,5 +167,37 @@ impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: me
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::retrogram::analysis::{Database, Block};
+    use crate::retrogram::memory::Pointer;
+
+    #[test]
+    fn block_splitting() {
+        let mut db = Database::new();
+        let start_ptr = Pointer::from(0x150);
+
+        db.insert_block(Block::from_parts(start_ptr.clone(), 0x10));
+        
+        let middle_ptr = Pointer::from(0x155);
+        let target_block = db.find_block_membership(&middle_ptr);
+
+        assert_eq!(target_block, Some(0));
+
+        let offset = middle_ptr.as_pointer() - start_ptr.as_pointer();
+        let result = db.split_block(target_block.unwrap(), offset);
+
+        assert_eq!(result, Some(1));
+
+        let old_block = db.block(target_block.unwrap()).unwrap();
+        let new_block = db.block(result.unwrap()).unwrap();
+
+        assert_eq!(*old_block.as_start().as_pointer(), 0x150);
+        assert_eq!(*old_block.as_length(), 0x5);
+        assert_eq!(*new_block.as_start().as_pointer(), 0x155);
+        assert_eq!(*new_block.as_length(), 0xB);
     }
 }

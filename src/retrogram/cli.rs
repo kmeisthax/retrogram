@@ -3,7 +3,7 @@
 use std::{io, fs};
 use std::str::FromStr;
 use std::convert::TryFrom;
-use std::fmt::{Display, LowerHex, UpperHex};
+use std::fmt::{Debug, Display, LowerHex, UpperHex};
 use std::collections::HashSet;
 use crate::retrogram::{asm, ast, arch, analysis, project, platform, input, memory};
 
@@ -18,18 +18,18 @@ use crate::retrogram::{asm, ast, arch, analysis, project, platform, input, memor
 ///  * Parse the value from a string
 ///  * Display the value, with upper or lowercase hexdecimal notation if needed
 ///  + Attempt to convert the value from a u64 (for user input contexts)
-pub trait Nameable : Clone + FromStr + Display + LowerHex + UpperHex + TryFrom<u64> {
+pub trait Nameable : Clone + Debug + FromStr + Display + LowerHex + UpperHex + TryFrom<u64> {
 
 }
 
-impl<T> Nameable for T where T: Clone + FromStr + Display + LowerHex + UpperHex + TryFrom<u64> {
+impl<T> Nameable for T where T: Clone + Debug + FromStr + Display + LowerHex + UpperHex + TryFrom<u64> {
 
 }
 
 fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P, MS>, bus: &memory::Memory<P, MV, MS, IO>, disassemble: &DIS) -> io::Result<ast::Section<I, S, F, P>>
     where P: memory::PtrNum<MS> + analysis::Mappable + Nameable,
-        MS: memory::Offset<P>,
-        memory::Pointer<P>: std::fmt::Debug,
+        MS: memory::Offset<P> + Debug,
+        memory::Pointer<P>: Debug,
         I: Clone + Display,
         S: Clone + Display,
         F: Clone + Display,
@@ -46,6 +46,18 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::D
         if let Some(target) = xref.as_target() {
             if let None = db.pointer_label(&target) {
                 db.insert_placeholder_label(target.clone(), xref.kind());
+            }
+
+            if let Some(id) = db.find_block_membership(target) {
+                let mut xref_offset = MS::zero();
+
+                if let Some(block) = db.block(id) {
+                    xref_offset = MS::try_from(target.as_pointer().clone() - block.as_start().as_pointer().clone()).unwrap_or(MS::zero());
+                }
+                
+                if xref_offset > MS::zero() {
+                    db.split_block(id, xref_offset);
+                }
             }
 
             db.insert_crossreference(xref);
