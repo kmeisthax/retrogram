@@ -2,7 +2,7 @@
 //! passes run on the program.
 
 use std::{fs, io};
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashSet, HashMap, BTreeMap};
 use std::fmt::UpperHex;
 use serde::{Serialize, Deserialize};
 use crate::retrogram::{ast, memory, project, analysis};
@@ -13,6 +13,10 @@ fn gimme_a_ptr<P>() -> HashMap<memory::Pointer<P>, ast::Label> where P: analysis
 
 fn gimme_a_lbl<P>() -> HashMap<ast::Label, memory::Pointer<P>> where P: analysis::Mappable {
     HashMap::new()
+}
+
+fn gimme_xref<P>() -> BTreeMap<P, HashSet<usize>> where P: analysis::Mappable {
+    BTreeMap::new()
 }
 
 fn im_stale() -> bool {
@@ -39,7 +43,15 @@ pub struct Database<P, S> where P: analysis::Mappable {
     
     /// A list of all pointer values in the program which have a label.
     #[serde(skip, default="gimme_a_ptr")]
-    pointers: HashMap<memory::Pointer<P>, ast::Label>
+    pointers: HashMap<memory::Pointer<P>, ast::Label>,
+
+    /// A list of crossreferences sorted by source address.
+    #[serde(skip, default="gimme_xref")]
+    xref_source_index: BTreeMap<memory::Pointer<P>, HashSet<usize>>,
+
+    /// A list of crossreferences sorted by target address.
+    #[serde(skip, default="gimme_xref")]
+    xref_target_index: BTreeMap<memory::Pointer<P>, HashSet<usize>>,
 }
 
 impl<P, S> Database<P, S> where P: analysis::Mappable {
@@ -50,7 +62,9 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
             blocks: Vec::new(),
             xrefs: Vec::new(),
             labels: HashMap::new(),
-            pointers: HashMap::new()
+            pointers: HashMap::new(),
+            xref_source_index: BTreeMap::new(),
+            xref_target_index: BTreeMap::new()
         }
     }
 
@@ -62,6 +76,20 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
             for (lbl, ptr) in self.symbol_list.iter() {
                 self.labels.insert(lbl.clone(), ptr.clone());
                 self.pointers.insert(ptr.clone(), lbl.clone());
+            }
+
+            for (id, xref) in self.xrefs.iter().enumerate() {
+                let source = xref.as_source();
+                let source_bukkit = self.xref_source_index.entry(source.clone()).or_insert_with(|| HashSet::new());
+
+                source_bukkit.insert(id);
+                
+                let target = xref.as_target();
+                if let Some(target) = target {
+                    let target_bukkit = self.xref_target_index.entry(target.clone()).or_insert_with(|| HashSet::new());
+
+                    target_bukkit.insert(id);
+                }
             }
 
             self.was_deserialized = false;
@@ -106,6 +134,13 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
     }
 
     pub fn insert_crossreference(&mut self, myref: analysis::Reference<P>) {
+        let id = self.xrefs.len();
+
+        self.xref_source_index.entry(myref.as_source().clone()).or_insert_with(|| HashSet::new()).insert(id);
+        if let Some(target) = myref.as_target() {
+            self.xref_target_index.entry(target.clone()).or_insert_with(|| HashSet::new()).insert(id);
+        }
+
         self.xrefs.push(myref);
     }
 
