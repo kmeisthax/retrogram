@@ -1,8 +1,10 @@
 //! Analysis database - Allows accumulation of program facts as disassembly
 //! passes run on the program.
 
-use std::{fs, io};
+use std::{fs, io, iter};
+use std::ops::Add;
 use std::collections::{HashSet, HashMap, BTreeMap};
+use std::collections::btree_map;
 use std::fmt::UpperHex;
 use serde::{Serialize, Deserialize};
 use crate::retrogram::{ast, memory, project, analysis};
@@ -202,6 +204,24 @@ impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: me
         }
 
         None
+    }
+
+    /// Given a contextualized memory range, return all xref IDs originating
+    /// from that memory range.
+    pub fn find_xrefs_from<'a>(&'a self, from_start: &memory::Pointer<P>, from_length: S) -> impl Iterator<Item = usize> + 'a
+        where <P as Add<S>>::Output: Into<P> {
+        let from_end = from_start.clone() + from_length.clone();
+        
+        return self.xref_source_index.range(from_start..&from_end.into_ptr()).map(|(k,v)| v).flatten().map(|v| *v);
+    }
+
+    /// Given a contextualized memory range, return all xref IDs targeting that
+    /// memory range.
+    pub fn find_xrefs_to<'a>(&'a self, to_start: &memory::Pointer<P>, to_length: S) -> impl Iterator<Item = usize> + 'a
+        where <P as Add<S>>::Output: Into<P> {
+        let to_end = to_start.clone() + to_length.clone();
+        
+        return self.xref_target_index.range(to_start..&to_end.into_ptr()).map(|(k,v)| v).flatten().map(|v| *v);
     }
 }
 

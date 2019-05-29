@@ -176,10 +176,10 @@ impl<P, CV> Pointer<P, CV> {
     }
 }
 
-impl<P, CV> Add<P> for Pointer<P, CV> where P: Add {
-    type Output = Pointer<<P as Add>::Output, CV>;
+impl<P, CV, S> Add<S> for Pointer<P, CV> where P: Add<S> {
+    type Output = Pointer<<P as Add<S>>::Output, CV>;
 
-    fn add(self, rhs: P) -> Self::Output {
+    fn add(self, rhs: S) -> Self::Output {
         Pointer {
             pointer: self.pointer + rhs,
             context: self.context
