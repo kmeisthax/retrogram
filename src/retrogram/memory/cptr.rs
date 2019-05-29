@@ -187,16 +187,16 @@ impl<P, CV, S> Add<S> for Pointer<P, CV> where P: Add<S> {
     }
 }
 
-impl<P, CV> AddAssign<P> for Pointer<P, CV> where P: AddAssign {
-    fn add_assign(&mut self, rhs: P) {
+impl<P, CV, S> AddAssign<S> for Pointer<P, CV> where P: AddAssign<S> {
+    fn add_assign(&mut self, rhs: S) {
         self.pointer += rhs;
     }
 }
 
-impl<P, CV> Sub<P> for Pointer<P, CV> where P: Sub {
-    type Output = Pointer<<P as Sub>::Output, CV>;
+impl<P, CV, S> Sub<S> for Pointer<P, CV> where P: Sub<S> {
+    type Output = Pointer<<P as Sub<S>>::Output, CV>;
 
-    fn sub(self, rhs: P) -> Self::Output {
+    fn sub(self, rhs: S) -> Self::Output {
         Pointer {
             pointer: self.pointer - rhs,
             context: self.context
@@ -204,16 +204,16 @@ impl<P, CV> Sub<P> for Pointer<P, CV> where P: Sub {
     }
 }
 
-impl<P, CV> SubAssign<P> for Pointer<P, CV> where P: SubAssign {
-    fn sub_assign(&mut self, rhs: P) {
+impl<P, CV, S> SubAssign<S> for Pointer<P, CV> where P: SubAssign<S> {
+    fn sub_assign(&mut self, rhs: S) {
         self.pointer -= rhs;
     }
 }
 
-impl<P, CV> BitAnd<P> for Pointer<P, CV> where P: BitAnd {
-    type Output = Pointer<<P as BitAnd>::Output, CV>;
+impl<P, CV, S> BitAnd<S> for Pointer<P, CV> where P: BitAnd<S> {
+    type Output = Pointer<<P as BitAnd<S>>::Output, CV>;
 
-    fn bitand(self, rhs: P) -> Self::Output {
+    fn bitand(self, rhs: S) -> Self::Output {
         Pointer {
             pointer: self.pointer & rhs,
             context: self.context
