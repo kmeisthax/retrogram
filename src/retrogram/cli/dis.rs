@@ -5,29 +5,10 @@ use std::str::FromStr;
 use std::convert::TryFrom;
 use std::fmt::{Debug, Display, LowerHex, UpperHex};
 use std::collections::HashSet;
-use crate::retrogram::{asm, ast, arch, analysis, project, platform, input, memory};
-
-/// Guard trait for pointer values users can input to us and we can output.
-/// 
-/// Effectively, this covers all of the operations we need to do in order for
-/// both the program and it's users to be able to name locations within a
-/// program.
-/// 
-/// The trait bounds, in plain english, require that we can:
-/// 
-///  * Parse the value from a string
-///  * Display the value, with upper or lowercase hexdecimal notation if needed
-///  + Attempt to convert the value from a u64 (for user input contexts)
-pub trait Nameable : Clone + Debug + FromStr + Display + LowerHex + UpperHex + TryFrom<u64> {
-
-}
-
-impl<T> Nameable for T where T: Clone + Debug + FromStr + Display + LowerHex + UpperHex + TryFrom<u64> {
-
-}
+use crate::retrogram::{asm, ast, arch, analysis, project, platform, input, memory, cli};
 
 fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P, MS>, bus: &memory::Memory<P, MV, MS, IO>, disassemble: &DIS) -> io::Result<ast::Section<I, S, F, P>>
-    where P: memory::PtrNum<MS> + analysis::Mappable + Nameable,
+    where P: memory::PtrNum<MS> + analysis::Mappable + cli::Nameable,
         MS: memory::Offset<P> + Debug,
         memory::Pointer<P>: Debug,
         I: Clone + Display,

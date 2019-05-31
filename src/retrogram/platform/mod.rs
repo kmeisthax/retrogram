@@ -8,12 +8,26 @@ pub mod agb;
 
 use std::str;
 use serde::Serialize;
+use crate::retrogram::arch;
 
 /// Enumeration of all platforms that ship with Retrogram.
 #[derive(Copy, Clone, Serialize, Debug)]
 pub enum PlatformName {
     GB,
     AGB
+}
+
+impl PlatformName {
+    /// Determine the default architecture for a given platform.
+    /// 
+    /// Some platforms can support multiple architectures, so this lookup may
+    /// fail.
+    pub fn default_arch(&self) -> Option<arch::ArchName> {
+        match self {
+            PlatformName::GB => Some(arch::ArchName::LR35902),
+            PlatformName::AGB => Some(arch::ArchName::AARCH32),
+        }
+    }
 }
 
 impl str::FromStr for PlatformName {

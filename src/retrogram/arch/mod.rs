@@ -5,12 +5,26 @@ pub mod aarch32;
 
 use std::str;
 use serde::Serialize;
+use crate::retrogram::asm;
 
 /// Enumeration of all architectures that ship with Retrogram.
 #[derive(Copy, Clone, Serialize, Debug)]
 pub enum ArchName {
     LR35902,
     AARCH32,
+}
+
+impl ArchName {
+    /// Determine the default assembler syntax for a given platform.
+    /// 
+    /// Some architectures don't have an assembler implemented yet, so this
+    /// lookup may fail.
+    pub fn default_asm(&self) -> Option<asm::AssemblerName> {
+        match self {
+            ArchName::LR35902 => Some(asm::AssemblerName::RGBDS),
+            ArchName::AARCH32 => None,
+        }
+    }
 }
 
 impl str::FromStr for ArchName {
