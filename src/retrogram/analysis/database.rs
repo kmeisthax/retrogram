@@ -161,6 +161,10 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
     pub fn block(&self, block_id: usize) -> Option<&analysis::Block<P, S>> {
         self.blocks.get(block_id)
     }
+
+    pub fn xref(&self, xref_id: usize) -> Option<&analysis::Reference<P>> {
+        self.xrefs.get(xref_id)
+    }
 }
 
 impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: memory::Offset<P> {
@@ -222,6 +226,25 @@ impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: me
         let to_end = to_start.clone() + to_length.clone();
         
         return self.xref_target_index.range(to_start..&to_end.into_ptr()).map(|(k,v)| v).flatten().map(|v| *v);
+    }
+
+    /// Search for all crossreferences whose static target has not yet been
+    /// analyzed.
+    pub fn unanalyzed_static_xrefs(&self) -> Vec<usize> {
+        let mut xref_ids = Vec::new();
+
+        for (id, xref) in self.xrefs.iter().enumerate() {
+            if let Some(target) = xref.as_target() {
+                // TODO: Ouch. O(mn) complexity. Can we do better?
+                for block in self.blocks.iter() {
+                    if block.is_ptr_within_block(target) {
+                        xref_ids.push(id);
+                    }
+                }
+            }
+        }
+
+        xref_ids
     }
 }
 

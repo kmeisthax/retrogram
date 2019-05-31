@@ -87,7 +87,23 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, IMP>(prog: &project::Program, star
     }
 
     let start_pc = input::parse_ptr(start_spec, db, bus).expect("Must specify a valid address to analyze");
-    scan_pc_for_arch(&mut db, &start_pc, disassembler, bus);
+    scan_pc_for_arch(&mut db, &start_pc, disassembler, bus)?;
+
+    loop {
+        let unanalyzed = db.unanalyzed_static_xrefs();
+
+        if unanalyzed.len() == 0 {
+            break;
+        }
+
+        for xref_id in unanalyzed {
+            let xref = db.xref(xref_id);
+
+            if let Some(xref) = xref {
+                scan_pc_for_arch(&mut db, &start_pc, disassembler, bus)?;
+            }
+        }
+    }
 
     pjdb.write(prog.as_database_path())?;
 
