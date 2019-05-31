@@ -2,14 +2,44 @@
 
 use std::{io, fs};
 use std::collections::HashSet;
+use std::fmt::Debug;
 use crate::retrogram::{project, platform, arch, asm, ast, input, analysis, memory, cli};
 
-fn update_database_with_scan_result<I, SI, F, P, S>(db: &mut analysis::Database<P, S>,
-        orig_asm: ast::Section<I, SI, F, P>,
-        xrefs: HashSet<analysis::Reference<P>>,
-        blocks: Vec<analysis::Block<P, S>>) -> io::Result<()>
-    where P: analysis::Mappable + cli::Nameable + memory::PtrNum<S>,
-        S: memory::Offset<P> {
+/// Given a program, analyze a given routine with the given memory model and
+/// disassembler and populate the database with the results.
+/// 
+/// This function exists to isolate as much as possible of the top-level scan
+/// implementation from generic typing concerns. You call it with a compatible
+/// disassembler and memory and the database gets updated as you wished.
+/// 
+/// TODO: The current set of lifetime bounds preclude the use of zero-copy
+/// deserialization. We should figure out a way around that.
+fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, IMP>(prog: &project::Program, start_spec: &str, disassembler: &DIS, bus: &memory::Memory<P, MV, S, IO>, importer: Option<&IMP>) -> io::Result<()>
+    where for <'dw> P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
+        for <'dw> S: memory::Offset<P> + Debug + serde::Deserialize<'dw> + serde::Serialize,
+        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>),
+        IMP: Fn(io::BufReader<fs::File>, &mut analysis::Database<P, S>) -> io::Result<()> {
+    let image = prog.iter_images().next().ok_or(io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
+    let mut file = fs::File::open(image)?;
+
+    let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
+        Ok(pjdb) => pjdb,
+        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+            eprintln!("Creating new database for project");
+            project::ProjectDatabase::new()
+        },
+        Err(e) => return Err(e)
+    };
+
+    let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
+    db.update_indexes();
+
+    if let Some(importer) = importer {
+        db.import_symbols(prog, importer)?;
+    }
+
+    let start_pc = input::parse_ptr(start_spec, db, bus).expect("Must specify a valid address to analyze");
+    let (orig_asm, xrefs, pc_offset, blocks) = analysis::disassemble_block(start_pc.clone(), bus, disassembler)?;
     
     for block in blocks {
         db.insert_block(block);
@@ -44,43 +74,6 @@ fn update_database_with_scan_result<I, SI, F, P, S>(db: &mut analysis::Database<
         _ => {}
     }
 
-    Ok(())
-}
-
-fn scan_for_arch(prog: &project::Program, start_spec: &str, arch: arch::ArchName, platform: platform::PlatformName, asm: asm::AssemblerName) -> io::Result<()> {
-    let image = prog.iter_images().next().ok_or(io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
-    let mut file = fs::File::open(image)?;
-
-    let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
-        Ok(pjdb) => pjdb,
-        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-            eprintln!("Creating new database for project");
-            project::ProjectDatabase::new()
-        },
-        Err(e) => return Err(e)
-    };
-
-    let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
-    db.update_indexes();
-
-    match asm {
-        asm::AssemblerName::RGBDS => db.import_symbols(prog, asm::rgbds::parse_symbol_file)?,
-        _ => {}
-    };
-
-    let bus = match platform {
-        platform::PlatformName::GB => platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?,
-        _ => return Err(io::Error::new(io::ErrorKind::Other, "Invalid platform for architecture"))
-    };
-
-    let start_pc = input::parse_ptr(start_spec, db, &bus).expect("Must specify a valid address to analyze");
-    let (orig_asm, xrefs, pc_offset, blocks) = match arch {
-        arch::ArchName::LR35902 => analysis::disassemble_block(start_pc.clone(), &bus, &arch::lr35902::disassemble)?,
-        _ => return Err(io::Error::new(io::ErrorKind::Other, "Not implemented. Yet."))
-    };
-
-    update_database_with_scan_result(db, orig_asm, xrefs, blocks)?;
-
     pjdb.write(prog.as_database_path())?;
 
     Ok(())
@@ -91,6 +84,13 @@ pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
     let platform = prog.platform().ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified platform, analysis cannot continue."))?;
     let arch = prog.arch().or_else(|| platform.default_arch()).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified architecture, analysis cannot continue."))?;
     let asm = prog.assembler().or_else(|| arch.default_asm()).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified assembler for architecture, analysis cannot continue."))?;
+    let image = prog.iter_images().next().ok_or(io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
+    let mut file = fs::File::open(image)?;
     
-    scan_for_arch(prog, start_spec, arch, platform, asm)
+    //TODO: how the hell do we use None as the assembler symbol import
+    match (arch, platform, asm) {
+        (arch::ArchName::LR35902, platform::PlatformName::GB, asm::AssemblerName::RGBDS) => scan_for_arch(prog, start_spec, &arch::lr35902::disassemble, &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?, Some(&asm::rgbds::parse_symbol_file)),
+        //(arch::ArchName::AARCH32, platform::PlatformName::AGB, _) => scan_for_arch(prog, start_spec, &arch::aarch32::disassemble, &platform::agb::construct_platform(&mut file)?, None),
+        _ => return Err(io::Error::new(io::ErrorKind::Other, "The given combination of architecture, platform, and/or assembler are not compatible."))
+    }
 }
