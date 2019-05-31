@@ -10,6 +10,7 @@ use std::{str, io};
 use crate::retrogram::{cli, project};
 
 enum Commands {
+    Scan,
     Disassemble
 }
 
@@ -19,6 +20,8 @@ impl str::FromStr for Commands {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_ref() {
             "dis" => Ok(Commands::Disassemble),
+            "scan" => Ok(Commands::Scan),
+            "chadtronic-scan" => Ok(Commands::Scan),
             _ => Err(())
         }
     }
@@ -60,6 +63,7 @@ fn main() -> io::Result<()> {
     let image = prog.iter_images().next().ok_or(io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
 
     match command {
+        Some(Commands::Scan) => cli::scan(&prog, &start_pc)?,
         Some(Commands::Disassemble) => cli::dis(&prog, &start_pc)?,
         _ => eprintln!("Please enter a command"),
     };

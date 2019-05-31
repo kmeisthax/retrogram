@@ -168,7 +168,7 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
 }
 
 impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: memory::Offset<P> {
-    pub fn find_block_membership(&mut self, ptr: &memory::Pointer<P>) -> Option<usize> {
+    pub fn find_block_membership(&self, ptr: &memory::Pointer<P>) -> Option<usize> {
         //TODO: This needs to be way higher performance than a linear scan
         for (i, ref block) in self.blocks.iter().enumerate() {
             if block.is_ptr_within_block(ptr) {
@@ -236,10 +236,8 @@ impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: me
         for (id, xref) in self.xrefs.iter().enumerate() {
             if let Some(target) = xref.as_target() {
                 // TODO: Ouch. O(mn) complexity. Can we do better?
-                for block in self.blocks.iter() {
-                    if block.is_ptr_within_block(target) {
-                        xref_ids.push(id);
-                    }
+                if self.find_block_membership(target) == None {
+                    xref_ids.push(id);
                 }
             }
         }

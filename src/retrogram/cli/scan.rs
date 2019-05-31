@@ -85,8 +85,9 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, IMP>(prog: &project::Program, star
     if let Some(importer) = importer {
         db.import_symbols(prog, importer)?;
     }
-
+    
     let start_pc = input::parse_ptr(start_spec, db, bus).expect("Must specify a valid address to analyze");
+    println!("Starting scan from {}", start_pc);
     scan_pc_for_arch(&mut db, &start_pc, disassembler, bus)?;
 
     loop {
@@ -97,10 +98,16 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, IMP>(prog: &project::Program, star
         }
 
         for xref_id in unanalyzed {
+            let mut target_pc = None;
             let xref = db.xref(xref_id);
 
             if let Some(xref) = xref {
-                scan_pc_for_arch(&mut db, &start_pc, disassembler, bus)?;
+                target_pc = xref.as_target().clone();
+            }
+
+            if let Some(target_pc) = target_pc {
+                println!("Starting scan from {}", target_pc);
+                scan_pc_for_arch(&mut db, &target_pc, disassembler, bus)?;
             }
         }
     }
