@@ -7,14 +7,32 @@ use std::fmt::{Debug, Display, LowerHex, UpperHex};
 use std::collections::HashSet;
 use crate::retrogram::{asm, ast, arch, analysis, project, platform, input, memory, cli};
 
-fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::Database<P, MS>, bus: &memory::Memory<P, MV, MS, IO>, disassemble: &DIS) -> io::Result<ast::Section<I, S, F, P>>
-    where P: memory::PtrNum<MS> + analysis::Mappable + cli::Nameable,
-        MS: memory::Offset<P> + Debug,
+fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT>(prog: &project::Program,
+        start_spec: &str,
+        bus: &memory::Memory<P, MV, MS, IO>,
+        disassemble: &DIS,
+        format_and_print: &FMT) -> io::Result<()>
+    where for <'dw> P: memory::PtrNum<MS> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw>,
+        for <'dw> MS: memory::Offset<P> + Debug + serde::Deserialize<'dw>,
         memory::Pointer<P>: Debug,
         I: Clone + Display,
         S: Clone + Display,
         F: Clone + Display,
-        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, MS, IO>) -> (Option<ast::Instruction<I, S, F, P>>, MS, bool, bool, Vec<analysis::Reference<P>>) {
+        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, MS, IO>) -> (Option<ast::Instruction<I, S, F, P>>, MS, bool, bool, Vec<analysis::Reference<P>>),
+        FMT: Fn(&ast::Section<I, S, F, P>) {
+    
+    let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
+        Ok(pjdb) => pjdb,
+        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+            eprintln!("Creating new database for project");
+            project::ProjectDatabase::new()
+        },
+        Err(e) => return Err(e)
+    };
+
+    let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
+    db.update_indexes();
+
     let start_pc = input::parse_ptr(start_spec, db, bus);
     let start_pc = start_pc.expect("Must specify a valid address to analyze");
     let (orig_asm, xrefs, pc_offset, blocks) = analysis::disassemble_block(start_pc.clone(), bus, disassemble)?;
@@ -54,85 +72,27 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS>(start_spec: &str, db: &mut analysis::D
     
     let labeled_asm = analysis::replace_labels(orig_asm, db, bus);
     let injected_asm = analysis::inject_labels(labeled_asm, db);
+    format_and_print(&injected_asm);
 
-    Ok(injected_asm)
+    Ok(())
 }
 
 pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
+    let platform = prog.platform().ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified platform, analysis cannot continue."))?;
+    let arch = prog.arch().or_else(|| platform.default_arch()).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified architecture, analysis cannot continue."))?;
+    let asm = prog.assembler().or_else(|| arch.default_asm()).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified assembler for architecture, analysis cannot continue."))?;
     let image = prog.iter_images().next().ok_or(io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
-    let arch = match prog.arch() {
-        Some(a) => a,
-        None => match prog.platform() {
-            Some(platform::PlatformName::GB) => arch::ArchName::LR35902,
-            Some(platform::PlatformName::AGB) => arch::ArchName::AARCH32,
-            _ => return Err(io::Error::new(io::ErrorKind::Other, "No viable default architecture for platform and none was selected"))
-        }
-    };
 
-    match arch {
-        arch::ArchName::LR35902 => {
-            let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
-                Ok(pjdb) => pjdb,
-                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-                    eprintln!("Creating new database for project");
-                    project::ProjectDatabase::new()
-                },
-                Err(e) => return Err(e)
-            };
-
-            let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
-            db.update_indexes();
-
-            db.import_symbols(prog, asm::rgbds::parse_symbol_file)?;
-
-            let bus = match prog.platform() {
-                Some(platform::PlatformName::GB) => platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?,
-                _ => return Err(io::Error::new(io::ErrorKind::Other, "Invalid platform for architecture"))
-            };
-
-            let asm = dis_inner(start_spec, &mut db, &bus, &arch::lr35902::disassemble)?;
-
-            match prog.assembler() {
-                Some(asm::AssemblerName::RGBDS) => println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm)),
-                _ => eprintln!("Please specify an assembler to print with")
-            };
-
-            pjdb.write(prog.as_database_path())?;
-        },
-        arch::ArchName::AARCH32 => {
-            let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
-                Ok(pjdb) => pjdb,
-                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-                    eprintln!("Creating new database for project");
-                    project::ProjectDatabase::new()
-                },
-                Err(e) => return Err(e)
-            };
-
-            let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
-            db.update_indexes();
-            
-            let bus = match prog.platform() {
-                Some(platform::PlatformName::AGB) => platform::agb::construct_platform(&mut file)?,
-                _ => return Err(io::Error::new(io::ErrorKind::Other, "Invalid platform for architecture"))
-            };
-
-            let asm = dis_inner(start_spec, &mut db, &bus, &arch::aarch32::disassemble)?;
-
-            match prog.assembler() {
-                Some(asm::AssemblerName::RGBDS) => println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm)),
-                _ => eprintln!("Please specify an assembler to print with")
-            };
-        },
+    match (arch, platform) {
+        (arch::ArchName::LR35902, platform::PlatformName::GB) => dis_inner(prog, start_spec,
+            &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?,
+            &arch::lr35902::disassemble,
+            &|asm| println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm))),
+        (arch::ArchName::AARCH32, platform::PlatformName::AGB) => dis_inner(prog, start_spec,
+            &platform::agb::construct_platform(&mut file)?,
+            &arch::aarch32::disassemble,
+            &|asm| println!("")),
         _ => return Err(io::Error::new(io::ErrorKind::Other, "oops"))
     }
-
-    match prog.platform() {
-        Some(platform::PlatformName::GB) => {
-        },
-        _ => eprintln!("Unknown platform")
-    }
-
-    Ok(())
 }
