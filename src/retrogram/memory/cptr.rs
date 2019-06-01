@@ -412,6 +412,36 @@ impl<P, CV> fmt::Display for Pointer<P, CV> where P: fmt::Display, CV: fmt::Disp
     }
 }
 
+impl<P, CV> fmt::UpperHex for Pointer<P, CV> where P: fmt::UpperHex, CV: fmt::UpperHex + reg::Concretizable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (ckey, cval) in self.context.iter() {
+            if let Some(concrete) = cval.as_concrete() {
+                write!(f, "{}_{:X}!", ckey, concrete)?;
+            } else {
+                //TODO: Partial symbolic bounds are lost.
+                write!(f, "{}_?!", ckey)?;
+            }
+        }
+
+        write!(f, "{:X}", self.pointer)
+    }
+}
+
+impl<P, CV> fmt::LowerHex for Pointer<P, CV> where P: fmt::LowerHex, CV: fmt::LowerHex + reg::Concretizable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (ckey, cval) in self.context.iter() {
+            if let Some(concrete) = cval.as_concrete() {
+                write!(f, "{}_{:x}!", ckey, concrete)?;
+            } else {
+                //TODO: Partial symbolic bounds are lost.
+                write!(f, "{}_?!", ckey)?;
+            }
+        }
+
+        write!(f, "{:x}", self.pointer)
+    }
+}
+
 //Oh look, serde_plain can't work with parametric types at all.
 //What a shame. Now I have to actually, uh, write a Deserializer by hand.
 //I have a confession to make: I don't understand the serde deserialization API
