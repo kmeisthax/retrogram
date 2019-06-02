@@ -12,7 +12,7 @@ use crate::retrogram::{analysis, memory};
 ///    locations, one of which may be the next instruction in sequence.
 /// 
 /// Effectively, it is a run of instructions with no jumps.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Block<P, S> where P: analysis::Mappable {
     start: memory::Pointer<P>,
     length: S

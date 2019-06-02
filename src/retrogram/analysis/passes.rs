@@ -64,8 +64,7 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
 pub fn replace_operand_with_label<I, S, F, P, AMV, AS, AIO>(src_operand: ast::Operand<I, S, F, P>, db: &mut Database<P, AS>, start_addr: &memory::Pointer<P>, memory: &memory::Memory<P, AMV, AS, AIO>, refkind: ReferenceKind) -> ast::Operand<I, S, F, P>
     where P: memory::PtrNum<AS> + analysis::Mappable + Clone + UpperHex,
         AS: memory::Offset<P> + Clone,
-        I: Clone,
-        F: Clone {
+        ast::Operand<I, S, F, P>: Clone {
     match src_operand {
         ast::Operand::Literal(ast::Literal::Pointer(pt)) => {
             let mut cpt = start_addr.contextualize(pt.clone());
@@ -93,9 +92,7 @@ pub fn replace_operand_with_label<I, S, F, P, AMV, AS, AIO>(src_operand: ast::Op
 pub fn replace_labels<I, S, F, P, AMV, AS, AIO>(src_assembly: ast::Section<I, S, F, P>, db: &mut Database<P, AS>, memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Section<I, S, F, P>
     where P: memory::PtrNum<AS> + analysis::Mappable + Clone + UpperHex,
         AS: memory::Offset<P> + Clone,
-        I: Clone,
-        S: Clone,
-        F: Clone {
+        ast::Line<I, S, F, P>: Clone, ast::Operand<I, S, F, P>: Clone {
     let mut dst_assembly = ast::Section::new(src_assembly.section_name(), src_assembly.section_loc());
 
     for line in src_assembly.iter_lines() {
@@ -120,7 +117,7 @@ pub fn replace_labels<I, S, F, P, AMV, AS, AIO>(src_assembly: ast::Section<I, S,
 /// Given an Assembly, create a new Assembly with all labels inserted from the
 /// database.
 pub fn inject_labels<I, S, F, P, MS>(src_assembly: ast::Section<I, S, F, P>, db: &Database<P, MS>) -> ast::Section<I, S, F, P>
-    where P: analysis::Mappable, I: Clone, S: Clone, F: Clone {
+    where P: analysis::Mappable, ast::Line<I, S, F, P>: Clone {
     let mut dst_assembly = ast::Section::new(src_assembly.section_name(), src_assembly.section_loc());
     
     for line in src_assembly.iter_lines() {

@@ -4,7 +4,7 @@ use std::{io, fs};
 use std::str::FromStr;
 use std::convert::TryFrom;
 use std::fmt::{Debug, Display, LowerHex, UpperHex};
-use std::collections::HashSet;
+use std::collections::{HashSet, BTreeSet};
 use crate::retrogram::{asm, ast, arch, analysis, project, platform, input, memory, cli};
 
 fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT>(prog: &project::Program,
@@ -13,11 +13,9 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT>(prog: &project::Program,
         disassemble: &DIS,
         format_and_print: &FMT) -> io::Result<()>
     where for <'dw> P: memory::PtrNum<MS> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw>,
-        for <'dw> MS: memory::Offset<P> + Debug + serde::Deserialize<'dw>,
-        memory::Pointer<P>: Debug,
-        I: Clone + Display,
-        S: Clone + Display,
-        F: Clone + Display,
+        for <'dw> MS: memory::Offset<P> + analysis::Mappable + serde::Deserialize<'dw>,
+        ast::Operand<I, S, F, P>: Clone,
+        ast::Line<I, S, F, P>: Clone,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, MS, IO>) -> (Option<ast::Instruction<I, S, F, P>>, MS, bool, bool, Vec<analysis::Reference<P>>),
         FMT: Fn(&ast::Section<I, S, F, P>) {
     
@@ -30,49 +28,60 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT>(prog: &project::Program,
         Err(e) => return Err(e)
     };
 
-    let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
+    let mut db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "You did not specify a name for the program to disassemble."))?);
     db.update_indexes();
 
-    let start_pc = input::parse_ptr(start_spec, db, bus);
-    let start_pc = start_pc.expect("Must specify a valid address to analyze");
-    let (orig_asm, xrefs, pc_offset, blocks) = analysis::disassemble_block(start_pc.clone(), bus, disassemble)?;
+    let start_pc = input::parse_ptr(start_spec, db, bus).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Must specify a valid address to analyze"))?;
+    let start_block_id = db.find_block_membership(&start_pc).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The given memory location has not yet been successfully analyzed. Please scan it first."))?;
 
-    for block in blocks {
-        db.insert_block(block);
+    let mut disassembly_blocks = BTreeSet::new();
+
+    {
+        let start_block = db.block(start_block_id).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "LOGIC ERROR: The given PC returned a block ID that doesn't exist."))?;
+        disassembly_blocks.insert(start_block.clone());
     }
+    
+    let mut found_targets = true;
 
-    for xref in xrefs {
-        if let Some(target) = xref.as_target() {
-            if let None = db.pointer_label(&target) {
-                db.insert_placeholder_label(target.clone(), xref.kind());
-            }
+    while found_targets {
+        found_targets = false;
+        
+        let mut target_blocks = BTreeSet::new();
 
-            if let Some(id) = db.find_block_membership(target) {
-                let mut xref_offset = MS::zero();
-
-                if let Some(block) = db.block(id) {
-                    xref_offset = MS::try_from(target.as_pointer().clone() - block.as_start().as_pointer().clone()).unwrap_or(MS::zero());
-                }
+        //TODO: This routine unnecessarily scans blocks that already exist for
+        //each run-through. We should find a way to stop that.
+        for block in disassembly_blocks.iter() {
+            dbg!(block.as_start());
+            for xref_id in db.find_xrefs_to(block.as_start(), block.as_length().clone()) {
+                let xref = db.xref(xref_id).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "LOGIC ERROR: The given PC returned an xref ID that doesn't exist."))?;
+                dbg!(xref);
                 
-                if xref_offset > MS::zero() {
-                    db.split_block(id, xref_offset);
+                match (xref.kind(), xref.as_target()) {
+                    (analysis::ReferenceKind::Code, Some(target)) => {
+                        let target_block_id = db.find_block_membership(target).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The given memory location has not yet been successfully analyzed. Please scan it first."))?;
+                        let target_block = db.block(target_block_id).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "LOGIC ERROR: The given PC returned a block ID that doesn't exist."))?;
+
+                        if !disassembly_blocks.contains(target_block) {
+                            found_targets = true;
+                            target_blocks.insert(target_block);
+                        }
+                    },
+                    _ => {}
                 }
             }
+        }
 
-            db.insert_crossreference(xref);
+        for block in target_blocks {
+            disassembly_blocks.insert(block.clone());
         }
     }
 
-    match orig_asm.iter_lines().next() {
-        Some(line) => {
-            db.insert_placeholder_label(line.source_address().clone(), analysis::ReferenceKind::Unknown);
-        },
-        _ => {}
+    for block in disassembly_blocks {
+        let (orig_asm, xrefs, pc_offset, blocks) = analysis::disassemble_block(start_pc.clone(), bus, disassemble)?;
+        let labeled_asm = analysis::replace_labels(orig_asm, db, bus);
+        let injected_asm = analysis::inject_labels(labeled_asm, db);
+        format_and_print(&injected_asm);
     }
-    
-    let labeled_asm = analysis::replace_labels(orig_asm, db, bus);
-    let injected_asm = analysis::inject_labels(labeled_asm, db);
-    format_and_print(&injected_asm);
 
     Ok(())
 }
