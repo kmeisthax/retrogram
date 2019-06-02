@@ -51,10 +51,8 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT>(prog: &project::Program,
         //TODO: This routine unnecessarily scans blocks that already exist for
         //each run-through. We should find a way to stop that.
         for block in disassembly_blocks.iter() {
-            dbg!(block.as_start());
-            for xref_id in db.find_xrefs_to(block.as_start(), block.as_length().clone()) {
+            for xref_id in db.find_xrefs_from(block.as_start(), block.as_length().clone()) {
                 let xref = db.xref(xref_id).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "LOGIC ERROR: The given PC returned an xref ID that doesn't exist."))?;
-                dbg!(xref);
                 
                 match (xref.kind(), xref.as_target()) {
                     (analysis::ReferenceKind::Code, Some(target)) => {
@@ -77,7 +75,19 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT>(prog: &project::Program,
     }
 
     for block in disassembly_blocks {
-        let (orig_asm, xrefs, pc_offset, blocks) = analysis::disassemble_block(start_pc.clone(), bus, disassemble)?;
+        let (orig_asm, xrefs, pc_offset, blocks) = analysis::disassemble_block(block.as_start().clone(), bus, disassemble)?;
+        if let Some(pc_offset) = pc_offset {
+            if pc_offset > block.as_length().clone() {
+                if let Ok(too_big) = MS::try_from(pc_offset - block.as_length().clone()) {
+                    eprintln!("WARN: Block at {} is too large by {}", block.as_start(), too_big);
+                }
+            } else if pc_offset < block.as_length().clone() {
+                if let Ok(too_small) = MS::try_from(block.as_length().clone() - pc_offset) {
+                    eprintln!("WARN: Block at {} is too small by {}", block.as_start(), too_small);
+                }
+            }
+        }
+
         let labeled_asm = analysis::replace_labels(orig_asm, db, bus);
         let injected_asm = analysis::inject_labels(labeled_asm, db);
         format_and_print(&injected_asm);
