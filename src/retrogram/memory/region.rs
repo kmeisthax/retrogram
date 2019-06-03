@@ -8,9 +8,9 @@ use std::cmp::PartialOrd;
 use std::slice::SliceIndex;
 use std::fmt::Debug;
 use num::traits::{Bounded, One};
-use crate::retrogram::{reg, mynums, memory};
+use crate::retrogram::{reg, maths, memory};
 use crate::retrogram::reg::Convertable;
-use crate::retrogram::mynums::CheckedSub;
+use crate::retrogram::maths::CheckedSub;
 use crate::retrogram::memory::bss::UnknownImage;
 use crate::retrogram::memory::rombin::ROMBinaryImage;
 use crate::retrogram::memory::{Image, Behavior, Pointer};
@@ -156,7 +156,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
     where P: memory::PtrNum<S>, S: memory::Offset<P> + TryFrom<usize>,
-        MV: reg::Symbolizable + mynums::BoundWidth<usize>, IO: One,
+        MV: reg::Symbolizable + maths::BoundWidth<usize>, IO: One,
         reg::Symbolic<MV>: Default, 
         <S as TryFrom<usize>>::Error : Debug {
     

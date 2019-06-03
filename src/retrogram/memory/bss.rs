@@ -4,7 +4,7 @@
 use std::marker::PhantomData;
 use std::convert::TryFrom;
 use std::ops::Sub;
-use crate::retrogram::mynums::CheckedSub;
+use crate::retrogram::maths::CheckedSub;
 use crate::retrogram::memory::{Image, Pointer, PtrNum, Offset};
 use crate::retrogram::reg;
 

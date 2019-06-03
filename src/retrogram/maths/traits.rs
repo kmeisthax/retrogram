@@ -28,17 +28,6 @@ pub trait BoundWidth<RHS = Self> : Shl<RHS> {
     fn bound_width() -> RHS;
 }
 
-macro_rules! boundwidth_impl {
-    ($t:ty, $rhs:ty, $shifts:expr) => {
-        impl BoundWidth<$rhs> for $t {
-            #[inline]
-            fn bound_width() -> $rhs {
-                $shifts
-            }
-        }
-    }
-}
-
 boundwidth_impl!(u8, u8, 8);
 boundwidth_impl!(u8, u16, 8);
 boundwidth_impl!(u8, u32, 8);
@@ -77,17 +66,6 @@ boundwidth_impl!(u128, usize, 128);
 /// checked maths with different types of operands and output parameters.
 pub trait CheckedSub<RHS = Self>: Sized + Sub<RHS> {
     fn checked_sub(&self, v: &RHS) -> Option<<Self as Sub<RHS>>::Output>;
-}
-
-macro_rules! checked_impl {
-    ($trait_name:ident, $method:ident, $t:ty, $rhs:ty, $out:ty) => {
-        impl $trait_name for $t {
-            #[inline]
-            fn $method(&self, v: &$rhs) -> Option<$out> {
-                <$t>::$method(*self, *v)
-            }
-        }
-    }
 }
 
 checked_impl!(CheckedSub, checked_sub, u8, u8, u8);

@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::convert::TryFrom;
 use num::traits::{Bounded, Zero, One};
 use crate::retrogram::reg;
-use crate::retrogram::mynums::{BoundWidth, CheckedSub};
+use crate::retrogram::maths::{BoundWidth, CheckedSub};
 
 /// Trait which represents all operations expected of a pointer value.
 /// 

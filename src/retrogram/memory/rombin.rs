@@ -3,7 +3,7 @@
 use std::marker::PhantomData;
 use std::convert::TryFrom;
 use std::io;
-use crate::retrogram::mynums::CheckedSub;
+use crate::retrogram::maths::CheckedSub;
 use crate::retrogram::memory::{Pointer, Image, PtrNum, Offset};
 
 pub struct ROMBinaryImage<P, MV> {
