@@ -2,6 +2,7 @@
 
 pub mod lr35902;
 pub mod aarch32;
+pub mod w65c816;
 
 use std::str;
 use serde::Serialize;
@@ -12,6 +13,7 @@ use crate::retrogram::asm;
 pub enum ArchName {
     LR35902,
     AARCH32,
+    W65C816,
 }
 
 impl ArchName {
@@ -23,6 +25,7 @@ impl ArchName {
         match self {
             ArchName::LR35902 => Some(asm::AssemblerName::RGBDS),
             ArchName::AARCH32 => None,
+            ArchName::W65C816 => None,
         }
     }
 }
@@ -37,6 +40,8 @@ impl str::FromStr for ArchName {
             "arm" => Ok(ArchName::AARCH32),
             "arm32" => Ok(ArchName::AARCH32),
             "aarch32" => Ok(ArchName::AARCH32),
+            "65c816" => Ok(ArchName::W65C816),
+            "w65c816" => Ok(ArchName::W65C816),
             _ => Err(())
         }
     }

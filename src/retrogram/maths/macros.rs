@@ -1,14 +1,38 @@
-use crate::retrogram::maths::BoundWidth;
-
-/// Allows conversions into a given masked wrapper type when the internal
-/// primitive of that wrapper can accept the given type. The primitive being
-/// wrapped will be masked, of course.
+/// Allows conversions into a given masked wrapper type from some other
+/// primitive type. The primitive being wrapped will be masked, of course; and
+/// we rely on the From implementation of the underlying wrapped type to do the
+/// conversion.
 macro_rules! masked_conv_impl {
-    ($type:ident, $wrap_type:ident, $mask:expr) => {
-        impl<T> From<T> for $type where $wrap_type: From<T> {
-            fn from(t: T) -> Self {
+    ($type:ident, $wrap_type:ident, $from_type: ident, $mask:expr) => {
+        impl From<$from_type> for $type {
+            fn from(t: $from_type) -> Self {
                 $type {
                     v: $wrap_type::from(t) & $mask
+                }
+            }
+        }
+    }
+}
+
+/// Allows falliable conversions into a given masked wrapper type from some
+/// other primitive type. The primitive must already be masked and conversion
+/// will fail if the value exceeds the mask. We rely on the TryFrom
+/// implementation of the underlying wrapped type to do the conversion.
+macro_rules! masked_tryconv_impl {
+    ($type:ident, $wrap_type:ident, $from_type: ident, $mask:expr) => {
+        impl TryFrom<$from_type> for $type {
+            type Error = Option<<$wrap_type as TryFrom<$from_type>>::Error>;
+
+            fn try_from(t: $from_type) -> Result<Self, Self::Error> {
+                if t > $mask {
+                    return Err(None)
+                }
+
+                match $wrap_type::try_from(t) {
+                    Ok(v) => Ok($type {
+                        v: v & $mask
+                    }),
+                    Err(e) => Err(Some(e))
                 }
             }
         }

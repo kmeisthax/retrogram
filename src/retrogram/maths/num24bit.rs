@@ -1,14 +1,61 @@
 //! 24-bit arithmetic
 
 use std::ops::{Add, Sub, Mul, Div, BitAnd, BitOr, BitXor, Shl};
+use std::fmt;
+use std::fmt::{Formatter, Display};
+use std::str::FromStr;
+use std::convert::TryFrom;
+use num::Zero;
 use crate::retrogram::maths::CheckedSub;
 
 #[allow(non_camel_case_types)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct u24 {
     v: u32
 }
 
-masked_conv_impl!(u24, u32, 0xFFFFFF);
+impl Display for u24 {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.v)
+    }
+}
+
+impl FromStr for u24 {
+    type Err = <u32 as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(u24 {
+            v: u32::from_str(s)?
+        })
+    }
+}
+
+impl Zero for u24 {
+    fn zero() -> Self {
+        u24 {
+            v: 0
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        self.v.is_zero()
+    }
+}
+
+impl CheckedSub for u24 {
+    fn checked_sub(&self, rhs: &Self) -> Option<<Self as Sub>::Output> {
+        Some(u24 {
+            v: self.v.checked_sub(rhs.v)?
+        })
+    }
+}
+
+masked_conv_impl!(u24, u32, u8, 0xFFFFFF);
+masked_conv_impl!(u24, u32, u16, 0xFFFFFF);
+masked_tryconv_impl!(u24, u32, u32, 0xFFFFFF);
+masked_tryconv_impl!(u24, u32, u64, 0xFFFFFF);
+masked_tryconv_impl!(u24, u32, u128, 0xFFFFFF);
+masked_tryconv_impl!(u24, u32, usize, 0xFFFFFF);
 
 binary_op_masked_impl!(u24, Add, add, 0xFFFFFF);
 binary_op_masked_impl!(u24, Sub, sub, 0xFFFFFF);
