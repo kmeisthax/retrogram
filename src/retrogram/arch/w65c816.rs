@@ -88,6 +88,125 @@ pub type Instruction = ast::Instruction<Offset, SignedValue, f32, Pointer>;
 /// TODO: When ! is stable, replace the floating-point type with !.
 pub type Section = ast::Section<Offset, SignedValue, f32, Pointer>;
 
+fn op_lit(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_unit(p).into_concrete() {
+        Some(litval) => vec![op::int(litval)],
+        None => vec![op::miss()]
+    }
+}
+
+fn op_zpage_ptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_unit(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))],
+        None => vec![op::indir(op::wrap("", vec![op::miss()], ""))]
+    }
+}
+
+fn op_zpage_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_unit(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("X")], ""))],
+        None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("X")], ""))]
+    }
+}
+
+fn op_zpage_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_unit(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("Y")], ""))],
+        None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("Y")], ""))]
+    }
+}
+
+fn op_stack(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_unit(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("S")], ""))],
+        None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("S")], ""))]
+    }
+}
+
+fn op_ptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_leword::<u16>(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))],
+        None => vec![op::indir(op::wrap("", vec![op::miss()], ""))]
+    }
+}
+
+fn op_ptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_leword::<u16>(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("X")], ""))],
+        None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("X")], ""))]
+    }
+}
+
+fn op_ptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_leword::<u16>(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("Y")], ""))],
+        None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("Y")], ""))]
+    }
+}
+
+fn op_fullptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_leword::<u24>(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))],
+        None => vec![op::indir(op::wrap("", vec![op::miss()], ""))]
+    }
+}
+
+fn op_fullptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_leword::<u24>(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("X")], ""))],
+        None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("X")], ""))]
+    }
+}
+
+fn op_fullptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_leword::<u24>(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("Y")], ""))],
+        None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("Y")], ""))]
+    }
+}
+
+fn op_zpage_dblptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_unit(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))], ")"))],
+        None => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::miss()], ""))], ")"))]
+    }
+}
+
+fn op_zpage_dblptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_unit(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("X")], ""))], ")"))],
+        None => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::miss(), op::sym("X")], ""))], ")"))]
+    }
+}
+
+fn op_zpage_dblptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_unit(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(litval)], "")), op::sym("Y")], ")"))],
+        None => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::miss()], "")), op::sym("Y")], ")"))]
+    }
+}
+
+fn op_stack_dblptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_unit(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("S")], ""))], ")")), op::sym("Y")],
+        None => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::miss(), op::sym("S")], ""))], ")")), op::sym("Y")]
+    }
+}
+
+fn op_zpage_dblfarptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_unit(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("[", vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))], "]"))],
+        None => vec![op::indir(op::wrap("[", vec![op::indir(op::wrap("", vec![op::miss()], ""))], "]"))]
+    }
+}
+
+fn op_zpage_dblfarptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+    match bus.read_unit(p).into_concrete() {
+        Some(litval) => vec![op::indir(op::wrap("[", vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))], "]")), op::sym("Y")],
+        None => vec![op::indir(op::wrap("[", vec![op::indir(op::wrap("", vec![op::miss()], ""))], "]")), op::sym("Y")]
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -114,10 +233,35 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
         Some(0x98) => (Some(inst::new("TYA", vec![])), u24::from(1 as u8), true, true, vec![]),
         Some(0x9A) => (Some(inst::new("TXS", vec![])), u24::from(1 as u8), true, true, vec![]),
         Some(0x9B) => (Some(inst::new("TXY", vec![])), u24::from(1 as u8), true, true, vec![]),
+        Some(0xA0) => (Some(inst::new("LDY", op_lit(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xA1) => (Some(inst::new("LDA", op_zpage_dblptr_index_x(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xA2) => (Some(inst::new("LDX", op_lit(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xA3) => (Some(inst::new("LDA", op_stack(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xA4) => (Some(inst::new("LDY", op_zpage_ptr(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xA5) => (Some(inst::new("LDA", op_zpage_ptr(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xA6) => (Some(inst::new("LDX", op_zpage_ptr(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xA7) => (Some(inst::new("LDA", op_zpage_dblfarptr(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
         Some(0xA8) => (Some(inst::new("TAY", vec![])), u24::from(1 as u8), true, true, vec![]),
+        Some(0xA9) => (Some(inst::new("LDA", op_lit(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
         Some(0xAA) => (Some(inst::new("TAX", vec![])), u24::from(1 as u8), true, true, vec![]),
+        Some(0xAC) => (Some(inst::new("LDY", op_ptr(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(3 as u8), true, true, vec![]),
+        Some(0xAD) => (Some(inst::new("LDA", op_ptr(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(3 as u8), true, true, vec![]),
+        Some(0xAE) => (Some(inst::new("LDX", op_ptr(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(3 as u8), true, true, vec![]),
+        Some(0xAF) => (Some(inst::new("LDA", op_fullptr(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(4 as u8), true, true, vec![]),
+        Some(0xB1) => (Some(inst::new("LDA", op_zpage_dblptr_index_y(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xB2) => (Some(inst::new("LDA", op_zpage_dblptr(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xB3) => (Some(inst::new("LDA", op_stack_dblptr_index_y(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xB4) => (Some(inst::new("LDY", op_zpage_index_x(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xB5) => (Some(inst::new("LDA", op_zpage_index_x(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xB6) => (Some(inst::new("LDX", op_zpage_index_y(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xB7) => (Some(inst::new("LDA", op_zpage_dblfarptr_index_y(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(2 as u8), true, true, vec![]),
+        Some(0xB9) => (Some(inst::new("LDA", op_ptr_index_y(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(3 as u8), true, true, vec![]),
         Some(0xBA) => (Some(inst::new("TSX", vec![])), u24::from(1 as u8), true, true, vec![]),
         Some(0xBB) => (Some(inst::new("TYX", vec![])), u24::from(1 as u8), true, true, vec![]),
+        Some(0xBC) => (Some(inst::new("LDY", op_ptr_index_x(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(3 as u8), true, true, vec![]),
+        Some(0xBD) => (Some(inst::new("LDA", op_ptr_index_x(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(3 as u8), true, true, vec![]),
+        Some(0xBE) => (Some(inst::new("LDX", op_ptr_index_y(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(3 as u8), true, true, vec![]),
+        Some(0xBF) => (Some(inst::new("LDA", op_fullptr_index_x(&(p.clone() + u24::from(1 as u8)), mem))), u24::from(4 as u8), true, true, vec![]),
         _ => (None, u24::from(0 as u8), false, true, vec![])
     }
 }

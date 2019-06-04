@@ -1,11 +1,11 @@
 //! 24-bit arithmetic
 
-use std::ops::{Add, Sub, Mul, Div, BitAnd, BitOr, BitXor, Shl};
+use std::ops::{Add, Sub, Mul, Div, BitAnd, BitOr, BitXor, Shl, Not};
 use std::fmt;
 use std::fmt::{Formatter, Display};
 use std::str::FromStr;
 use std::convert::TryFrom;
-use num::Zero;
+use num::{Zero, One, Bounded};
 use crate::retrogram::maths::CheckedSub;
 
 #[allow(non_camel_case_types)]
@@ -42,11 +42,47 @@ impl Zero for u24 {
     }
 }
 
+impl One for u24 {
+    fn one() -> Self {
+        u24 {
+            v: 1
+        }
+    }
+
+    fn is_one(&self) -> bool {
+        self.v.is_one()
+    }
+}
+
+impl Bounded for u24 {
+    fn min_value() -> Self {
+        u24 {
+            v: 0
+        }
+    }
+
+    fn max_value() -> Self {
+        u24 {
+            v: 0xFFFFFF
+        }
+    }
+}
+
 impl CheckedSub for u24 {
     fn checked_sub(&self, rhs: &Self) -> Option<<Self as Sub>::Output> {
         Some(u24 {
             v: self.v.checked_sub(rhs.v)?
         })
+    }
+}
+
+impl Not for u24 {
+    type Output = Self;
+
+    fn not(self) -> Self {
+        u24 {
+            v: !self.v & 0xFFFFFF
+        }
     }
 }
 
