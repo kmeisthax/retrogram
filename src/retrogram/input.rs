@@ -1,7 +1,7 @@
 //! Input utility functions
 
 use std::str::FromStr;
-use crate::retrogram::{memory, analysis, ast, cli};
+use crate::retrogram::{memory, analysis, database, ast, cli};
 
 /// Parse any pointer specification entered in by a user.
 /// 
@@ -25,7 +25,7 @@ use crate::retrogram::{memory, analysis, ast, cli};
 /// This function assumes the default context type of `u64`. No known platform
 /// requires a wider context type and adding more type parameters to every user
 /// of `memory::Pointer` is inadvisable.
-pub fn parse_ptr<P, MV, S, IO>(text_str: &str, db: &analysis::Database<P, S>, bus: &memory::Memory<P, MV, S, IO>) -> Option<memory::Pointer<P>>
+pub fn parse_ptr<P, MV, S, IO>(text_str: &str, db: &database::Database<P, S>, bus: &memory::Memory<P, MV, S, IO>) -> Option<memory::Pointer<P>>
     where P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
         S: memory::Offset<P> {
     if let Ok(text_lbl) = ast::Label::from_str(text_str) {

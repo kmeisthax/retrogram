@@ -5,6 +5,7 @@ pub mod ast;
 pub mod arch;
 pub mod platform;
 pub mod analysis;
+pub mod database;
 pub mod asm;
 pub mod project;
 pub mod input;

@@ -248,7 +248,8 @@ impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: me
 
 #[cfg(test)]
 mod tests {
-    use crate::retrogram::analysis::{Database, Block};
+    use crate::retrogram::analysis::Block;
+    use crate::retrogram::database::Database;
     use crate::retrogram::memory::Pointer;
 
     #[test]

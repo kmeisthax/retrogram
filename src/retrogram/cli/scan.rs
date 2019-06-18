@@ -3,11 +3,11 @@
 use std::{io, fs};
 use std::collections::HashSet;
 use std::fmt::Debug;
-use crate::retrogram::{project, platform, arch, asm, ast, input, analysis, memory, cli};
+use crate::retrogram::{project, platform, arch, asm, ast, input, analysis, database, memory, cli};
 
 /// Scan a specific starting PC and add the results of the analysis to the
 /// database.
-fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut analysis::Database<P, S>, start_pc: &memory::Pointer<P>,
+fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, S>, start_pc: &memory::Pointer<P>,
         disassembler: &DIS,
         bus: &memory::Memory<P, MV, S, IO>) -> io::Result<()>
     where P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
@@ -66,7 +66,7 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, IMP>(prog: &project::Program, star
     where for <'dw> P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
         for <'dw> S: memory::Offset<P> + Debug + serde::Deserialize<'dw> + serde::Serialize,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>),
-        IMP: Fn(io::BufReader<fs::File>, &mut analysis::Database<P, S>) -> io::Result<()> {
+        IMP: Fn(io::BufReader<fs::File>, &mut database::Database<P, S>) -> io::Result<()> {
     let image = prog.iter_images().next().ok_or(io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 

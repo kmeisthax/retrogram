@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use argparse;
 use serde_json;
-use crate::retrogram::analysis;
+use crate::retrogram::{analysis, database};
 use crate::retrogram::platform::PlatformName;
 use crate::retrogram::arch::ArchName;
 use crate::retrogram::asm::AssemblerName;
@@ -148,7 +148,7 @@ impl Project {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ProjectDatabase<P, S> where P: analysis::Mappable {
-    databases: HashMap<String, analysis::Database<P, S>>
+    databases: HashMap<String, database::Database<P, S>>
 }
 
 impl<P, S> ProjectDatabase<P, S> where for <'dw> P: analysis::Mappable + Deserialize<'dw>, for <'dw> S: Deserialize<'dw> {
@@ -174,13 +174,13 @@ impl<P, S> ProjectDatabase<P, S> where P: analysis::Mappable {
         }
     }
 
-    pub fn get_database(&self, db_name: &str) -> Option<&analysis::Database<P, S>> {
+    pub fn get_database(&self, db_name: &str) -> Option<&database::Database<P, S>> {
         self.databases.get(db_name)
     }
 
-    pub fn get_database_mut(&mut self, db_name: &str) -> &mut analysis::Database<P, S> {
+    pub fn get_database_mut(&mut self, db_name: &str) -> &mut database::Database<P, S> {
         if !self.databases.contains_key(db_name) {
-            self.databases.insert(db_name.to_string(), analysis::Database::new());
+            self.databases.insert(db_name.to_string(), database::Database::new());
         }
 
         self.databases.get_mut(db_name).expect("I just inserted it, it should be there.")

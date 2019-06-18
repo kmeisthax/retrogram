@@ -6,7 +6,7 @@ use std::cmp::PartialOrd;
 use crate::retrogram::ast;
 use crate::retrogram::arch::lr35902;
 use crate::retrogram::platform::gb;
-use crate::retrogram::analysis::Database;
+use crate::retrogram::database::Database;
 
 fn str2hex<I>(thestr: &str) -> Option<I> where I: From<u8> + Shl + From<<I as Shl>::Output> + BitOr + From<<I as BitOr>::Output> {
     let mut out = I::from(0);

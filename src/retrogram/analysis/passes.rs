@@ -4,7 +4,8 @@
 use std::{fmt, io};
 use std::collections::HashSet;
 use std::fmt::UpperHex;
-use crate::retrogram::analysis::{Database, ReferenceKind};
+use crate::retrogram::analysis::ReferenceKind;
+use crate::retrogram::database::Database;
 use crate::retrogram::{ast, memory, analysis};
 
 /// Given memory and a pointer, disassemble a basic block of instructions and
