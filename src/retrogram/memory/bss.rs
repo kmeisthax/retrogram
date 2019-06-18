@@ -2,7 +2,7 @@
 //! unknown.
 
 use std::marker::PhantomData;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::ops::Sub;
 use crate::retrogram::maths::CheckedSub;
 use crate::retrogram::memory::{Image, Pointer, PtrNum, Offset};
@@ -27,7 +27,7 @@ impl<P, MV, IO> UnknownImage<P, MV, IO> {
     }
 }
 
-impl<P, MV, IO> Image for UnknownImage<P, MV, IO> where P: Clone + CheckedSub, IO: Offset<P> {
+impl<P, MV, IO> Image for UnknownImage<P, MV, IO> where P: Clone + CheckedSub, <P as std::ops::Sub>::Output: TryInto<IO> {
     type Pointer = P;
     type Offset = IO;
     type Data = MV;
@@ -38,7 +38,7 @@ impl<P, MV, IO> Image for UnknownImage<P, MV, IO> where P: Clone + CheckedSub, I
 
     fn decode_addr(&self, ptr: &Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset> {
         match base.checked_sub(ptr.as_pointer()) {
-            Some(p) => IO::try_from(p).ok(),
+            Some(p) => p.try_into().ok(),
             None => None
         }
     }
@@ -70,7 +70,7 @@ impl<P, MV, IO> UnknownBankedImage<P, MV, IO> {
     }
 }
 
-impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: Clone + CheckedSub, IO: Offset<P> {
+impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: Clone + CheckedSub, <P as std::ops::Sub>::Output: TryInto<IO> {
     type Pointer = P;
     type Offset = IO;
     type Data = MV;
@@ -81,7 +81,7 @@ impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: Clone + Checked
 
     fn decode_addr(&self, ptr: &Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset> {
         match base.checked_sub(ptr.as_pointer()) {
-            Some(p) => IO::try_from(p).ok(),
+            Some(p) => p.try_into().ok(),
             None => None
         }
     }

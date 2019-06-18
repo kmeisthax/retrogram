@@ -3,7 +3,7 @@
 
 use std::io;
 use std::ops::{Add, Sub, Not, BitOr, Shl};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::cmp::PartialOrd;
 use std::slice::SliceIndex;
 use std::fmt::Debug;
@@ -95,7 +95,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
     where P: memory::PtrNum<S> + 'static, S: memory::Offset<P>,
-        IO: memory::Offset<P> + 'static, MV: 'static {
+        IO: Clone + 'static, <P as std::ops::Sub>::Output: TryInto<IO>, MV: 'static {
     pub fn install_mem(&mut self, start: P, length: S) {
         self.views.push(Region {
             start: start,
