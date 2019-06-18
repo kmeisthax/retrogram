@@ -127,7 +127,7 @@ pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
     
     //TODO: how the hell do we use None as the assembler symbol import
     match (arch, platform, asm) {
-        (arch::ArchName::LR35902, platform::PlatformName::GB, asm::AssemblerName::RGBDS) => scan_for_arch(prog, start_spec, &arch::lr35902::disassemble, &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?, Some(&asm::rgbds::parse_symbol_file)),
+        (arch::ArchName::LR35902, platform::PlatformName::GB, asm::AssemblerName::RGBDS) => scan_for_arch(prog, start_spec, &arch::lr35902::disassemble, &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?, Some(&database::rgbds::parse_symbol_file)),
         //(arch::ArchName::AARCH32, platform::PlatformName::AGB, _) => scan_for_arch(prog, start_spec, &arch::aarch32::disassemble, &platform::agb::construct_platform(&mut file)?, None),
         _ => return Err(io::Error::new(io::ErrorKind::Other, "The given combination of architecture, platform, and/or assembler are not compatible."))
     }
