@@ -1,10 +1,10 @@
 //! 24-bit arithmetic
 
-use std::ops::{Add, Sub, Mul, Div, BitAnd, BitOr, BitXor, Shl, Not};
+use std::ops::{Add, Sub, Mul, Div, BitAnd, BitOr, BitXor, Shl, Shr, Not};
 use std::fmt;
 use std::fmt::{Formatter, Display};
 use std::str::FromStr;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use num::{Zero, One, Bounded};
 use crate::retrogram::maths::CheckedSub;
 
@@ -93,6 +93,13 @@ masked_tryconv_impl!(u24, u32, u64, 0xFFFFFF);
 masked_tryconv_impl!(u24, u32, u128, 0xFFFFFF);
 masked_tryconv_impl!(u24, u32, usize, 0xFFFFFF);
 
+try_unwrap_impl!(u24, u32, u8);
+try_unwrap_impl!(u24, u32, u16);
+unwrap_impl!(u24, u32, u32);
+unwrap_impl!(u24, u32, u64);
+unwrap_impl!(u24, u32, u128);
+try_unwrap_impl!(u24, u32, usize);
+
 binary_op_masked_impl!(u24, Add, add, 0xFFFFFF);
 binary_op_masked_impl!(u24, Sub, sub, 0xFFFFFF);
 binary_op_masked_impl!(u24, Div, div, 0xFFFFFF);
@@ -101,6 +108,7 @@ binary_op_masked_impl!(u24, BitAnd, bitand, 0xFFFFFF);
 binary_op_masked_impl!(u24, BitOr, bitor, 0xFFFFFF);
 binary_op_masked_impl!(u24, BitXor, bitxor, 0xFFFFFF);
 binary_op_masked_impl!(u24, Shl, shl, 0xFFFFFF);
+binary_op_masked_impl!(u24, Shr, shr, 0xFFFFFF);
 
 binary_op_masked_impl!(u24, u8, Shl, shl, 0xFFFFFF);
 binary_op_masked_impl!(u24, u16, Shl, shl, 0xFFFFFF);
@@ -108,6 +116,13 @@ binary_op_masked_impl!(u24, u32, Shl, shl, 0xFFFFFF);
 binary_op_masked_impl!(u24, u64, Shl, shl, 0xFFFFFF);
 binary_op_masked_impl!(u24, u128, Shl, shl, 0xFFFFFF);
 binary_op_masked_impl!(u24, usize, Shl, shl, 0xFFFFFF);
+
+binary_op_masked_impl!(u24, u8, Shr, shr, 0xFFFFFF);
+binary_op_masked_impl!(u24, u16, Shr, shr, 0xFFFFFF);
+binary_op_masked_impl!(u24, u32, Shr, shr, 0xFFFFFF);
+binary_op_masked_impl!(u24, u64, Shr, shr, 0xFFFFFF);
+binary_op_masked_impl!(u24, u128, Shr, shr, 0xFFFFFF);
+binary_op_masked_impl!(u24, usize, Shr, shr, 0xFFFFFF);
 
 boundwidth_impl!(u24, u8, 24);
 boundwidth_impl!(u24, u16, 24);

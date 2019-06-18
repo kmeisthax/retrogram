@@ -58,9 +58,13 @@ struct Region<P, MV, S = P, IO = usize> {
 }
 
 impl<P, MV, S, IO> Region<P, MV, S, IO> where P: memory::PtrNum<S>, S: memory::Offset<P> {
-    pub fn is_ptr_within(&self, ptr: P) -> bool {
-        if let Ok(offset) = S::try_from(ptr.clone() - self.start.clone()) {
-            self.start <= ptr.clone() && offset < self.length
+    pub fn is_ptr_within(&self, ptr: Pointer<P>) -> bool {
+        if let Ok(offset) = S::try_from(ptr.clone().into_pointer() - self.start.clone()) {
+            if let Some(_ms_offset) = self.image.decode_addr(&ptr, self.start.clone()) {
+                self.start <= ptr.clone().into_pointer() && offset < self.length
+            } else {
+                false
+            }
         } else {
             false
         }
@@ -219,7 +223,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     where P: memory::PtrNum<S>, S: memory::Offset<P> {
     pub fn minimize_context(&self, ptr: Pointer<P>) -> Pointer<P> {
         for view in &self.views {
-            if view.is_ptr_within(ptr.clone().into_pointer()) {
+            if view.is_ptr_within(ptr.clone()) {
                 return view.image.minimize_context(ptr);
             }
         }
@@ -229,7 +233,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     
     pub fn insert_user_context(&self, ptr: Pointer<P>, ctxts: &[u64]) -> Pointer<P> {
         for view in &self.views {
-            if view.is_ptr_within(ptr.clone().into_pointer()) {
+            if view.is_ptr_within(ptr.clone()) {
                 return view.image.insert_user_context(ptr, ctxts);
             }
         }

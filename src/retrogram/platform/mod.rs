@@ -5,6 +5,7 @@
 
 pub mod gb;
 pub mod agb;
+pub mod sfc;
 
 use std::str;
 use serde::Serialize;
@@ -14,7 +15,8 @@ use crate::retrogram::arch;
 #[derive(Copy, Clone, Serialize, Debug)]
 pub enum PlatformName {
     GB,
-    AGB
+    AGB,
+    SFC
 }
 
 impl PlatformName {
@@ -26,6 +28,7 @@ impl PlatformName {
         match self {
             PlatformName::GB => Some(arch::ArchName::LR35902),
             PlatformName::AGB => Some(arch::ArchName::AARCH32),
+            PlatformName::SFC => Some(arch::ArchName::W65C816)
         }
     }
 }
@@ -38,6 +41,8 @@ impl str::FromStr for PlatformName {
             "gb" => Ok(PlatformName::GB),
             "gba" => Ok(PlatformName::AGB),
             "agb" => Ok(PlatformName::AGB),
+            "sfc" => Ok(PlatformName::SFC),
+            "snes" => Ok(PlatformName::SFC),
             _ => Err(())
         }
     }

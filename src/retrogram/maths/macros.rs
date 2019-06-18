@@ -39,6 +39,28 @@ macro_rules! masked_tryconv_impl {
     }
 }
 
+macro_rules! unwrap_impl {
+    ($type:ident, $wrapped_type:ident, $into_type:ident) => {
+        impl Into<$into_type> for $type {
+            fn into(self) -> $into_type {
+                self.v.into()
+            }
+        }
+    };
+}
+
+macro_rules! try_unwrap_impl {
+    ($type:ident, $wrapped_type:ident, $into_type:ident) => {
+        impl TryInto<$into_type> for $type {
+            type Error = <$wrapped_type as TryInto<$into_type>>::Error;
+
+            fn try_into(self) -> Result<$into_type, Self::Error> {
+                self.v.try_into()
+            }
+        }
+    };
+}
+
 /// Allows implementing binary operations on a wrapped type.
 /// 
 /// All implementations are forwarded to the implementation provided by the
