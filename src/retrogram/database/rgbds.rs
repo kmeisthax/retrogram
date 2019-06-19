@@ -1,11 +1,13 @@
 //! Database import support for RGBDS build artifacts (sym/map)
 
-use std::io;
+use std::{io, fs};
 use std::ops::{Shl, BitOr};
+use std::io::BufRead;
 use crate::retrogram::ast;
 use crate::retrogram::arch::lr35902;
 use crate::retrogram::platform::gb;
 use crate::retrogram::database::Database;
+use crate::retrogram::project;
 
 fn str2hex<I>(thestr: &str) -> Option<I> where I: From<u8> + Shl + From<<I as Shl>::Output> + BitOr + From<<I as BitOr>::Output> {
     let mut out = I::from(0);
@@ -35,37 +37,43 @@ fn str2hex<I>(thestr: &str) -> Option<I> where I: From<u8> + Shl + From<<I as Sh
     Some(out)
 }
 
+//&project::Program, &project::DataSource, &mut [fs::File], &mut database::Database<P, S>
+
 /// Read the symbols from an RGBDS symbol file.
-pub fn parse_symbol_file<F>(file: F, db: &mut Database<lr35902::Pointer, lr35902::Offset>) -> io::Result<()> where F: io::BufRead {
-    for line in file.lines() {
-        let line = line?;
-        let mut split = line.split(" ");
+pub fn parse_symbol_file(prog: &project::Program, datasrc: &project::DataSource, files: &mut [io::BufReader<fs::File>],
+    db: &mut Database<lr35902::Pointer, lr35902::Offset>) -> io::Result<()> {
+    
+    for file in files {
+        for line in file.lines() {
+            let line = line?;
+            let mut split = line.split(" ");
 
-        if let Some(ptr_str) = split.next() {
-            if ptr_str.chars().next() == Some(';') {
-                continue;
-            }
+            if let Some(ptr_str) = split.next() {
+                if ptr_str.chars().next() == Some(';') {
+                    continue;
+                }
 
-            let mut ptr_split = ptr_str.split(":");
-            let mut bank_addr : u16 = 0;
-            let mut ptr_addr : u16 = 0;
-            if let Some(bank_part) = ptr_split.next() {
-                bank_addr = str2hex(bank_part).unwrap_or(0);
-            }
+                let mut ptr_split = ptr_str.split(":");
+                let mut bank_addr : u16 = 0;
+                let mut ptr_addr : u16 = 0;
+                if let Some(bank_part) = ptr_split.next() {
+                    bank_addr = str2hex(bank_part).unwrap_or(0);
+                }
 
-            if let Some(ptr_part) = ptr_split.next() {
-                ptr_addr = str2hex(ptr_part).unwrap_or(0);
-            }
+                if let Some(ptr_part) = ptr_split.next() {
+                    ptr_addr = str2hex(ptr_part).unwrap_or(0);
+                }
 
-            if let Some(ctxt_ptr) = gb::create_context(&vec![bank_addr, ptr_addr]) {
-                if let Some(label_str) = split.next() {
-                    let mut name_split = label_str.split(".");
+                if let Some(ctxt_ptr) = gb::create_context(&vec![bank_addr, ptr_addr]) {
+                    if let Some(label_str) = split.next() {
+                        let mut name_split = label_str.split(".");
 
-                    if let Some(global_part) = name_split.next() {
-                        if let Some(local_part) = name_split.next() {
-                            db.insert_label(ast::Label::new(local_part, Some(global_part)), ctxt_ptr);
-                        } else {
-                            db.insert_label(ast::Label::new(global_part, None), ctxt_ptr);
+                        if let Some(global_part) = name_split.next() {
+                            if let Some(local_part) = name_split.next() {
+                                db.insert_label(ast::Label::new(local_part, Some(global_part)), ctxt_ptr);
+                            } else {
+                                db.insert_label(ast::Label::new(global_part, None), ctxt_ptr);
+                            }
                         }
                     }
                 }

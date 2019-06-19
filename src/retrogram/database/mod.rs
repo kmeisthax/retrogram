@@ -15,7 +15,7 @@ use serde::Serialize;
 /// Enum listing all of the external data formats we can add to a retrogram
 /// database.
 #[derive(Copy, Clone, Serialize, Debug)]
-enum ExternalFormat {
+pub enum ExternalFormat {
     RGBDSSymbolFile
 }
 

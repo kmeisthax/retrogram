@@ -9,6 +9,7 @@ use crate::retrogram::{analysis, database};
 use crate::retrogram::platform::PlatformName;
 use crate::retrogram::arch::ArchName;
 use crate::retrogram::asm::AssemblerName;
+use crate::retrogram::database::ExternalFormat;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Program {
@@ -21,7 +22,7 @@ pub struct Program {
     name: Option<String>,
 
     #[serde(default)]
-    symbol_files: Vec<String>,
+    data_sources: Vec<String>,
 
     #[serde(default="default_db_filename")]
     database_path: String
@@ -39,7 +40,7 @@ impl Default for Program {
             assembler: None,
             images: Vec::new(),
             name: None,
-            symbol_files: Vec::new(),
+            data_sources: Vec::new(),
             database_path: default_db_filename()
         }
     }
@@ -48,7 +49,6 @@ impl Default for Program {
 impl Program {
     pub fn refer_args<'a, 'b>(&'a mut self, ap: &'b mut argparse::ArgumentParser<'a>) {
         ap.refer(&mut self.images).add_option(&["--image"], argparse::Collect, "The program image file(s) to analyze.");
-        ap.refer(&mut self.symbol_files).add_option(&["--symbol_file"], argparse::Collect, "Symbol files, if any, to look up symbols from.");
         ap.refer(&mut self.platform).add_option(&["--platform"], argparse::StoreOption, "What platform to expect");
         ap.refer(&mut self.arch).add_option(&["--arch"], argparse::StoreOption, "What architecture to expect");
         ap.refer(&mut self.assembler).add_option(&["--asm"], argparse::StoreOption, "What assembler to output");
@@ -73,11 +73,11 @@ impl Program {
         self.images.iter()
     }
 
-    /// List all the symbol files related to a given program.
+    /// List all the external data sources this program pulls data from.
     /// 
     /// TODO: This should return &str, not &String, no?
-    pub fn iter_symbol_files<'a>(&'a self) -> impl Iterator<Item = &String> + 'a {
-        self.symbol_files.iter()
+    pub fn iter_sources<'a>(&'a self) -> impl Iterator<Item = &String> + 'a {
+        self.data_sources.iter()
     }
 
     pub fn as_database_path(&self) -> &str {
@@ -105,9 +105,9 @@ impl Program {
                 0 => self.images.clone(),
                 _ => other.images.clone()
             },
-            symbol_files: match other.symbol_files.len() {
-                0 => self.symbol_files.clone(),
-                _ => other.symbol_files.clone()
+            data_sources: match other.data_sources.len() {
+                0 => self.data_sources.clone(),
+                _ => other.data_sources.clone()
             },
             database_path: default_db_filename()
         }
@@ -115,8 +115,88 @@ impl Program {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct DataSource {
+    /// The data format to use when importing data from this source.
+    format: Option<ExternalFormat>,
+
+    /// The list of files necessary to assemble this data source.
+    files: Vec<String>,
+
+    /// This list of programs that this data source can provide data for.
+    /// 
+    /// For anonymous data sources, this field cannot be supplied and the data
+    /// source is presumed to be valid for all possible programs.
+    programs: Vec<String>
+}
+
+impl Default for DataSource {
+    fn default() -> Self {
+        DataSource {
+            format: None,
+            files: Vec::new(),
+            programs: Vec::new()
+        }
+    }
+}
+
+impl DataSource {
+    /// Add arguments to fill out an anonymous data source from user input.
+    /// 
+    /// NOTE: This function does not collect the `programs` parameter since it
+    /// is only used for error checking when the user requests an import from a
+    /// named data source rather than an anonymous one. Anonymous data sources
+    /// have no program limitations by design.
+    pub fn refer_args<'a, 'b>(&'a mut self, ap: &'b mut argparse::ArgumentParser<'a>) {
+        ap.refer(&mut self.format).add_option(&["--external_db_format"], argparse::StoreOption, "The format of external data to import data from");
+        ap.refer(&mut self.files).add_option(&["--external_db_file"], argparse::Collect, "The external data files to import data from");
+    }
+
+    pub fn format(&self) -> Option<ExternalFormat> {
+        self.format
+    }
+
+    pub fn iter_files<'a>(&'a self) -> impl Iterator<Item = &String> + 'a {
+        self.files.iter()
+    }
+
+    /// Determine if a given data source can provide data to the database of a
+    /// given program.
+    /// 
+    /// Anonymous data sources do not have a list of valid programs and thus are
+    /// valid for all possible programs.
+    pub fn is_prog_valid(&self, program_name: &str) -> bool {
+        if self.programs.len() == 0 {
+            return true;
+        }
+
+        for program in self.programs.iter() {
+            if program == program_name {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn apply_override(&self, other: &DataSource) -> DataSource {
+        DataSource {
+            format: other.format.or(self.format),
+            files: match other.files.len() {
+                0 => self.files.clone(),
+                _ => other.files.clone()
+            },
+            programs: match other.programs.len() {
+                0 => self.programs.clone(),
+                _ => other.programs.clone()
+            }
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Project {
-    programs: HashMap<String, Program>
+    programs: HashMap<String, Program>,
+    data_sources: HashMap<String, DataSource>
 }
 
 impl Project {
@@ -143,6 +223,17 @@ impl Project {
     /// Get the project's default program.
     pub fn default_program(&self) -> Option<(&String, &Program)> {
         self.programs.iter().next()
+    }
+
+    /// Get the data source with the given name within the project.
+    pub fn data_source(&mut self, name: &str) -> Option<&DataSource> {
+        let mut source = self.data_sources.get_mut(name);
+
+        if let Some(source) = source {
+            return Some(source);
+        }
+
+        None
     }
 }
 
