@@ -22,7 +22,7 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
 
     for xref in xrefs {
         if let Some(target) = xref.as_target() {
-            if let None = db.pointer_label(&target) {
+            if let None = db.pointer_symbol(&target) {
                 db.insert_placeholder_label(target.clone(), xref.kind());
             }
 

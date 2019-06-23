@@ -8,11 +8,11 @@ use std::fmt::UpperHex;
 use serde::{Serialize, Deserialize};
 use crate::retrogram::{ast, memory, project, analysis};
 
-fn gimme_a_ptr<P>() -> HashMap<memory::Pointer<P>, ast::Label> where P: analysis::Mappable {
+fn gimme_a_ptr<P>() -> HashMap<memory::Pointer<P>, usize> where P: analysis::Mappable {
     HashMap::new()
 }
 
-fn gimme_a_lbl<P>() -> HashMap<ast::Label, memory::Pointer<P>> where P: analysis::Mappable {
+fn gimme_a_lbl() -> HashMap<ast::Label, usize> {
     HashMap::new()
 }
 
@@ -24,10 +24,23 @@ fn im_stale() -> bool {
     true
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Symbol<P>(ast::Label, memory::Pointer<P>) where P: analysis::Mappable;
+
+impl<P> Symbol<P> where P: analysis::Mappable {
+    pub fn as_label(&self) -> &ast::Label {
+        &self.0
+    }
+
+    pub fn as_pointer(&self) -> &memory::Pointer<P> {
+        &self.1
+    }
+}
+
 /// A repository of information obtained from the program under analysis.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Database<P, S> where P: analysis::Mappable {
-    symbol_list: Vec<(ast::Label, memory::Pointer<P>)>,
+    symbols: Vec<Symbol<P>>,
 
     #[serde(skip, default="im_stale")]
     was_deserialized: bool,
@@ -40,11 +53,11 @@ pub struct Database<P, S> where P: analysis::Mappable {
 
     /// A list of all labels in the program.
     #[serde(skip, default="gimme_a_lbl")]
-    labels: HashMap<ast::Label, memory::Pointer<P>>,
+    label_symbols: HashMap<ast::Label, usize>,
     
     /// A list of all pointer values in the program which have a label.
     #[serde(skip, default="gimme_a_ptr")]
-    pointers: HashMap<memory::Pointer<P>, ast::Label>,
+    pointer_symbols: HashMap<memory::Pointer<P>, usize>,
 
     /// A list of crossreferences sorted by source address.
     #[serde(skip, default="gimme_xref")]
@@ -58,12 +71,12 @@ pub struct Database<P, S> where P: analysis::Mappable {
 impl<P, S> Database<P, S> where P: analysis::Mappable {
     pub fn new() -> Self {
         Database {
-            symbol_list: Vec::new(),
+            symbols: Vec::new(),
             was_deserialized: false,
             blocks: Vec::new(),
             xrefs: Vec::new(),
-            labels: HashMap::new(),
-            pointers: HashMap::new(),
+            label_symbols: HashMap::new(),
+            pointer_symbols: HashMap::new(),
             xref_source_index: BTreeMap::new(),
             xref_target_index: BTreeMap::new()
         }
@@ -74,9 +87,9 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
     /// TODO: Find a way to get rid of this and do it alongside deserialization
     pub fn update_indexes(&mut self) {
         if self.was_deserialized {
-            for (lbl, ptr) in self.symbol_list.iter() {
-                self.labels.insert(lbl.clone(), ptr.clone());
-                self.pointers.insert(ptr.clone(), lbl.clone());
+            for (id, Symbol(lbl, ptr)) in self.symbols.iter().enumerate() {
+                self.label_symbols.insert(lbl.clone(), id);
+                self.pointer_symbols.insert(ptr.clone(), id);
             }
 
             for (id, xref) in self.xrefs.iter().enumerate() {
@@ -98,9 +111,11 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
     }
 
     pub fn insert_label(&mut self, label: ast::Label, ptr: memory::Pointer<P>) {
-        self.symbol_list.push((label.clone(), ptr.clone()));
-        self.labels.insert(label.clone(), ptr.clone());
-        self.pointers.insert(ptr, label);
+        let id = self.symbols.len();
+
+        self.symbols.push(Symbol(label.clone(), ptr.clone()));
+        self.label_symbols.insert(label.clone(), id);
+        self.pointer_symbols.insert(ptr, id);
     }
 
     /// Create a label for a location that is not named in the database.
@@ -133,16 +148,20 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
         self.xrefs.push(myref);
     }
 
-    pub fn pointer_label(&self, ptr: &memory::Pointer<P>) -> Option<&ast::Label> {
-        self.pointers.get(ptr)
+    pub fn pointer_symbol(&self, ptr: &memory::Pointer<P>) -> Option<usize> {
+        self.pointer_symbols.get(ptr).map(|v| *v)
     }
 
-    pub fn label_pointer(&self, label: &ast::Label) -> Option<&memory::Pointer<P>> {
-        self.labels.get(label)
+    pub fn label_symbol(&self, label: &ast::Label) -> Option<usize> {
+        self.label_symbols.get(label).map(|v| *v)
     }
 
     pub fn insert_block(&mut self, block: analysis::Block<P, S>) {
         self.blocks.push(block)
+    }
+
+    pub fn symbol(&self, symbol_id: usize) -> Option<&Symbol<P>> {
+        self.symbols.get(symbol_id)
     }
 
     pub fn block(&self, block_id: usize) -> Option<&analysis::Block<P, S>> {

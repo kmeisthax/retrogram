@@ -71,8 +71,9 @@ pub fn replace_operand_with_label<I, S, F, P, AMV, AS, AIO>(src_operand: ast::Op
             let mut cpt = start_addr.contextualize(pt.clone());
             cpt = memory.minimize_context(cpt);
 
-            if let Some(lbl) = db.pointer_label(&cpt) {
-                ast::Operand::Label(lbl.clone())
+            if let Some(sym_id) = db.pointer_symbol(&cpt) {
+                let sym = db.symbol(sym_id).expect("Database handed an invalid symbol back");
+                ast::Operand::Label(sym.as_label().clone())
             } else {
                 ast::Operand::Label(db.insert_placeholder_label(cpt, refkind))
             }
@@ -125,8 +126,10 @@ pub fn inject_labels<I, S, F, P, MS>(src_assembly: ast::Section<I, S, F, P>, db:
         if let None = line.label() {
             let (_label, old_instr, comment, src_addr) = line.clone().into_parts();
 
-            if let Some(new_label) = db.pointer_label(&src_addr) {
-                dst_assembly.append_line(ast::Line::new(Some(new_label.clone()), old_instr, comment, src_addr));
+            if let Some(sym_id) = db.pointer_symbol(&src_addr) {
+                let sym = db.symbol(sym_id).expect("DB sent back invalid symbol ID");
+                
+                dst_assembly.append_line(ast::Line::new(Some(sym.as_label().clone()), old_instr, comment, src_addr));
             } else {
                 dst_assembly.append_line(line.clone());
             }
