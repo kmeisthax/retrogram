@@ -32,8 +32,16 @@ impl<P> Symbol<P> where P: analysis::Mappable {
         &self.0
     }
 
+    pub fn set_label(&mut self, new_label: ast::Label) {
+        self.0 = new_label;
+    }
+
     pub fn as_pointer(&self) -> &memory::Pointer<P> {
         &self.1
+    }
+
+    pub fn set_pointer(&mut self, new_pointer: memory::Pointer<P>) {
+        self.1 = new_pointer;
     }
 }
 
@@ -110,12 +118,66 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
         }
     }
 
-    pub fn insert_label(&mut self, label: ast::Label, ptr: memory::Pointer<P>) {
+    /// Create a new symbol association.
+    pub fn insert_symbol(&mut self, label: ast::Label, ptr: memory::Pointer<P>) {
         let id = self.symbols.len();
 
         self.symbols.push(Symbol(label.clone(), ptr.clone()));
         self.label_symbols.insert(label.clone(), id);
         self.pointer_symbols.insert(ptr, id);
+    }
+
+    /// Change a given symbol record's label or pointer association.
+    /// 
+    /// Fields provided as None will be left as it is.
+    pub fn update_symbol(&mut self, sym_id: usize, new_label: Option<ast::Label>, new_pointer: Option<memory::Pointer<P>>) {
+        if let Some(sym) = self.symbols.get_mut(sym_id) {
+            if let Some(new_label) = new_label {
+                self.label_symbols.remove(sym.as_label());
+                sym.set_label(new_label.clone());
+                self.label_symbols.insert(new_label, sym_id);
+            }
+
+            if let Some(new_pointer) = new_pointer {
+                self.pointer_symbols.remove(sym.as_pointer());
+                sym.set_pointer(new_pointer.clone());
+                self.pointer_symbols.insert(new_pointer, sym_id);
+            }
+        }
+    }
+
+    /// Ensure a symbol exists within the database with a given label and
+    /// pointer.
+    /// 
+    /// This function takes some precautions to avoid inserting duplicate labels
+    /// into the symbol table. Specifically, if the label already exists, we
+    /// repoint it to the new pointer. Furthermore, if a placeholder label
+    /// already refers to the same location, we change that symbol's label to
+    /// match the request.
+    pub fn upsert_symbol(&mut self, new_label: ast::Label, for_pointer: memory::Pointer<P>) {
+        if let Some(sym_id) = self.label_symbol(&new_label) {
+            if let Some(sym) = self.symbol(sym_id) {
+                if *sym.as_pointer() == for_pointer {
+                    return;
+                }
+            }
+
+            self.update_symbol(sym_id, None, Some(for_pointer));
+        } else if let Some(sym_id) = self.pointer_symbol(&for_pointer) {
+            if let Some(sym) = self.symbol(sym_id) {
+                if *sym.as_label() == new_label {
+                    return;
+                }
+
+                if !sym.as_label().is_placeholder() {
+                    return self.insert_symbol(new_label, for_pointer);
+                }
+            }
+
+            self.update_symbol(sym_id, Some(new_label), None);
+        } else {
+            self.insert_symbol(new_label, for_pointer);
+        }
     }
 
     /// Create a label for a location that is not named in the database.
@@ -132,7 +194,7 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
 
         name = format!("{}_{:X}", name, ptr.as_pointer());
 
-        self.insert_label(ast::Label::new_placeholder(&name, None), ptr);
+        self.insert_symbol(ast::Label::new_placeholder(&name, None), ptr);
 
         ast::Label::new(&name, None)
     }
