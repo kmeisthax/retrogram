@@ -20,7 +20,7 @@ pub struct Pointer<P, CV = u64> {
     context: HashMap<String, reg::Symbolic<CV>>
 }
 
-impl<P, CV> Pointer<P, CV> where CV: Clone + Bounded + From<u8> {
+impl<P, CV> Pointer<P, CV> where CV: reg::Concretizable {
     /// Obtain a reference to the noncontextual pointer value.
     pub fn as_pointer(&self) -> &P {
         &self.pointer

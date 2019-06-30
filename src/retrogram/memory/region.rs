@@ -140,7 +140,7 @@ impl<P, MV, S> Memory<P, MV, S, usize>
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: memory::PtrNum<S>, S: memory::Offset<P>, MV: reg::Symbolizable,
+    where P: memory::PtrNum<S>, S: memory::Offset<P>, MV: reg::Concretizable,
         IO: One, reg::Symbolic<MV>: Default {
     
     pub fn read_unit(&self, ptr: &Pointer<P>) -> reg::Symbolic<MV> {
@@ -160,7 +160,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
     where P: memory::PtrNum<S>, S: memory::Offset<P> + TryFrom<usize>,
-        MV: reg::Symbolizable + maths::BoundWidth<usize>, IO: One,
+        MV: reg::Concretizable + maths::BoundWidth<usize>, IO: One,
         reg::Symbolic<MV>: Default, 
         <S as TryFrom<usize>>::Error : Debug {
     

@@ -5,7 +5,7 @@ use std::ops::{Sub, Not, BitAnd, BitOr, Shl, Shr};
 use std::cmp::{min, max, PartialEq, Ord};
 use num::traits::{Bounded, One};
 use serde::{Serialize, Deserialize};
-use crate::retrogram::reg::{Convertable, Symbolizable, Concretizable, Validatable};
+use crate::retrogram::reg::{Convertable, Concretizable, Validatable};
 
 /// Represents a processor register bounded to a particular set of states.
 /// 
@@ -33,18 +33,18 @@ pub struct Symbolic<T> {
     bits_cleared: T,
 }
 
-impl<T> Default for Symbolic<T> where T: Bounded + From<u8> {
+impl<T> Default for Symbolic<T> where T: Concretizable {
     fn default() -> Self {
         Symbolic {
             lower_bound: T::min_value(),
             upper_bound: T::max_value(),
-            bits_set: T::from(0),
-            bits_cleared: T::from(0),
+            bits_set: T::zero(),
+            bits_cleared: T::zero(),
         }
     }
 }
 
-impl<T> From<T> for Symbolic<T> where T: Symbolizable {
+impl<T> From<T> for Symbolic<T> where T: Concretizable {
     fn from(v: T) -> Self {
         Symbolic {
             lower_bound: v.clone(),
@@ -73,15 +73,29 @@ impl<T> Symbolic<T> where T: Concretizable {
         self.lower_bound == self.upper_bound
     }
 
+    fn is_bound_undefined(&self) -> bool {
+        self.lower_bound == T::min_value() && self.upper_bound == T::max_value()
+    }
+
     fn is_bits_concrete(&self) -> bool {
         T::from(self.bits_set.clone() | self.bits_cleared.clone()) == T::from(!T::zero())
     }
-    /// Returns true if only one valid T exists for this register
+
+    fn is_bits_undefined(&self) -> bool {
+        T::from(self.bits_set.clone() | T::from(!self.bits_cleared.clone())) == T::zero()
+    }
+
+    /// Determines if exactly one valid T matches this symbolic value
     ///
     /// TODO: This is nonexaustive, contrived cases exist which have one
     /// satisfying value but not by way of one bound mechanism or the other.
     pub fn is_concrete(&self) -> bool {
         self.is_bound_concrete() || self.is_bits_concrete()
+    }
+
+    /// Determines if any valid T matches this symbolic value
+    pub fn is_undefined(&self) -> bool {
+        self.is_bound_undefined() && self.is_bits_undefined()
     }
 
     pub fn into_concrete(self) -> Option<T> {

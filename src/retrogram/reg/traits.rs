@@ -3,7 +3,7 @@
 use std::ops::{Sub, Not, BitAnd, BitOr, Shl, Shr};
 use std::cmp::{min, max, PartialEq, PartialOrd};
 use std::fmt::Debug;
-use num::traits::Zero;
+use num::traits::{Zero, Bounded};
 use crate::retrogram::reg;
 
 /// Rust doesn't let us expose the child type's From impl as another From impl
@@ -15,21 +15,6 @@ pub trait Convertable<R> {
     fn convert_from(v: reg::Symbolic<R>) -> Self;
 }
 
-/// Guard trait for converting a concrete value into a symbolic one.
-/// 
-/// In plain English: In order to convert a concrete value into a symbolic one,
-/// we need to be able to:
-/// 
-///  * Perform bitwise NOT on the type.
-///  * Convert the results of bitwise NOT operations back into the type.
-pub trait Symbolizable: Clone + Not + From<<Self as Not>::Output> {
-
-}
-
-impl<T> Symbolizable for T where T: Clone + Not + From<<T as Not>::Output> {
-
-}
-
 /// Guard trait for converting a symbolic value back into a concrete one.
 /// 
 /// In plain English: In order to convert a symbolic value back into a concrete
@@ -39,16 +24,17 @@ impl<T> Symbolizable for T where T: Clone + Not + From<<T as Not>::Output> {
 ///  * Perform bitwise OR and NOT on the type.
 ///  * Get the type's zero value.
 ///  * Convert the results of bitwise OR and NOT operations back into the type.
+///  * Get the maximum and minimum bound values of a type.
 /// 
 /// Furthermore, while this is not expressed in the trait bounds, it is implied
 /// that it is possible to generate an "all bits set" value by way of inverting
 /// Zero. If your type implements Concretizable but does not satisfy this bound
 /// then using it as a symbolic type may cause errors.
-pub trait Concretizable: Clone + PartialEq + BitOr + Not + Zero + From<<Self as BitOr>::Output> + From<<Self as Not>::Output> {
+pub trait Concretizable: Clone + Bounded + PartialEq + BitOr + Not + Zero + From<<Self as BitOr>::Output> + From<<Self as Not>::Output> {
 
 }
 
-impl<T> Concretizable for T where T: Clone + PartialEq + BitOr + Not + Zero + From<<Self as BitOr>::Output> + From<<Self as Not>::Output> {
+impl<T> Concretizable for T where T: Clone + Bounded + PartialEq + BitOr + Not + Zero + From<<Self as BitOr>::Output> + From<<Self as Not>::Output> {
 
 }
 
