@@ -4,6 +4,9 @@ use crate::retrogram::reg;
 fn test_symbolic_default() {
     let symbolic_default : reg::Symbolic<u8> = reg::Symbolic::default();
 
+    assert!(symbolic_default.is_unconstrained());
+    assert!(!symbolic_default.is_unsatisfiable());
+    assert!(!symbolic_default.is_concrete());
     assert_eq!(None, symbolic_default.into_concrete());
 }
 
@@ -11,9 +14,23 @@ fn test_symbolic_default() {
 fn test_concrete_roundtrip() {
     let start_value = 142;
     let sym_value = reg::Symbolic::from(start_value);
+
+    assert!(sym_value.is_concrete());
+    assert!(!sym_value.is_unconstrained());
+    assert!(!sym_value.is_unsatisfiable());
+
     let concrete_value = sym_value.into_concrete();
 
     assert_eq!(Some(start_value), concrete_value);
+}
+
+#[test]
+fn test_concrete_cares() {
+    let start_value : u8 = 243;
+    let sym_value = reg::Symbolic::from(start_value);
+
+    assert_eq!(0xFF, sym_value.cares());
+    assert_eq!(0x00, sym_value.not_cares());
 }
 
 #[test]
@@ -26,16 +43,12 @@ fn test_concrete_validation() {
 }
 
 #[test]
-fn test_symbolic_validation() {
-    let mut sym_value = reg::Symbolic::default();
+fn test_unsatisfiable() {
+    let sym_value = reg::Symbolic::from_bits(0xF0, 0x1F);
 
-    sym_value.increase_lower_bound(20);
-    sym_value.decrease_upper_bound(40);
-
-    assert!(sym_value.is_valid(25));
-    assert!(sym_value.is_valid(20));
-    assert!(sym_value.is_valid(40));
-    assert!(!sym_value.is_valid(60));
+    assert!(sym_value.is_unsatisfiable());
+    assert!(!sym_value.is_concrete());
+    assert!(!sym_value.is_unconstrained());
 }
 
 #[test]

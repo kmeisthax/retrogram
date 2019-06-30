@@ -2,10 +2,9 @@
 //! mutated.
 
 use std::ops::{Sub, Not, BitAnd, BitOr, Shl, Shr};
-use std::cmp::{min, max, PartialEq, Ord};
 use num::traits::{Bounded, One};
 use serde::{Serialize, Deserialize};
-use crate::retrogram::reg::{Convertable, Concretizable, Validatable};
+use crate::retrogram::reg::{Convertable, Concretizable};
 
 /// Represents a processor register bounded to a particular set of states.
 /// 
@@ -27,8 +26,6 @@ use crate::retrogram::reg::{Convertable, Concretizable, Validatable};
 /// multiple states are valid, then the register is said to be abstract.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Symbolic<T> {
-    lower_bound: T,
-    upper_bound: T,
     bits_set: T,
     bits_cleared: T,
 }
@@ -36,8 +33,6 @@ pub struct Symbolic<T> {
 impl<T> Default for Symbolic<T> where T: Concretizable {
     fn default() -> Self {
         Symbolic {
-            lower_bound: T::min_value(),
-            upper_bound: T::max_value(),
             bits_set: T::zero(),
             bits_cleared: T::zero(),
         }
@@ -47,8 +42,6 @@ impl<T> Default for Symbolic<T> where T: Concretizable {
 impl<T> From<T> for Symbolic<T> where T: Concretizable {
     fn from(v: T) -> Self {
         Symbolic {
-            lower_bound: v.clone(),
-            upper_bound: v.clone(),
             bits_set: v.clone(),
             bits_cleared: T::from(!v),
         }
@@ -60,8 +53,6 @@ impl<T, R> Convertable<R> for Symbolic<T> where T: From<R> + Concretizable, R: C
         let zero_extension = T::from(!T::from(R::from(!R::zero())));
         
         Symbolic {
-            lower_bound: T::from(v.lower_bound),
-            upper_bound: T::from(v.upper_bound),
             bits_set: T::from(v.bits_set),
             bits_cleared: T::from(zero_extension | T::from(v.bits_cleared)),
         }
@@ -69,39 +60,33 @@ impl<T, R> Convertable<R> for Symbolic<T> where T: From<R> + Concretizable, R: C
 }
 
 impl<T> Symbolic<T> where T: Concretizable {
-    fn is_bound_concrete(&self) -> bool {
-        self.lower_bound == self.upper_bound
+    /// Construct a symbolic value from bits that should be set and bits that
+    /// should be cleared.
+    pub fn from_bits(bits_set: T, bits_cleared: T) -> Self {
+        Symbolic {
+            bits_set: bits_set,
+            bits_cleared: bits_cleared
+        }
     }
 
-    fn is_bound_undefined(&self) -> bool {
-        self.lower_bound == T::min_value() && self.upper_bound == T::max_value()
+    /// Determines if this symbolic value does not constrain the values which
+    /// may satisfy it.
+    pub fn is_unconstrained(&self) -> bool {
+        T::from(self.bits_set.clone() | self.bits_cleared.clone()) == T::zero()
     }
 
-    fn is_bits_concrete(&self) -> bool {
+    /// Determine if this symbolic value cannot be satisfied.
+    pub fn is_unsatisfiable(&self) -> bool {
+        T::from(self.bits_set.clone() & self.bits_cleared.clone()) != T::zero()
+    }
+
+    /// Determines if this symbolic value is constrained to precisely one value.
+    pub fn is_concrete(&self) -> bool {
         T::from(self.bits_set.clone() | self.bits_cleared.clone()) == T::from(!T::zero())
     }
 
-    fn is_bits_undefined(&self) -> bool {
-        T::from(self.bits_set.clone() | T::from(!self.bits_cleared.clone())) == T::zero()
-    }
-
-    /// Determines if exactly one valid T matches this symbolic value
-    ///
-    /// TODO: This is nonexaustive, contrived cases exist which have one
-    /// satisfying value but not by way of one bound mechanism or the other.
-    pub fn is_concrete(&self) -> bool {
-        self.is_bound_concrete() || self.is_bits_concrete()
-    }
-
-    /// Determines if any valid T matches this symbolic value
-    pub fn is_undefined(&self) -> bool {
-        self.is_bound_undefined() && self.is_bits_undefined()
-    }
-
     pub fn into_concrete(self) -> Option<T> {
-        if self.is_bound_concrete() {
-            Some(self.lower_bound)
-        } else if self.is_bits_concrete() {
+        if self.is_concrete() {
             Some(self.bits_set)
         } else {
             None
@@ -109,31 +94,40 @@ impl<T> Symbolic<T> where T: Concretizable {
     }
 
     pub fn as_concrete(&self) -> Option<&T> {
-        if self.is_bound_concrete() {
-            Some(&self.lower_bound)
-        } else if self.is_bits_concrete() {
+        if self.is_concrete() {
             Some(&self.bits_set)
         } else {
             None
         }
     }
-}
 
-impl<T> Symbolic<T> where T: Validatable {
+    /// Produce a concrete value where each bit of the value is `1` if and only
+    /// if that bit must be ether set or cleared to satisfy the constraint of
+    /// this symbolic value.
+    /// 
+    /// #Identities
+    /// 
+    /// A `cares` value equal to `!0` indicates a value that is either concrete
+    /// or unsatisfiable.
+    /// 
+    /// A concrete value anded or ored by `cares` should satisfy the constraint
+    /// of the symbolic value if and only if the original concerete value would
+    /// also do so.
+    pub fn cares(&self) -> T {
+        T::from(self.bits_set.clone() | self.bits_cleared.clone())
+    }
+
+    /// Produce a concrete value where each bit of the value is `1` if and only
+    /// if that bit can change without affecting the satisfiability of that
+    /// concrete value.
+    pub fn not_cares(&self) -> T {
+        T::from(!self.cares())
+    }
+    
     /// Returns true if the given value satisfies the register constraint
     pub fn is_valid(&self, v: T) -> bool {
         let notv = !v.clone();
-        v >= self.lower_bound && v <= self.upper_bound && T::from(v & self.bits_set.clone()) == self.bits_set && T::from(T::from(notv) & self.bits_cleared.clone()) == self.bits_cleared
-    }
-}
-
-impl<T> Symbolic<T> where T: Clone + Ord {
-    pub fn increase_lower_bound(&mut self, v: T) {
-        self.lower_bound = max(self.lower_bound.clone(), v);
-    }
-    
-    pub fn decrease_upper_bound(&mut self, v: T) {
-        self.upper_bound = min(self.upper_bound.clone(), v);
+        T::from(v & self.bits_set.clone()) == self.bits_set && T::from(T::from(notv) & self.bits_cleared.clone()) == self.bits_cleared
     }
 }
 
@@ -142,8 +136,6 @@ impl<T> BitAnd for Symbolic<T> where T: Bounded + BitAnd + BitOr + From<<T as Bi
     
     fn bitand(self, sv:Self) -> Self {
         Symbolic {
-            lower_bound: T::min_value(),
-            upper_bound: T::max_value(),
             bits_set: T::from(self.bits_set & sv.bits_set),
             bits_cleared: T::from(self.bits_cleared | sv.bits_cleared)
         }
@@ -155,8 +147,6 @@ impl<T> BitOr for Symbolic<T> where T: Bounded + BitAnd + BitOr + From<<T as Bit
     
     fn bitor(self, sv:Self) -> Self {
         Symbolic {
-            lower_bound: T::min_value(),
-            upper_bound: T::max_value(),
             bits_set: T::from(self.bits_set | sv.bits_set),
             bits_cleared: T::from(self.bits_cleared & sv.bits_cleared)
         }
@@ -169,8 +159,6 @@ impl<T,R> Shl<R> for Symbolic<T> where T: Shl<R> + One, R: Clone,
 
     fn shl(self, rhs: R) -> Self::Output {
         Symbolic {
-            lower_bound: self.lower_bound << rhs.clone(),
-            upper_bound: self.upper_bound << rhs.clone(),
             bits_set: self.bits_set << rhs.clone(),
             bits_cleared: <T as Shl<R>>::Output::from(self.bits_cleared << rhs.clone() | <T as Shl<R>>::Output::from((T::one() << rhs.clone()) - T::one()))
         }
