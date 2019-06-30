@@ -29,8 +29,9 @@ pub fn parse_ptr<P, MV, S, IO>(text_str: &str, db: &database::Database<P, S>, bu
     where P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
         S: memory::Offset<P> {
     if let Ok(text_lbl) = ast::Label::from_str(text_str) {
-        if let Some(ptr) = db.label_pointer(&text_lbl) {
-            return Some(ptr.clone());
+        if let Some(sym_id) = db.label_symbol(&text_lbl) {
+            let sym = db.symbol(sym_id).expect("DB handed back invalid symbol ID");
+            return Some(sym.as_pointer().clone());
         }
     }
 

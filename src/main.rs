@@ -9,6 +9,7 @@ mod retrogram;
 use std::{str, io};
 use crate::retrogram::{cli, project};
 
+#[derive(PartialEq, Eq)]
 enum Commands {
     Scan,
     Disassemble,
@@ -68,8 +69,17 @@ fn main() -> io::Result<()> {
             if let Some(source_name) = source_name {
                 match project.data_source(&source_name) {
                     Some(project_source) => source = project_source.apply_override(&source),
-                    None => eprintln!("The specified data source {} does not exist.", source_name)
+                    None if command == Some(Commands::Import) => eprintln!("The specified data source {} does not exist.", source_name),
+                    None => {}
                 }
+            } else if let Some(first_datasource_name) = prog.iter_sources().next() {
+                match project.data_source(&first_datasource_name) {
+                    Some(project_source) => source = project_source.apply_override(&source),
+                    None if command == Some(Commands::Import) => eprintln!("No project data source was configured or mentioned and the project's first data source does not exist."),
+                    None => {}
+                }
+            } else if command == Some(Commands::Import) {
+                eprintln!("No project data source was configured or mentioned and the given program does not have any sources.");
             }
         },
         Err(e) => eprintln!("Cannot open project file, got error {}", e) //TODO: You shouldn't need a project file if you specified everything else correctly.

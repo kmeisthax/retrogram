@@ -70,9 +70,9 @@ pub fn parse_symbol_file(prog: &project::Program, datasrc: &project::DataSource,
 
                         if let Some(global_part) = name_split.next() {
                             if let Some(local_part) = name_split.next() {
-                                db.insert_label(ast::Label::new(local_part, Some(global_part)), ctxt_ptr);
+                                db.upsert_symbol(ast::Label::new(local_part, Some(global_part)), ctxt_ptr);
                             } else {
-                                db.insert_label(ast::Label::new(global_part, None), ctxt_ptr);
+                                db.upsert_symbol(ast::Label::new(global_part, None), ctxt_ptr);
                             }
                         }
                     }
