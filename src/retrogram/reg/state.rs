@@ -39,7 +39,26 @@ pub struct State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash {
 }
 
 impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash {
+    /// Determine if the trace that generated the current architectural state
+    /// did or did not define the value of a register at some point in time.
+    /// 
+    /// If the value was later undefined by other actions, this function will
+    /// still return true. To determine if the register is currently undefined,
+    /// get the value and check if it's symbolic or not.
+    fn register_was_written(&self, k: RK) -> bool {
+        self.cpu_state.get(&k).is_some()
+    }
 
+    /// Determine if the trace that generated the current architectural state
+    /// did or did not define the value of a memory location at some point in
+    /// time.
+    /// 
+    /// If the value was later undefined by other actions, this function will
+    /// still return true. To determine if the memory location is currently
+    /// undefined, get the value and check if it's symbolic or not.
+    fn memory_was_written(&self, k: P) -> bool {
+        self.mem_state.get(&k).is_some()
+    }
 }
 
 impl<RK, RV, P, MV> Default for State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash {
