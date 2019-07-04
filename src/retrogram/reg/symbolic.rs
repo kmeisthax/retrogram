@@ -164,3 +164,15 @@ impl<T,R> Shl<R> for Symbolic<T> where T: Shl<R> + One, R: Clone,
         }
     }
 }
+
+impl<T,R> Shr<R> for Symbolic<T> where T: Shr<R> + Bounded + Not, R: Clone,
+    <T as Shr<R>>::Output: BitOr + Not + From<<<T as Shr<R>>::Output as BitOr>::Output> + From<<<T as Shr<R>>::Output as Not>::Output> {
+    type Output = Symbolic<<T as Shr<R>>::Output>;
+
+    fn shr(self, rhs: R) -> Self::Output {
+        Symbolic {
+            bits_set: self.bits_set >> rhs.clone(),
+            bits_cleared: <T as Shr<R>>::Output::from(self.bits_cleared >> rhs.clone() | <T as Shr<R>>::Output::from(!(T::max_value() >> rhs.clone())))
+        }
+    }
+}

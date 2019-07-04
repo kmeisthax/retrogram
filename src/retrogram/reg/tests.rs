@@ -80,12 +80,23 @@ fn test_symbolic_bitand() {
 }
 
 #[test]
-fn test_symbolic_shift() {
+fn test_symbolic_shl() {
     let value_one = 0x3C;
     let sym_value_one = reg::Symbolic::from(value_one);
 
     let value_shift = value_one << 2;
     let sym_value_shift = sym_value_one << 2;
+
+    assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
+}
+
+#[test]
+fn test_symbolic_shr() {
+    let value_one = 0xF0;
+    let sym_value_one = reg::Symbolic::from(value_one);
+
+    let value_shift = value_one >> 2;
+    let sym_value_shift = sym_value_one >> 2;
 
     assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
 }
