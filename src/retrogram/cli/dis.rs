@@ -106,7 +106,7 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
     match (arch, platform) {
         (arch::ArchName::LR35902, platform::PlatformName::GB) => dis_inner(prog, start_spec,
             &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?,
-            &arch::lr35902::disassemble,
+            &|p, mem| arch::lr35902::disassemble(p, mem, None),
             &|asm| println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm))),
         (arch::ArchName::AARCH32, platform::PlatformName::AGB) => dis_inner(prog, start_spec,
             &platform::agb::construct_platform(&mut file)?,
