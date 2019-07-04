@@ -45,7 +45,7 @@ impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash {
     /// If the value was later undefined by other actions, this function will
     /// still return true. To determine if the register is currently undefined,
     /// get the value and check if it's symbolic or not.
-    fn register_was_written(&self, k: RK) -> bool {
+    pub fn register_was_written(&self, k: RK) -> bool {
         self.cpu_state.get(&k).is_some()
     }
 
@@ -56,8 +56,16 @@ impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash {
     /// If the value was later undefined by other actions, this function will
     /// still return true. To determine if the memory location is currently
     /// undefined, get the value and check if it's symbolic or not.
-    fn memory_was_written(&self, k: P) -> bool {
+    pub fn memory_was_written(&self, k: P) -> bool {
         self.mem_state.get(&k).is_some()
+    }
+
+    pub fn set_register(&mut self, k: RK, v: Symbolic<RV>) {
+        self.cpu_state.insert(k, v);
+    }
+
+    pub fn set_memory(&mut self, k: P, v: Symbolic<MV>) {
+        self.mem_state.insert(k, v);
     }
 }
 
