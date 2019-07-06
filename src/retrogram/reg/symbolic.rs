@@ -30,6 +30,17 @@ pub struct Symbolic<T> {
     bits_cleared: T,
 }
 
+impl<T> Symbolic<T> {
+    /// Construct a symbolic value from bits that should be set and bits that
+    /// should be cleared.
+    pub fn from_bits(bits_set: T, bits_cleared: T) -> Self {
+        Symbolic {
+            bits_set: bits_set,
+            bits_cleared: bits_cleared
+        }
+    }
+}
+
 impl<T> Default for Symbolic<T> where T: Concretizable {
     fn default() -> Self {
         Symbolic {
@@ -60,12 +71,13 @@ impl<T, R> Convertable<R> for Symbolic<T> where T: From<R> + Concretizable, R: C
 }
 
 impl<T> Symbolic<T> where T: Concretizable {
-    /// Construct a symbolic value from bits that should be set and bits that
-    /// should be cleared.
-    pub fn from_bits(bits_set: T, bits_cleared: T) -> Self {
+    /// Construct a symbolic value from a given concrete value where we only
+    /// want to specify the bits listed in `cares`. Bits in `cares` that are
+    /// zero will be treated as unconstrained.
+    pub fn from_cares(v: T, cares: T) -> Self {
         Symbolic {
-            bits_set: bits_set,
-            bits_cleared: bits_cleared
+            bits_set: v.clone(),
+            bits_cleared: T::from(T::from(!v) & cares)
         }
     }
 
