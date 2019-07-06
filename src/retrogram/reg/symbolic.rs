@@ -5,6 +5,7 @@ use std::ops::{Sub, Not, BitAnd, BitOr, Shl, Shr};
 use num::traits::{Bounded, One};
 use serde::{Serialize, Deserialize};
 use crate::retrogram::reg::{Convertable, Concretizable};
+use crate::retrogram::maths::BoundWidth;
 
 /// Represents a processor register bounded to a particular set of states.
 /// 
@@ -140,6 +141,72 @@ impl<T> Symbolic<T> where T: Concretizable {
     pub fn is_valid(&self, v: T) -> bool {
         let notv = !v.clone();
         T::from(v & self.bits_set.clone()) == self.bits_set && T::from(T::from(notv) & self.bits_cleared.clone()) == self.bits_cleared
+    }
+
+    /// Generate all possible values which satisfy the symbolic constraint.
+    pub fn valid(&self) -> impl Iterator<Item = T> {
+        struct SymbolicValueIterator<T> {
+            not_cares: T,
+            next: Option<T>,
+        }
+
+        impl<T> Iterator for SymbolicValueIterator<T> where T: Concretizable {
+            type Item = T;
+
+            fn next(&mut self) -> Option<T> {
+                let r = self.next.clone();
+
+                if let Some(mut v) = self.next.clone() {
+                    let nc = self.not_cares.clone();
+
+                    //Some explanation for this weirdness... We kind of have our
+                    //hands tied syntactically here as I want to be able to use
+                    //any bitwise numeral type here, including exotic signed
+                    //representations. So we have to iterate through each bit,
+                    //and if we find a nocare bit then we half-add it with the
+                    //current value and propagate carries forward. When we run
+                    //out of carries we're done and can save the new value.
+
+                    let mut carry = T::one();
+                    let mut bit = T::zero();
+
+                    while carry != T::zero() && bit != T::bound_width() {
+                        let mask = T::from(T::one() << bit.clone());
+
+                        if T::from(nc.clone() & mask.clone()) != T::zero() {
+                            let vbit = T::from(v.clone() & mask.clone());
+                            let carrybit = T::from(carry << bit.clone());
+                            let newcarry = match vbit == T::zero() {
+                                true => T::zero(),
+                                false => T::one()
+                            };
+                            let vcut = T::from(v & T::from(!mask));
+
+                            v = T::from(vcut | T::from(carrybit ^ vbit));
+                            carry = newcarry;
+                        }
+
+                        bit = bit + T::one();
+                    }
+
+                    if carry == T::zero() {
+                        self.next = Some(v);
+                    } else {
+                        self.next = None;
+                    }
+                }
+
+                r
+            }
+        }
+
+        SymbolicValueIterator{
+            not_cares: self.not_cares(),
+            next: match self.is_unsatisfiable() {
+                true => None,
+                false => Some(self.bits_set.clone())
+            }
+        }
     }
 }
 

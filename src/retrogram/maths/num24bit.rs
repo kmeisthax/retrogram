@@ -2,14 +2,14 @@
 
 use std::ops::{Add, Sub, Mul, Div, BitAnd, BitOr, BitXor, Shl, Shr, Not};
 use std::fmt;
-use std::fmt::{Formatter, Display};
+use std::fmt::{Formatter, Display, Debug};
 use std::str::FromStr;
 use std::convert::{TryFrom, TryInto};
 use num::{Zero, One, Bounded};
-use crate::retrogram::maths::CheckedSub;
+use crate::retrogram::maths::{CheckedSub, BoundWidth};
 
 #[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct u24 {
     v: u32
 }
@@ -126,6 +126,7 @@ binary_op_masked_impl!(u24, usize, Shr, shr, 0xFFFFFF);
 
 boundwidth_impl!(u24, u8, 24);
 boundwidth_impl!(u24, u16, 24);
+boundwidth_impl!(u24, u24, u24::from(24 as u16));
 boundwidth_impl!(u24, u32, 24);
 boundwidth_impl!(u24, u64, 24);
 boundwidth_impl!(u24, u128, 24);

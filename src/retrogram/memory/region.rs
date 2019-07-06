@@ -10,7 +10,7 @@ use std::fmt::Debug;
 use num::traits::{Bounded, One};
 use crate::retrogram::{reg, maths, memory};
 use crate::retrogram::reg::Convertable;
-use crate::retrogram::maths::CheckedSub;
+use crate::retrogram::maths::{CheckedSub, BoundWidth};
 use crate::retrogram::memory::bss::UnknownImage;
 use crate::retrogram::memory::rombin::ROMBinaryImage;
 use crate::retrogram::memory::{Image, Behavior, Pointer};
@@ -178,13 +178,15 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
             <EV as Shl<usize>>::Output: reg::Concretizable,
             reg::Symbolic<EV>: Shl<usize>,
             reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output> {
-        let units_reqd = (EV::bound_width() as f32 / MV::bound_width() as f32).round() as usize;
+        let ev_units = <EV as BoundWidth<usize>>::bound_width();
+        let mv_units = <MV as BoundWidth<usize>>::bound_width();
+        let units_reqd = (ev_units as f32 / mv_units as f32).round() as usize;
         let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::from(EV::zero());
 
         for i in 0..units_reqd {
             let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
             let unit = reg::Symbolic::<EV>::convert_from(self.read_unit(&ptr));
-            let shifted_unit = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(unit << (i * MV::bound_width())));
+            let shifted_unit = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(unit << (i * mv_units)));
             sum = sum | shifted_unit;
         }
 
@@ -205,13 +207,15 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
             <EV as Shl<usize>>::Output: reg::Concretizable,
             reg::Symbolic<EV>: Shl<usize>,
             reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output> {
-        let units_reqd = (EV::bound_width() as f32 / MV::bound_width() as f32).round() as usize;
+        let ev_units = <EV as BoundWidth<usize>>::bound_width();
+        let mv_units = <MV as BoundWidth<usize>>::bound_width();
+        let units_reqd = (ev_units as f32 / mv_units as f32).round() as usize;
         let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::from(EV::zero());
 
         for i in (0..units_reqd).rev() {
             let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
             let unit = reg::Symbolic::<EV>::convert_from(self.read_unit(&ptr));
-            let shifted_unit = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(unit << (i * MV::bound_width())));
+            let shifted_unit = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(unit << (i * mv_units)));
             sum = sum | shifted_unit;
         }
 
