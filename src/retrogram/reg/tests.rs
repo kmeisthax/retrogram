@@ -12,7 +12,7 @@ fn test_symbolic_default() {
 
 #[test]
 fn test_concrete_roundtrip() {
-    let start_value = 142;
+    let start_value : u8 = 142;
     let sym_value = reg::Symbolic::from(start_value);
 
     assert!(sym_value.is_concrete());
@@ -35,7 +35,7 @@ fn test_concrete_cares() {
 
 #[test]
 fn test_concrete_validation() {
-    let start_value = 83;
+    let start_value : u8 = 83;
     let sym_value = reg::Symbolic::from(start_value);
 
     assert!(sym_value.is_valid(start_value));
@@ -44,7 +44,7 @@ fn test_concrete_validation() {
 
 #[test]
 fn test_unsatisfiable() {
-    let sym_value = reg::Symbolic::from_bits(0xF0, 0x1F);
+    let sym_value : reg::Symbolic<u8> = reg::Symbolic::from_bits(0xF0, 0x1F);
 
     assert!(sym_value.is_unsatisfiable());
     assert!(!sym_value.is_concrete());
@@ -53,8 +53,8 @@ fn test_unsatisfiable() {
 
 #[test]
 fn test_symbolic_bitor() {
-    let value_one = 0x3C;
-    let value_two = 0xF0;
+    let value_one : u8 = 0x3C;
+    let value_two : u8 = 0xF0;
 
     let sym_value_one = reg::Symbolic::from(value_one);
     let sym_value_two = reg::Symbolic::from(value_two);
@@ -67,8 +67,8 @@ fn test_symbolic_bitor() {
 
 #[test]
 fn test_symbolic_bitand() {
-    let value_one = 0x3C;
-    let value_two = 0xF0;
+    let value_one : u8 = 0x3C;
+    let value_two : u8 = 0xF0;
 
     let sym_value_one = reg::Symbolic::from(value_one);
     let sym_value_two = reg::Symbolic::from(value_two);
@@ -81,7 +81,7 @@ fn test_symbolic_bitand() {
 
 #[test]
 fn test_symbolic_shl() {
-    let value_one = 0x3C;
+    let value_one : u8 = 0x3C;
     let sym_value_one = reg::Symbolic::from(value_one);
 
     let value_shift = value_one << 2;
@@ -92,11 +92,42 @@ fn test_symbolic_shl() {
 
 #[test]
 fn test_symbolic_shr() {
-    let value_one = 0xF0;
+    let value_one : u8 = 0xF0;
     let sym_value_one = reg::Symbolic::from(value_one);
 
     let value_shift = value_one >> 2;
     let sym_value_shift = sym_value_one >> 2;
 
     assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
+}
+
+#[test]
+fn test_symbolic_iter() {
+    let sym_value : reg::Symbolic<u8> = reg::Symbolic::from_bits(0xF0, 0x05);
+    let mut sym_iter = sym_value.valid();
+
+    assert_eq!(sym_value.not_cares(), 0xA);
+
+    assert_eq!(sym_iter.next(), Some(0xF0));
+    assert_eq!(sym_iter.next(), Some(0xF2));
+    assert_eq!(sym_iter.next(), Some(0xF8));
+    assert_eq!(sym_iter.next(), Some(0xFA));
+    assert_eq!(sym_iter.next(), None);
+}
+
+#[test]
+fn test_symbolic_iter_unsatisfiable() {
+    let sym_value : reg::Symbolic<u8> = reg::Symbolic::from_bits(0x6F, 0x1F);
+    let mut sym_iter = sym_value.valid();
+
+    assert_eq!(sym_iter.next(), None);
+}
+
+#[test]
+fn test_symbolic_iter_concrete() {
+    let sym_value = reg::Symbolic::from(0x3F as u8);
+    let mut sym_iter = sym_value.valid();
+
+    assert_eq!(sym_iter.next(), Some(0x3F));
+    assert_eq!(sym_iter.next(), None);
 }
