@@ -266,11 +266,11 @@ pub fn construct_platform_from_rom_image<F>(file: &mut F, pv: PlatformVariant) -
     }
 
     rom_mapping = rom_mapping.known_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Could not automatically determine ROM mapping"))?;
-    m.install_mem_image(u24::from(0 as u16),
+    m.install_rom_image(u24::from(0 as u16),
         u24::try_from(0xFFFFFF as u32).or_else(|e| Err(io::Error::new(io::ErrorKind::InvalidData, "ROM size is too large for the SFC platform")))?,
         Box::new(SufamiPlatform::new(data, floffset, rom_mapping)));
 
-    m.install_mem(u24::try_from(0x7E0000 as u32).expect("This should work."),
+    m.install_ram(u24::try_from(0x7E0000 as u32).expect("This should work."),
         u24::try_from(0x020000 as u32).expect("This should work."));
     //TODO: System IO area. Requires a custom image to handle banking.
 
