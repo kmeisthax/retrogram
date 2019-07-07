@@ -269,22 +269,22 @@ pub fn construct_platform<F>(file: &mut F, mut pv: PlatformVariant) -> io::Resul
     };
 
     match pv {
-        PlatformVariant::LinearMapper => bus.install_mem_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, LinearMapper::new())?)),
-        PlatformVariant::MBC1Mapper => bus.install_mem_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, MBC1Mapper::new())?)),
-        PlatformVariant::MBC2Mapper => bus.install_mem_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, MBC2Mapper::new())?)),
-        PlatformVariant::MBC3Mapper => bus.install_mem_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, MBC3Mapper::new())?)),
-        PlatformVariant::MBC5Mapper => bus.install_mem_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, MBC5Mapper::new())?)),
+        PlatformVariant::LinearMapper => bus.install_rom_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, LinearMapper::new())?)),
+        PlatformVariant::MBC1Mapper => bus.install_rom_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, MBC1Mapper::new())?)),
+        PlatformVariant::MBC2Mapper => bus.install_rom_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, MBC2Mapper::new())?)),
+        PlatformVariant::MBC3Mapper => bus.install_rom_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, MBC3Mapper::new())?)),
+        PlatformVariant::MBC5Mapper => bus.install_rom_image(0x0000, 0x8000, Box::new(GameBoyROMImage::new(file, MBC5Mapper::new())?)),
         PlatformVariant::UnknownMapper => panic!("Platform variant detection failed! Please manually specify the platform variant.")
     }
 
-    bus.install_mem(0x8000, 0x2000); //VRAM
-    bus.install_mem(0xA000, 0x2000); //SRAM (todo: this should be modeled better...)
-    bus.install_mem(0xC000, 0x2000); //WRAM (todo: bankable WRAM)
-    bus.install_mem(0xFE00, 0x009F); //OAM
+    bus.install_ram(0x8000, 0x2000); //VRAM
+    bus.install_ram(0xA000, 0x2000); //SRAM (todo: this should be modeled better...)
+    bus.install_ram(0xC000, 0x2000); //WRAM (todo: bankable WRAM)
+    bus.install_ram(0xFE00, 0x009F); //OAM
     bus.install_io (0xFF00, 0x007F); //IO space
-    bus.install_mem(0xFF80, 0x007F); //HRAM
+    bus.install_ram(0xFF80, 0x007F); //HRAM
     bus.install_io (0xFFFF, 0x0001); //Interrupt enable
-    bus.openbus_mem(0xE000, 0x1000); //Echo RAM
+    bus.install_openbus(0xE000, 0x1000); //Echo RAM
 
     Ok(bus)
 }

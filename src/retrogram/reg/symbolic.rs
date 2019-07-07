@@ -1,11 +1,10 @@
 //! A symbolic value type which allows placing bounds on values which have been
 //! mutated.
 
-use std::ops::{Sub, Not, BitAnd, BitOr, Shl, Shr};
+use std::ops::{Sub, Not, BitAnd, BitOr, BitXor, Shl, Shr};
 use num::traits::{Bounded, One};
 use serde::{Serialize, Deserialize};
 use crate::retrogram::reg::{Convertable, Concretizable};
-use crate::retrogram::maths::BoundWidth;
 
 /// Represents a processor register bounded to a particular set of states.
 /// 
@@ -82,6 +81,16 @@ impl<T> Symbolic<T> where T: Concretizable {
         }
     }
 
+    /// Break a symbolic value into it's bits-set and bits-cleared parts.
+    pub fn into_bits(self) -> (T, T) {
+        (self.bits_set, self.bits_cleared)
+    }
+
+    /// Reference the bits-set and bits-cleared parts of a symbolic value.
+    pub fn as_bits(&self) -> (&T, &T) {
+        (&self.bits_set, &self.bits_cleared)
+    }
+
     /// Determines if this symbolic value does not constrain the values which
     /// may satisfy it.
     pub fn is_unconstrained(&self) -> bool {
@@ -95,7 +104,7 @@ impl<T> Symbolic<T> where T: Concretizable {
 
     /// Determines if this symbolic value is constrained to precisely one value.
     pub fn is_concrete(&self) -> bool {
-        T::from(self.bits_set.clone() | self.bits_cleared.clone()) == T::from(!T::zero())
+        !self.is_unsatisfiable() && T::from(self.bits_set.clone() | self.bits_cleared.clone()) == T::from(!T::zero())
     }
 
     pub fn into_concrete(self) -> Option<T> {
@@ -208,26 +217,68 @@ impl<T> Symbolic<T> where T: Concretizable {
             }
         }
     }
-}
 
-impl<T> BitAnd for Symbolic<T> where T: Bounded + BitAnd + BitOr + From<<T as BitAnd>::Output> + From<<T as BitOr>::Output> {
-    type Output = Symbolic<T>;
-    
-    fn bitand(self, sv:Self) -> Self {
-        Symbolic {
-            bits_set: T::from(self.bits_set & sv.bits_set),
-            bits_cleared: T::from(self.bits_cleared | sv.bits_cleared)
+    /// Calculate the lowest possible value that can satisfy the symbolic value.
+    pub fn lower_bound(&self) -> Option<T> {
+        if !self.is_unsatisfiable() {
+            Some(self.bits_set.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Calculate the highest possible value that can satisfy the symbolic
+    /// value.
+    pub fn upper_bound(&self) -> Option<T> {
+        if !self.is_unsatisfiable() {
+            Some(T::from(self.bits_set.clone() | self.not_cares()))
+        } else {
+            None
         }
     }
 }
 
-impl<T> BitOr for Symbolic<T> where T: Bounded + BitAnd + BitOr + From<<T as BitAnd>::Output> + From<<T as BitOr>::Output> {
-    type Output = Symbolic<T>;
+impl<T, R> BitAnd<Symbolic<R>> for Symbolic<T> where T: Bounded + BitAnd<R> + BitOr<R>,
+    <T as BitAnd<R>>::Output: From<<T as BitOr<R>>::Output> {
+    type Output = Symbolic<<T as BitAnd<R>>::Output>;
     
-    fn bitor(self, sv:Self) -> Self {
+    fn bitand(self, sv:Symbolic<R>) -> Self::Output {
         Symbolic {
-            bits_set: T::from(self.bits_set | sv.bits_set),
-            bits_cleared: T::from(self.bits_cleared & sv.bits_cleared)
+            bits_set: self.bits_set & sv.bits_set,
+            bits_cleared: <T as BitAnd<R>>::Output::from(self.bits_cleared | sv.bits_cleared)
+        }
+    }
+}
+
+impl<T, R> BitOr<Symbolic<R>> for Symbolic<T> where T: Bounded + BitAnd<R> + BitOr<R>,
+    <T as BitOr<R>>::Output: From<<T as BitAnd<R>>::Output> {
+    type Output = Symbolic<<T as BitOr<R>>::Output>;
+    
+    fn bitor(self, sv:Symbolic<R>) -> Self::Output {
+        Symbolic {
+            bits_set: self.bits_set | sv.bits_set,
+            bits_cleared: <T as BitOr<R>>::Output::from(self.bits_cleared & sv.bits_cleared)
+        }
+    }
+}
+
+impl<T, R> BitXor<Symbolic<R>> for Symbolic<T>
+    where T: Clone + BitOr + BitAnd<R> + BitXor<R> + From<<T as BitOr>::Output>,
+        R: Clone + BitOr + From<<R as BitOr>::Output>,
+        <T as BitXor<R>>::Output: Clone + Not + BitAnd + From<<T as BitAnd<R>>::Output> +
+            From<<<T as BitXor<R>>::Output as Not>::Output> + From<<<T as BitXor<R>>::Output as BitAnd>::Output> {
+    type Output = Symbolic<<T as BitXor<R>>::Output>;
+
+    fn bitxor(self, sv:Symbolic<R>) -> Self::Output {
+        let self_nocare = T::from(self.bits_set.clone() | self.bits_cleared.clone());
+        let rhs_nocare = R::from(sv.bits_set.clone() | sv.bits_cleared.clone());
+        let mask = <T as BitXor<R>>::Output::from(self_nocare & rhs_nocare);
+        let bitset_xor = self.bits_set ^ sv.bits_set;
+        let bitclear_xor = self.bits_cleared ^ sv.bits_cleared;
+
+        Symbolic {
+            bits_set: <T as BitXor<R>>::Output::from(bitset_xor & mask.clone()),
+            bits_cleared: <T as BitXor<R>>::Output::from(<T as BitXor<R>>::Output::from(!bitclear_xor) & mask)
         }
     }
 }

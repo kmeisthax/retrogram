@@ -53,7 +53,9 @@ use crate::retrogram::memory::{Image, Behavior, Pointer};
 struct Region<P, MV, S = P, IO = usize> {
     start: P,
     length: S,
-    memtype: Behavior,
+    read_memtype: Behavior,
+    write_memtype: Behavior,
+    exec_memtype: Behavior,
     image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>
 }
 
@@ -83,11 +85,24 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
         }
     }
 
-    pub fn install_mem_image(&mut self, start: P, length: S, image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>) {
+    pub fn install_mem_image(&mut self, start: P, length: S, read_memtype: Behavior, write_memtype: Behavior, exec_memtype: Behavior, image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>) {
         self.views.push(Region {
             start: start,
             length: length,
-            memtype: Behavior::Storage,
+            read_memtype: read_memtype,
+            write_memtype: write_memtype,
+            exec_memtype: exec_memtype,
+            image: image
+        });
+    }
+
+    pub fn install_rom_image(&mut self, start: P, length: S, image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>) {
+        self.views.push(Region {
+            start: start,
+            length: length,
+            read_memtype: Behavior::Memory,
+            write_memtype: Behavior::Invalid,
+            exec_memtype: Behavior::Memory,
             image: image
         });
     }
@@ -96,11 +111,24 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
     where P: memory::PtrNum<S> + 'static, S: memory::Offset<P>,
         IO: Clone + 'static, <P as std::ops::Sub>::Output: TryInto<IO>, MV: 'static {
-    pub fn install_mem(&mut self, start: P, length: S) {
+    pub fn install_mem(&mut self, start: P, length: S, read_memtype: Behavior, write_memtype: Behavior, exec_memtype: Behavior) {
         self.views.push(Region {
             start: start,
             length: length,
-            memtype: Behavior::Storage,
+            read_memtype: read_memtype,
+            write_memtype: write_memtype,
+            exec_memtype: exec_memtype,
+            image: Box::new(UnknownImage::new())
+        });
+    }
+
+    pub fn install_ram(&mut self, start: P, length: S) {
+        self.views.push(Region {
+            start: start,
+            length: length,
+            read_memtype: Behavior::Memory,
+            write_memtype: Behavior::Memory,
+            exec_memtype: Behavior::Memory,
             image: Box::new(UnknownImage::new())
         });
     }
@@ -109,16 +137,20 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         self.views.push(Region {
             start: start,
             length: length,
-            memtype: Behavior::MappedIO,
+            read_memtype: Behavior::MappedIO,
+            write_memtype: Behavior::MappedIO,
+            exec_memtype: Behavior::MappedIO,
             image: Box::new(UnknownImage::new())
         });
     }
 
-    pub fn openbus_mem(&mut self, start: P, length: S) {
+    pub fn install_openbus(&mut self, start: P, length: S) {
         self.views.push(Region {
             start: start,
             length: length,
-            memtype: Behavior::Invalid,
+            read_memtype: Behavior::Invalid,
+            write_memtype: Behavior::Invalid,
+            exec_memtype: Behavior::Invalid,
             image: Box::new(UnknownImage::new())
         });
     }
@@ -131,7 +163,9 @@ impl<P, MV, S> Memory<P, MV, S, usize>
         self.views.push(Region {
             start: start,
             length: length,
-            memtype: Behavior::Storage,
+            read_memtype: Behavior::Memory,
+            write_memtype: Behavior::MappedIO,
+            exec_memtype: Behavior::Memory,
             image: Box::new(ROMBinaryImage::read_bytes(file)?)
         });
 
@@ -176,8 +210,10 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         where EV: memory::Desegmentable<MV> + reg::Concretizable,
             MV: reg::Concretizable,
             <EV as Shl<usize>>::Output: reg::Concretizable,
-            reg::Symbolic<EV>: Shl<usize>,
-            reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output> {
+            reg::Symbolic<EV>: Shl<usize> + BitOr + Convertable<<EV as Shl<usize>>::Output> +
+                Convertable<<EV as BitOr>::Output>,
+            reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output>,
+            reg::Symbolic<<EV as BitOr>::Output> : From<<reg::Symbolic<EV> as BitOr>::Output> {
         let ev_units = <EV as BoundWidth<usize>>::bound_width();
         let mv_units = <MV as BoundWidth<usize>>::bound_width();
         let units_reqd = (ev_units as f32 / mv_units as f32).round() as usize;
@@ -185,9 +221,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 
         for i in 0..units_reqd {
             let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
-            let unit = reg::Symbolic::<EV>::convert_from(self.read_unit(&ptr));
-            let shifted_unit = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(unit << (i * mv_units)));
-            sum = sum | shifted_unit;
+            let unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(self.read_unit(&ptr));
+            let shifted_unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(reg::Symbolic::from(unit << (i * mv_units)));
+            sum = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(sum | shifted_unit));
         }
 
         sum
@@ -205,8 +241,10 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         where EV: memory::Desegmentable<MV> + reg::Concretizable,
             MV: reg::Concretizable,
             <EV as Shl<usize>>::Output: reg::Concretizable,
-            reg::Symbolic<EV>: Shl<usize>,
-            reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output> {
+            reg::Symbolic<EV>: Shl<usize> + BitOr + Convertable<<EV as Shl<usize>>::Output> +
+                Convertable<<EV as BitOr>::Output>,
+            reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output>,
+            reg::Symbolic<<EV as BitOr>::Output> : From<<reg::Symbolic<EV> as BitOr>::Output> {
         let ev_units = <EV as BoundWidth<usize>>::bound_width();
         let mv_units = <MV as BoundWidth<usize>>::bound_width();
         let units_reqd = (ev_units as f32 / mv_units as f32).round() as usize;
@@ -214,9 +252,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 
         for i in (0..units_reqd).rev() {
             let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
-            let unit = reg::Symbolic::<EV>::convert_from(self.read_unit(&ptr));
-            let shifted_unit = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(unit << (i * mv_units)));
-            sum = sum | shifted_unit;
+            let unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(self.read_unit(&ptr));
+            let shifted_unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(reg::Symbolic::from(unit << (i * mv_units)));
+            sum = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(sum | shifted_unit));
         }
 
         sum

@@ -52,7 +52,7 @@ fn test_unsatisfiable() {
 }
 
 #[test]
-fn test_symbolic_bitor() {
+fn test_concrete_bitor() {
     let value_one : u8 = 0x3C;
     let value_two : u8 = 0xF0;
 
@@ -66,7 +66,7 @@ fn test_symbolic_bitor() {
 }
 
 #[test]
-fn test_symbolic_bitand() {
+fn test_concrete_bitand() {
     let value_one : u8 = 0x3C;
     let value_two : u8 = 0xF0;
 
@@ -80,7 +80,48 @@ fn test_symbolic_bitand() {
 }
 
 #[test]
-fn test_symbolic_shl() {
+fn test_concrete_bitxor() {
+    let value_one : u8 = 0x3C;
+    let value_two : u8 = 0xF0;
+
+    let sym_value_one = reg::Symbolic::from(value_one);
+    let sym_value_two = reg::Symbolic::from(value_two);
+
+    let value_xor = value_one ^ value_two;
+    let sym_value_xor = sym_value_one ^ sym_value_two;
+
+    assert_eq!(Some(value_xor), sym_value_xor.into_concrete());
+}
+
+#[test]
+fn test_symbolic_bitor() {
+    let sym_value_one : reg::Symbolic<u16> = reg::Symbolic::from_bits(0x0049, 0x0124);
+    let sym_value_two : reg::Symbolic<u16> = reg::Symbolic::from_bits(0x0007, 0x01C0);
+    let sym_value_or = sym_value_one | sym_value_two;
+
+    assert_eq!((0x004F, 0x0100), sym_value_or.into_bits());
+}
+
+#[test]
+fn test_symbolic_bitand() {
+    let sym_value_one : reg::Symbolic<u16> = reg::Symbolic::from_bits(0x0049, 0x0124);
+    let sym_value_two : reg::Symbolic<u16> = reg::Symbolic::from_bits(0x0007, 0x01C0);
+    let sym_value_and = sym_value_one & sym_value_two;
+
+    assert_eq!((0x0001, 0x01E4), sym_value_and.into_bits());
+}
+
+#[test]
+fn test_symbolic_bitxor() {
+    let sym_value_one : reg::Symbolic<u16> = reg::Symbolic::from_bits(0x0049, 0x0124);
+    let sym_value_two : reg::Symbolic<u16> = reg::Symbolic::from_bits(0x0007, 0x01C0);
+    let sym_value_and = sym_value_one ^ sym_value_two;
+
+    assert_eq!((0x0044, 0x0101), sym_value_and.into_bits());
+}
+
+#[test]
+fn test_concrete_shl() {
     let value_one : u8 = 0x3C;
     let sym_value_one = reg::Symbolic::from(value_one);
 
@@ -91,7 +132,7 @@ fn test_symbolic_shl() {
 }
 
 #[test]
-fn test_symbolic_shr() {
+fn test_concrete_shr() {
     let value_one : u8 = 0xF0;
     let sym_value_one = reg::Symbolic::from(value_one);
 
@@ -130,4 +171,14 @@ fn test_symbolic_iter_concrete() {
 
     assert_eq!(sym_iter.next(), Some(0x3F));
     assert_eq!(sym_iter.next(), None);
+}
+
+#[test]
+fn test_symbolic_bounds() {
+    let sym_value : reg::Symbolic<u8> = reg::Symbolic::from_bits(0x7A, 0x80);
+
+    assert_eq!(sym_value.lower_bound(), Some(0x7A));
+    assert_eq!(sym_value.upper_bound(), Some(0x7F));
+    assert!(sym_value.is_valid(sym_value.lower_bound().expect("Must be upper bounded")));
+    assert!(sym_value.is_valid(sym_value.upper_bound().expect("Must be lower bounded")));
 }
