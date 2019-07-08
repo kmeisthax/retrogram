@@ -174,6 +174,8 @@ pub fn read_value_from_targetreg(p: &memory::Pointer<Pointer>, mem: &Bus, state:
     }
 }
 
+/// Given a targetreg operand, manipulate the given state to incorporate the
+/// effect of writing a given value to that operand.
 pub fn write_value_to_targetreg(p: &memory::Pointer<Pointer>, mem: &Bus, state: &mut State, targetreg: u8, value: reg::Symbolic<Value>) {
     match targetreg {
         0 => state.set_register(Register::B, value),
@@ -194,6 +196,22 @@ pub fn write_value_to_targetreg(p: &memory::Pointer<Pointer>, mem: &Bus, state: 
     }
 }
 
+/// Given a symbolic value, compute the zero flag that it would generate in the
+/// F register if it were the result of a computation.
+/// 
+/// The resulting value is suitable for use as a new flags register with the
+/// format of Z000. You may OR in additional bits as necessary.
+pub fn zero_flag(val: reg::Symbolic<Value>) -> reg::Symbolic<Value> {
+    match (val.into_concrete(), val.is_valid(0)) {
+        (Some(0), _) => reg::Symbolic::from(0x80 as Value),
+        (Some(_), _) => reg::Symbolic::from(0 as Value),
+        (None, true) => reg::Symbolic::from_cares(0 as Value, 0x7F as Value),
+        (None, false) => reg::Symbolic::from(0 as Value),
+    }
+}
+
+/// Trace a CB-prefix bit rotate operation (RLC, RRC, RL, RR, SLA, SRA, SWAP,
+/// or SRL).
 pub fn trace_bitop(p: &memory::Pointer<Pointer>, mem: &Bus, state: Option<State>, bitop: u8, targetreg: u8) -> Option<State> {
     if let Some(mut state) = state {
         let flags = state.get_register(Register::F);
@@ -212,9 +230,51 @@ pub fn trace_bitop(p: &memory::Pointer<Pointer>, mem: &Bus, state: Option<State>
             7 => (val >> 1, val & reg::Symbolic::from(0x01)), //SRL
             _ => panic!("Invalid bit operation!")
         };
-
-        state.set_register(Register::F, flags & reg::Symbolic::from(0xEF) | newcarry << 4);
+        
+        state.set_register(Register::F, newcarry << 4 | zero_flag(val)); //N and H flags are always zero
         write_value_to_targetreg(p, mem, &mut state, targetreg, newval);
+
+        Some(state)
+    } else {
+        state
+    }
+}
+
+/// Trace a CB-prefix bit test instruction (e.g. BIT n, reg).
+pub fn trace_bittest(p: &memory::Pointer<Pointer>, mem: &Bus, state: Option<State>, targetbit: u8, targetreg: u8) -> Option<State> {
+    if let Some(mut state) = state {
+        let flags = state.get_register(Register::F);
+        let val = read_value_from_targetreg(p, mem, &state, targetreg) >> targetbit & reg::Symbolic::from(0x01);
+
+        state.set_register(Register::F, flags & reg::Symbolic::from(0x10) | reg::Symbolic::from(0x20) | zero_flag(val));
+
+        Some(state)
+    } else {
+        state
+    }
+}
+
+/// Trace a CB-prefix bit reset instruction (e.g. RES n, reg).
+pub fn trace_bitreset(p: &memory::Pointer<Pointer>, mem: &Bus, state: Option<State>, targetbit: u8, targetreg: u8) -> Option<State> {
+    if let Some(mut state) = state {
+        let mask = reg::Symbolic::from(!(1 << targetbit));
+        let val = read_value_from_targetreg(p, mem, &state, targetreg);
+
+        write_value_to_targetreg(p, mem, &mut state, targetreg, val & mask);
+
+        Some(state)
+    } else {
+        state
+    }
+}
+
+/// Trace a CB-prefix bit set instruction (e.g. SET n, reg).
+pub fn trace_bitset(p: &memory::Pointer<Pointer>, mem: &Bus, state: Option<State>, targetbit: u8, targetreg: u8) -> Option<State> {
+    if let Some(mut state) = state {
+        let bit = reg::Symbolic::from(1 << targetbit);
+        let val = read_value_from_targetreg(p, mem, &state, targetreg);
+
+        write_value_to_targetreg(p, mem, &mut state, targetreg, val | bit);
 
         Some(state)
     } else {
