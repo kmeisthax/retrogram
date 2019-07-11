@@ -42,3 +42,27 @@ impl<T> Concretizable for T where T: Clone + Bounded + BoundWidth + PartialEq + 
     From<<Self as Not>::Output> + From<<Self as Shl>::Output> + From<<Self as Shr>::Output> + Debug {
 
 }
+
+/// Guard trait for bitwise operations on a type.
+/// 
+/// This is similar to `Concretizable` but stipulates the output type of all
+/// operations is identical to the implementing type. This is because `Symbolic`
+/// cannot make use of `From` conversions (which is why we have `Convertable`).
+/// In practice any good numerical type implementation that supports bitwise
+/// operators will also return it's own types, so this excludes pathological
+/// cases like redefining shifts to mean input and output (looking at you C++).
+/// 
+/// In short: concrete values can satisfy both traits; symbolic ones only
+/// satisfy this one.
+/// 
+/// Bitwise also requires the ability to shift by a `usize` count for programmer
+/// convenience.
+pub trait Bitwise: Clone + Zero + One + BoundWidth<usize> + Shl<usize, Output=Self> + BitAnd<Output=Self> +
+    BitXor<Output=Self> + BitOr<Output=Self> + Not<Output=Self> {
+
+}
+
+impl<T> Bitwise for T where T: Clone + Zero + One + BoundWidth<usize> + Shl<usize, Output=Self> + BitAnd<Output=Self> +
+    BitXor<Output=Self> + BitOr<Output=Self> + Not<Output=Self> {
+
+}

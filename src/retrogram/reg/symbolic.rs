@@ -1,10 +1,11 @@
 //! A symbolic value type which allows placing bounds on values which have been
 //! mutated.
 
-use std::ops::{Sub, Not, BitAnd, BitOr, BitXor, Shl, Shr};
-use num::traits::{Bounded, One};
+use std::ops::{Sub, Not, BitAnd, BitOr, BitXor, Shl, Shr, Add};
+use num::traits::{Bounded, Zero, One};
 use serde::{Serialize, Deserialize};
-use crate::retrogram::reg::{Convertable, Concretizable};
+use crate::retrogram::reg::{Convertable, Concretizable, Bitwise};
+use crate::retrogram::maths::BoundWidth;
 
 /// Represents a processor register bounded to a particular set of states.
 /// 
@@ -56,6 +57,19 @@ impl<T> From<T> for Symbolic<T> where T: Concretizable {
             bits_set: v.clone(),
             bits_cleared: T::from(!v),
         }
+    }
+}
+
+impl<T> Zero for Symbolic<T> where T: Zero + Concretizable, Symbolic<T>: Add<Symbolic<T>, Output=Symbolic<T>> {
+    fn zero() -> Self {
+        Symbolic {
+            bits_set: T::zero(),
+            bits_cleared: T::from(!T::zero())
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        return self.is_concrete() && self.bits_set.is_zero();
     }
 }
 
@@ -304,5 +318,43 @@ impl<T,R> Shr<R> for Symbolic<T> where T: Shr<R> + Bounded + Not, R: Clone,
             bits_set: self.bits_set >> rhs.clone(),
             bits_cleared: <T as Shr<R>>::Output::from(self.bits_cleared >> rhs.clone() | <T as Shr<R>>::Output::from(!(T::max_value() >> rhs.clone())))
         }
+    }
+}
+
+impl<T,R> Add<Symbolic<R>> for Symbolic<T> where T: Clone + Add<R> + BitXor<R> + BitAnd<R>,
+    <T as BitXor<R>>::Output: Clone + Concretizable + BoundWidth<usize>
+        + Shl<usize, Output=<T as BitXor<R>>::Output> + Not<Output=<T as BitXor<R>>::Output>,
+    Symbolic<T>: Clone + BitXor<Symbolic<R>, Output=Symbolic<<T as BitXor<R>>::Output>>
+        + BitAnd<Symbolic<R>, Output=Symbolic<<T as BitXor<R>>::Output>>,
+    Symbolic<R>: Clone,
+    Symbolic<<T as BitXor<R>>::Output>: Bitwise,
+    Symbolic<<T as Add<R>>::Output>: Convertable<<T as BitXor<R>>::Output> {
+    type Output = Symbolic<<T as Add<R>>::Output>;
+
+    fn add(self, rhs: Symbolic<R>) -> Self::Output {
+        type InnerXOR<T,R> = <T as BitXor<R>>::Output;
+        
+        //Implementation notes:
+        //
+        // 1. I hope the trait bounds above did not literally kill you.
+        // 2. We can't call Symbolic::zero() here, that's a circular reference.
+        //    You can't require `Zero` in the implementation of `Add` because 
+        //    `Add` is already required by `Zero`. This gives you really fun
+        //    recursion errors.
+
+        let bits : usize = InnerXOR::<T,R>::bound_width();
+        let half_adds = self.clone() ^ rhs.clone();
+        let half_carries = self.clone() & rhs.clone();
+        let zero : InnerXOR<T,R> = InnerXOR::<T,R>::zero();
+        let mut carry = Symbolic::from(zero);
+        let mut sum = carry.clone();
+
+        for bit in 0..bits {
+            let mask = Symbolic::from(InnerXOR::<T,R>::one() << bit);
+            sum = sum | half_adds.clone() & mask.clone() ^ carry.clone() & mask.clone();
+            carry = (carry & half_adds.clone() & mask.clone() | half_carries.clone() & mask) << 1;
+        }
+
+        Symbolic::convert_from(sum)
     }
 }
