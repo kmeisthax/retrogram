@@ -20,7 +20,7 @@ pub struct Pointer<P, CV = u64> {
     context: HashMap<String, reg::Symbolic<CV>>
 }
 
-impl<P, CV> Pointer<P, CV> where CV: reg::Concretizable {
+impl<P, CV> Pointer<P, CV> where CV: reg::Bitwise {
     /// Obtain a reference to the noncontextual pointer value.
     pub fn as_pointer(&self) -> &P {
         &self.pointer
@@ -255,7 +255,7 @@ impl<P, CV> PartialEq for Pointer<P, CV> where P: PartialEq, CV: PartialEq {
 /// 
 /// The only case in which this partial ordering returns None is if the
 /// underlying address or context type's partial ordering would do the same.
-impl<P, CV> PartialOrd for Pointer<P, CV> where P: PartialOrd, CV: PartialOrd + reg::Concretizable {
+impl<P, CV> PartialOrd for Pointer<P, CV> where P: PartialOrd, CV: PartialOrd + reg::Bitwise {
     fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
         let mut keys = HashSet::new();
 
@@ -318,7 +318,7 @@ impl<P, CV> Eq for Pointer<P, CV> where P: Eq, CV: Eq {
 ///    context values.
 /// 3. Pointers with the same contexts sort according to their underlying
 ///    address type.
-impl<P, CV> Ord for Pointer<P, CV> where P: Ord, CV: Ord + reg::Concretizable {
+impl<P, CV> Ord for Pointer<P, CV> where P: Ord, CV: Ord + reg::Bitwise {
     fn cmp(&self, rhs: &Self) -> Ordering {
         let mut keys = HashSet::new();
 
@@ -397,7 +397,7 @@ impl<P, CV> str::FromStr for Pointer<P, CV> where P: str::FromStr, CV: str::From
     }
 }
 
-impl<P, CV> fmt::Display for Pointer<P, CV> where P: fmt::Display, CV: fmt::Display + reg::Concretizable {
+impl<P, CV> fmt::Display for Pointer<P, CV> where P: fmt::Display, CV: fmt::Display + reg::Bitwise + PartialEq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for (ckey, cval) in self.context.iter() {
             if let Some(concrete) = cval.as_concrete() {
@@ -412,7 +412,7 @@ impl<P, CV> fmt::Display for Pointer<P, CV> where P: fmt::Display, CV: fmt::Disp
     }
 }
 
-impl<P, CV> fmt::UpperHex for Pointer<P, CV> where P: fmt::UpperHex, CV: fmt::UpperHex + reg::Concretizable {
+impl<P, CV> fmt::UpperHex for Pointer<P, CV> where P: fmt::UpperHex, CV: fmt::UpperHex + reg::Bitwise + PartialEq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for (ckey, cval) in self.context.iter() {
             if let Some(concrete) = cval.as_concrete() {
@@ -427,7 +427,7 @@ impl<P, CV> fmt::UpperHex for Pointer<P, CV> where P: fmt::UpperHex, CV: fmt::Up
     }
 }
 
-impl<P, CV> fmt::LowerHex for Pointer<P, CV> where P: fmt::LowerHex, CV: fmt::LowerHex + reg::Concretizable {
+impl<P, CV> fmt::LowerHex for Pointer<P, CV> where P: fmt::LowerHex, CV: fmt::LowerHex + reg::Bitwise + PartialEq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for (ckey, cval) in self.context.iter() {
             if let Some(concrete) = cval.as_concrete() {
@@ -476,7 +476,8 @@ impl<'de, P, CV> Deserialize<'de> for Pointer<P, CV> where P: str::FromStr, CV: 
     }
 }
 
-impl<P, CV> Serialize for Pointer<P, CV> where P: fmt::Display, CV: fmt::Display + reg::Concretizable {
+impl<P, CV> Serialize for Pointer<P, CV> where P: fmt::Display, CV: fmt::Display + reg::Bitwise,
+    Pointer<P, CV>: ToString {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::ser::Serializer {
         serializer.serialize_str(&self.to_string())

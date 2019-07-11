@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 use num_traits::bounds::Bounded;
-use crate::retrogram::reg::{Symbolic, Concretizable};
+use crate::retrogram::reg::{Symbolic, Bitwise};
 
 /// Represents a bundle of known program state.
 /// 
@@ -78,7 +78,7 @@ impl<RK, RV, P, MV> Default for State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq 
     }
 }
 
-impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash, RV: Concretizable {
+impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash, Symbolic<RV>: Clone + Default {
     pub fn get_register(&self, k: RK) -> Symbolic<RV> {
         if let Some(val) = self.cpu_state.get(&k) {
             return val.clone();
@@ -88,7 +88,7 @@ impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash, RV: 
     }
 }
 
-impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash, MV: Concretizable {
+impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash, Symbolic<MV>: Clone + Default {
     pub fn get_memory(&self, k: P) -> Symbolic<MV> {
         if let Some(val) = self.mem_state.get(&k) {
             return val.clone();

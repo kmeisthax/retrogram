@@ -174,7 +174,7 @@ impl<P, MV, S> Memory<P, MV, S, usize>
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: memory::PtrNum<S>, S: memory::Offset<P>, MV: reg::Concretizable,
+    where P: memory::PtrNum<S>, S: memory::Offset<P>, MV: reg::Bitwise,
         IO: One, reg::Symbolic<MV>: Default {
     
     pub fn read_unit(&self, ptr: &Pointer<P>) -> reg::Symbolic<MV> {
@@ -194,7 +194,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
     where P: memory::PtrNum<S>, S: memory::Offset<P> + TryFrom<usize>,
-        MV: reg::Concretizable + maths::BoundWidth<usize>, IO: One,
+        MV: reg::Bitwise, IO: One,
         reg::Symbolic<MV>: Default, 
         <S as TryFrom<usize>>::Error : Debug {
     
@@ -207,13 +207,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     /// determines how many atomic memory units are required to be read in order
     /// to populate the expected value type.
     pub fn read_leword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
-        where EV: memory::Desegmentable<MV> + reg::Concretizable,
-            MV: reg::Concretizable,
-            <EV as Shl<usize>>::Output: reg::Concretizable,
-            reg::Symbolic<EV>: Shl<usize> + BitOr + Convertable<<EV as Shl<usize>>::Output> +
-                Convertable<<EV as BitOr>::Output>,
-            reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output>,
-            reg::Symbolic<<EV as BitOr>::Output> : From<<reg::Symbolic<EV> as BitOr>::Output> {
+        where EV: memory::Desegmentable<MV> + reg::Bitwise,
+            MV: reg::Bitwise,
+            reg::Symbolic<EV>: reg::Bitwise {
         let ev_units = <EV as BoundWidth<usize>>::bound_width();
         let mv_units = <MV as BoundWidth<usize>>::bound_width();
         let units_reqd = (ev_units as f32 / mv_units as f32).round() as usize;
@@ -222,8 +218,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         for i in 0..units_reqd {
             let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
             let unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(self.read_unit(&ptr));
-            let shifted_unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(reg::Symbolic::from(unit << (i * mv_units)));
-            sum = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(sum | shifted_unit));
+            sum = sum | unit << (i * mv_units);
         }
 
         sum
@@ -238,13 +233,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     /// determines how many atomic memory units are required to be read in order
     /// to populate the expected value type.
     pub fn read_beword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
-        where EV: memory::Desegmentable<MV> + reg::Concretizable,
-            MV: reg::Concretizable,
-            <EV as Shl<usize>>::Output: reg::Concretizable,
-            reg::Symbolic<EV>: Shl<usize> + BitOr + Convertable<<EV as Shl<usize>>::Output> +
-                Convertable<<EV as BitOr>::Output>,
-            reg::Symbolic<<EV as Shl<usize>>::Output> : From<<reg::Symbolic<EV> as Shl<usize>>::Output>,
-            reg::Symbolic<<EV as BitOr>::Output> : From<<reg::Symbolic<EV> as BitOr>::Output> {
+        where EV: memory::Desegmentable<MV> + reg::Bitwise,
+            MV: reg::Bitwise,
+            reg::Symbolic<EV>: reg::Bitwise {
         let ev_units = <EV as BoundWidth<usize>>::bound_width();
         let mv_units = <MV as BoundWidth<usize>>::bound_width();
         let units_reqd = (ev_units as f32 / mv_units as f32).round() as usize;
@@ -253,8 +244,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         for i in (0..units_reqd).rev() {
             let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
             let unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(self.read_unit(&ptr));
-            let shifted_unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(reg::Symbolic::from(unit << (i * mv_units)));
-            sum = reg::Symbolic::<EV>::convert_from(reg::Symbolic::from(sum | shifted_unit));
+            sum = sum | unit << (i * mv_units);
         }
 
         sum
