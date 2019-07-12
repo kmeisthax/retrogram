@@ -60,7 +60,7 @@ impl<T> From<T> for Symbolic<T> where T: Clone + Not<Output=T> {
     }
 }
 
-impl<T> Zero for Symbolic<T> where T: Bitwise + PartialEq, Symbolic<T>: Add<Symbolic<T>, Output=Symbolic<T>> {
+impl<T> Zero for Symbolic<T> where T: Bitwise, Symbolic<T>: Add<Symbolic<T>, Output=Symbolic<T>> {
     fn zero() -> Self {
         Symbolic {
             bits_set: T::zero(),
@@ -169,14 +169,6 @@ impl<T> Symbolic<T> where T: Bitwise {
             None
         }
     }
-}
-
-impl<T> Symbolic<T> where T: Bitwise + PartialEq {
-    /// Returns true if the given value satisfies the register constraint
-    pub fn is_valid(&self, v: T) -> bool {
-        let notv = !v.clone();
-        v & self.bits_set.clone() == self.bits_set && notv & self.bits_cleared.clone() == self.bits_cleared
-    }
 
     /// Calculate the lowest possible value that can satisfy the symbolic value.
     pub fn lower_bound(&self) -> Option<T> {
@@ -195,6 +187,14 @@ impl<T> Symbolic<T> where T: Bitwise + PartialEq {
         } else {
             None
         }
+    }
+}
+
+impl<T> Symbolic<T> where T: Bitwise + PartialEq {
+    /// Returns true if the given value satisfies the register constraint
+    pub fn is_valid(&self, v: T) -> bool {
+        let notv = !v.clone();
+        v & self.bits_set.clone() == self.bits_set && notv & self.bits_cleared.clone() == self.bits_cleared
     }
 }
 
@@ -311,26 +311,32 @@ impl<T, R> BitXor<Symbolic<R>> for Symbolic<T>
     }
 }
 
-impl<T,R> Shl<R> for Symbolic<T> where T: Shl<R> + One, R: Clone,
-    <T as Shl<R>>::Output: BitOr + Sub<T> + From<<<T as Shl<R>>::Output as BitOr>::Output> + From<<<T as Shl<R>>::Output as Sub<T>>::Output> {
+impl<T,R> Shl<R> for Symbolic<T> where T: Shl<R>, R: Clone,
+    <T as Shl<R>>::Output: Zero + BitOr<Output=<T as Shl<R>>::Output> + Not<Output=<T as Shl<R>>::Output> +
+        Shl<R, Output=<T as Shl<R>>::Output> {
     type Output = Symbolic<<T as Shl<R>>::Output>;
 
     fn shl(self, rhs: R) -> Self::Output {
+        let extension = !(!(<T as Shl<R>>::Output::zero()) << rhs.clone());
+
         Symbolic {
             bits_set: self.bits_set << rhs.clone(),
-            bits_cleared: <T as Shl<R>>::Output::from(self.bits_cleared << rhs.clone() | <T as Shl<R>>::Output::from((T::one() << rhs.clone()) - T::one()))
+            bits_cleared: self.bits_cleared << rhs | extension
         }
     }
 }
 
-impl<T,R> Shr<R> for Symbolic<T> where T: Shr<R> + Bounded + Not, R: Clone,
-    <T as Shr<R>>::Output: BitOr + Not + From<<<T as Shr<R>>::Output as BitOr>::Output> + From<<<T as Shr<R>>::Output as Not>::Output> {
+impl<T,R> Shr<R> for Symbolic<T> where T: Shr<R>, R: Clone,
+    <T as Shr<R>>::Output: Zero + BitOr<Output=<T as Shr<R>>::Output> + Not<Output=<T as Shr<R>>::Output> + 
+        Shr<R, Output=<T as Shr<R>>::Output> {
     type Output = Symbolic<<T as Shr<R>>::Output>;
 
     fn shr(self, rhs: R) -> Self::Output {
+        let extension = !(!(<T as Shr<R>>::Output::zero()) >> rhs.clone());
+        
         Symbolic {
             bits_set: self.bits_set >> rhs.clone(),
-            bits_cleared: <T as Shr<R>>::Output::from(self.bits_cleared >> rhs.clone() | <T as Shr<R>>::Output::from(!(T::max_value() >> rhs.clone())))
+            bits_cleared: self.bits_cleared >> rhs.clone() | extension
         }
     }
 }

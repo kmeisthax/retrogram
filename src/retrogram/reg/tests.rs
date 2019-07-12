@@ -193,6 +193,17 @@ fn test_concrete_shl() {
 }
 
 #[test]
+fn test_concrete_shl_arithmetic() {
+    let value_one : i8 = -16;
+    let sym_value_one = reg::Symbolic::from(value_one);
+
+    let value_shift = value_one << 2;
+    let sym_value_shift = sym_value_one << 2;
+
+    assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
+}
+
+#[test]
 fn test_concrete_shr() {
     let value_one : u8 = 0xF0;
     let sym_value_one = reg::Symbolic::from(value_one);
@@ -210,7 +221,7 @@ fn test_concrete_shr_arithmetic() {
 
     let value_shift = value_one >> 2;
     let sym_value_shift = sym_value_one >> 2;
-
+    
     assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
 }
 
