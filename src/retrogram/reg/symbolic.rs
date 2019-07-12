@@ -346,39 +346,81 @@ impl<T> Not for Symbolic<T> where T: Not, <T as Not>::Output: From<T> {
     }
 }
 
+type XOROut<T,R> = <T as BitXor<R>>::Output;
+type SymXOROut<T,R> = Symbolic<<T as BitXor<R>>::Output>;
+
 impl<T,R> Add<Symbolic<R>> for Symbolic<T> where T: Clone + Add<R> + BitXor<R> + BitAnd<R>,
-    <T as BitXor<R>>::Output: Clone + Zero + One + BoundWidth<usize>
-        + Shl<usize, Output=<T as BitXor<R>>::Output> + Not<Output=<T as BitXor<R>>::Output>,
-    Symbolic<T>: Clone + BitXor<Symbolic<R>, Output=Symbolic<<T as BitXor<R>>::Output>>
-        + BitAnd<Symbolic<R>, Output=Symbolic<<T as BitXor<R>>::Output>>,
+    XOROut<T,R>: Clone + Zero + One + BoundWidth<usize> + Shl<usize, Output=XOROut<T,R>> + Not<Output=XOROut<T,R>>,
+    Symbolic<T>: Clone + BitXor<Symbolic<R>, Output=SymXOROut<T,R>> + BitAnd<Symbolic<R>, Output=SymXOROut<T,R>>,
     Symbolic<R>: Clone,
-    Symbolic<<T as BitXor<R>>::Output>: Clone + BoundWidth<usize> +
-        Shl<usize, Output=Symbolic<<T as BitXor<R>>::Output>> + BitAnd<Output=Symbolic<<T as BitXor<R>>::Output>> +
-        BitXor<Output=Symbolic<<T as BitXor<R>>::Output>> + BitOr<Output=Symbolic<<T as BitXor<R>>::Output>> +
-        Not<Output=Symbolic<<T as BitXor<R>>::Output>>,
-    Symbolic<<T as Add<R>>::Output>: Convertable<<T as BitXor<R>>::Output> {
+    SymXOROut<T,R>: Clone + BoundWidth<usize> + Shl<usize, Output=SymXOROut<T,R>> + BitAnd<Output=SymXOROut<T,R>> +
+        BitXor<Output=SymXOROut<T,R>> + BitOr<Output=SymXOROut<T,R>> + Not<Output=SymXOROut<T,R>>,
+    Symbolic<<T as Add<R>>::Output>: Convertable<XOROut<T,R>> {
+    
     type Output = Symbolic<<T as Add<R>>::Output>;
 
     fn add(self, rhs: Symbolic<R>) -> Self::Output {
-        type InnerXOR<T,R> = <T as BitXor<R>>::Output;
-
         //Implementation notes:
         //
         // 1. I hope the trait bounds above did not literally kill you.
-        // 2. We can't call Symbolic::zero() here, that's a circular reference.
-        //    You can't require `Zero` in the implementation of `Add` because 
-        //    `Add` is already required by `Zero`. This gives you really fun
-        //    recursion errors.
+        // 2. We can't call Symbolic::zero() here, because then we'd have to
+        //    require Zero on symbolic values of T^R, which requires Add on
+        //    Symbolic values of T^R, which requires Zero on symbolic values of
+        //    (T^R)^(T^R), which gives a 128-line long error from rustc.
+        // 3. We're implementing addition literally the way you would do it in
+        //    hardware - or at least, logical descriptions of hardware. This is
+        //    not performant at all.
+        // 4. We never call `add` so we technically don't need that trait here.
+        //    I want the output types to match the concrete types, however, so
+        //    we need this trait that we don't use.
 
-        let bits : usize = InnerXOR::<T,R>::bound_width();
+        let bits : usize = XOROut::<T,R>::bound_width();
         let half_adds = self.clone() ^ rhs.clone();
         let half_carries = self.clone() & rhs.clone();
-        let zero : InnerXOR<T,R> = InnerXOR::<T,R>::zero();
+        let zero : XOROut<T,R> = XOROut::<T,R>::zero();
         let mut carry = Symbolic::from(zero);
         let mut sum = carry.clone();
 
         for bit in 0..bits {
-            let mask = Symbolic::from(InnerXOR::<T,R>::one() << bit);
+            let mask = Symbolic::from(XOROut::<T,R>::one() << bit);
+            sum = sum | half_adds.clone() & mask.clone() ^ carry.clone() & mask.clone();
+            carry = (carry & half_adds.clone() & mask.clone() | half_carries.clone() & mask) << 1;
+        }
+
+        Symbolic::convert_from(sum)
+    }
+}
+
+impl<T,R> Sub<Symbolic<R>> for Symbolic<T> where T: Clone + Sub<R> + BitXor<R> + BitAnd<R>,
+    XOROut<T,R>: Clone + Zero + One + BoundWidth<usize> + Shl<usize, Output=XOROut<T,R>> + Not<Output=XOROut<T,R>>,
+    Symbolic<T>: Clone + BitXor<Symbolic<R>, Output=SymXOROut<T,R>> + BitAnd<Symbolic<R>, Output=SymXOROut<T,R>>,
+    Symbolic<R>: Clone + Not<Output=Symbolic<R>>,
+    SymXOROut<T,R>: Clone + BoundWidth<usize> + Shl<usize, Output=SymXOROut<T,R>> + BitAnd<Output=SymXOROut<T,R>> +
+        BitXor<Output=SymXOROut<T,R>> + BitOr<Output=SymXOROut<T,R>> + Not<Output=SymXOROut<T,R>>,
+    Symbolic<<T as Sub<R>>::Output>: Convertable<XOROut<T,R>> {
+    
+    type Output = Symbolic<<T as Sub<R>>::Output>;
+
+    fn sub(self, rhs: Symbolic<R>) -> Self::Output {
+        //Further implementation notes:
+        //
+        // 1. We're implementing subtraction also the same way hardware does it:
+        //    flip the bits and start with a carry. This works for signed and
+        //    unsigned types equally because two's compliement is great.
+        // 2. If you implement an exotic signed type which emulates one's
+        //    compliment or sign-and-magnitude or whatever, that becomes a
+        //    standard numerical type symbolically.
+
+        let bits : usize = XOROut::<T,R>::bound_width();
+        let half_adds = self.clone() ^ !rhs.clone();
+        let half_carries = self.clone() & !rhs.clone();
+        let zero : XOROut<T,R> = XOROut::<T,R>::zero();
+        let mut sum = Symbolic::from(zero);
+        let one : XOROut<T,R> = XOROut::<T,R>::one();
+        let mut carry = Symbolic::from(one);
+
+        for bit in 0..bits {
+            let mask = Symbolic::from(XOROut::<T,R>::one() << bit);
             sum = sum | half_adds.clone() & mask.clone() ^ carry.clone() & mask.clone();
             carry = (carry & half_adds.clone() & mask.clone() | half_carries.clone() & mask) << 1;
         }

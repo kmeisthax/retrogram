@@ -117,6 +117,35 @@ fn test_concrete_add() {
 
     assert_eq!(Some(value_sum), sym_value_sum.into_concrete());
 }
+
+#[test]
+fn test_concrete_sub() {
+    let value_one : u8 = 0x76;
+    let value_two : u8 = 0x15;
+
+    let sym_value_one = reg::Symbolic::from(value_one);
+    let sym_value_two = reg::Symbolic::from(value_two);
+
+    let value_sum = value_one - value_two;
+    let sym_value_sum = sym_value_one - sym_value_two;
+
+    assert_eq!(Some(value_sum), sym_value_sum.into_concrete());
+}
+
+#[test]
+fn test_concrete_signed_add() {
+    let value_one : i8 = 32;
+    let value_two : i8 = -6;
+
+    let sym_value_one = reg::Symbolic::from(value_one);
+    let sym_value_two = reg::Symbolic::from(value_two);
+
+    let value_sum = value_one + value_two;
+    let sym_value_sum = sym_value_one + sym_value_two;
+
+    assert_eq!(Some(value_sum), sym_value_sum.into_concrete());
+}
+
 #[test]
 fn test_symbolic_bitor() {
     let sym_value_one : reg::Symbolic<u16> = reg::Symbolic::from_bits(0x0049, 0x0124);
@@ -166,6 +195,17 @@ fn test_concrete_shl() {
 #[test]
 fn test_concrete_shr() {
     let value_one : u8 = 0xF0;
+    let sym_value_one = reg::Symbolic::from(value_one);
+
+    let value_shift = value_one >> 2;
+    let sym_value_shift = sym_value_one >> 2;
+
+    assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
+}
+
+#[test]
+fn test_concrete_shr_arithmetic() {
+    let value_one : i8 = -16;
     let sym_value_one = reg::Symbolic::from(value_one);
 
     let value_shift = value_one >> 2;
