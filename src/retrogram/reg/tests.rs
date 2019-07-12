@@ -94,6 +94,30 @@ fn test_concrete_bitxor() {
 }
 
 #[test]
+fn test_concrete_not() {
+    let value_one : u8 = 0x42;
+    let sym_value_one = reg::Symbolic::from(value_one);
+
+    let value_not = !value_one;
+    let sym_value_not = !sym_value_one;
+
+    assert_eq!(Some(value_not), sym_value_not.into_concrete());
+}
+
+#[test]
+fn test_concrete_add() {
+    let value_one : u8 = 0x76;
+    let value_two : u8 = 0x15;
+
+    let sym_value_one = reg::Symbolic::from(value_one);
+    let sym_value_two = reg::Symbolic::from(value_two);
+
+    let value_sum = value_one + value_two;
+    let sym_value_sum = sym_value_one + sym_value_two;
+
+    assert_eq!(Some(value_sum), sym_value_sum.into_concrete());
+}
+#[test]
 fn test_symbolic_bitor() {
     let sym_value_one : reg::Symbolic<u16> = reg::Symbolic::from_bits(0x0049, 0x0124);
     let sym_value_two : reg::Symbolic<u16> = reg::Symbolic::from_bits(0x0007, 0x01C0);
@@ -118,6 +142,14 @@ fn test_symbolic_bitxor() {
     let sym_value_and = sym_value_one ^ sym_value_two;
 
     assert_eq!((0x0044, 0x0101), sym_value_and.into_bits());
+}
+
+#[test]
+fn test_symbolic_not() {
+    let sym_value_one : reg::Symbolic<u8> = reg::Symbolic::from_bits(0x04, 0x01);
+    let sym_value_not = !sym_value_one;
+
+    assert_eq!((0x01, 0x04), sym_value_not.into_bits());
 }
 
 #[test]

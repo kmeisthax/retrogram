@@ -142,12 +142,12 @@ impl<T> Symbolic<T> where T: Bitwise {
 
     /// Determine if this symbolic value cannot be satisfied.
     pub fn is_unsatisfiable(&self) -> bool {
-        !(self.bits_set.clone() & self.bits_cleared.clone()).is_zero()
+        !((self.bits_set.clone() & self.bits_cleared.clone()).is_zero())
     }
 
     /// Determines if this symbolic value is constrained to precisely one value.
     pub fn is_concrete(&self) -> bool {
-        !self.is_unsatisfiable() && (!self.bits_set.clone() | self.bits_cleared.clone()).is_zero()
+        !self.is_unsatisfiable() && (!self.bits_set.clone() & !self.bits_cleared.clone()).is_zero()
     }
 
     /// Consumes the symbolic value to produce a concrete value, or None if it
@@ -335,13 +335,13 @@ impl<T,R> Shr<R> for Symbolic<T> where T: Shr<R> + Bounded + Not, R: Clone,
     }
 }
 
-impl<T> Not for Symbolic<T> where T: Not {
+impl<T> Not for Symbolic<T> where T: Not, <T as Not>::Output: From<T> {
     type Output = Symbolic<<T as Not>::Output>;
 
     fn not(self) -> Self::Output {
         Symbolic {
-            bits_set: !self.bits_set,
-            bits_cleared: !self.bits_cleared
+            bits_set: <T as Not>::Output::from(self.bits_cleared),
+            bits_cleared: <T as Not>::Output::from(self.bits_set)
         }
     }
 }
