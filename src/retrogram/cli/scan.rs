@@ -120,7 +120,7 @@ pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
     let mut file = fs::File::open(image)?;
     
     match (arch, platform) {
-        (arch::ArchName::LR35902, platform::PlatformName::GB) => scan_for_arch(prog, start_spec, &|p, mem| arch::lr35902::disassemble(p, mem, None), &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?),
+        (arch::ArchName::LR35902, platform::PlatformName::GB) => scan_for_arch(prog, start_spec, &arch::lr35902::disassemble, &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?),
         (arch::ArchName::AARCH32, platform::PlatformName::AGB) => scan_for_arch(prog, start_spec, &arch::aarch32::disassemble, &platform::agb::construct_platform(&mut file)?),
         _ => return Err(io::Error::new(io::ErrorKind::Other, "The given combination of architecture, platform, and/or assembler are not compatible."))
     }
