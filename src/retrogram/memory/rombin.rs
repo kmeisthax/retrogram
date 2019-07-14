@@ -40,7 +40,7 @@ impl<P, MV> Image for ROMBinaryImage<P, MV> where P: Clone + CheckedSub, usize: 
     }
 
     fn decode_addr(&self, ptr: &Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset> {
-        match base.checked_sub(ptr.as_pointer()) {
+        match base.checked_sub(ptr.as_pointer().clone()) {
             Some(p) => usize::try_from(p).ok(),
             None => None
         }

@@ -1,6 +1,6 @@
 //! My number traits
 
-use std::ops::{Shl, Sub};
+use std::ops::{Shl, Sub, Mul};
 
 /// A trait which indicates the number of left shifts of the given type's
 /// smallest value (1) are required in order to overflow that type.
@@ -155,19 +155,37 @@ boundwidth_impl!(i128, isize, 128);
 /// num_traits doesn't support this behavior because Rust itself doesn't define
 /// checked maths with different types of operands and output parameters.
 pub trait CheckedSub<RHS = Self>: Sized + Sub<RHS> {
-    fn checked_sub(&self, v: &RHS) -> Option<<Self as Sub<RHS>>::Output>;
+    fn checked_sub(self, v: RHS) -> Option<<Self as Sub<RHS>>::Output>;
 }
 
-checked_impl!(CheckedSub, checked_sub, u8, u8, u8);
-checked_impl!(CheckedSub, checked_sub, u16, u16, u16);
-checked_impl!(CheckedSub, checked_sub, u32, u32, u32);
-checked_impl!(CheckedSub, checked_sub, u64, u64, u64);
-checked_impl!(CheckedSub, checked_sub, u128, u128, u128);
-checked_impl!(CheckedSub, checked_sub, usize, usize, usize);
+wrap_existing_impl!(CheckedSub, checked_sub, u8, u8, Option<u8>);
+wrap_existing_impl!(CheckedSub, checked_sub, u16, u16, Option<u16>);
+wrap_existing_impl!(CheckedSub, checked_sub, u32, u32, Option<u32>);
+wrap_existing_impl!(CheckedSub, checked_sub, u64, u64, Option<u64>);
+wrap_existing_impl!(CheckedSub, checked_sub, u128, u128, Option<u128>);
+wrap_existing_impl!(CheckedSub, checked_sub, usize, usize, Option<usize>);
 
-checked_impl!(CheckedSub, checked_sub, i8, i8, i8);
-checked_impl!(CheckedSub, checked_sub, i16, i16, i16);
-checked_impl!(CheckedSub, checked_sub, i32, i32, i32);
-checked_impl!(CheckedSub, checked_sub, i64, i64, i64);
-checked_impl!(CheckedSub, checked_sub, i128, i128, i128);
-checked_impl!(CheckedSub, checked_sub, isize, isize, isize);
+wrap_existing_impl!(CheckedSub, checked_sub, i8, i8, Option<i8>);
+wrap_existing_impl!(CheckedSub, checked_sub, i16, i16, Option<i16>);
+wrap_existing_impl!(CheckedSub, checked_sub, i32, i32, Option<i32>);
+wrap_existing_impl!(CheckedSub, checked_sub, i64, i64, Option<i64>);
+wrap_existing_impl!(CheckedSub, checked_sub, i128, i128, Option<i128>);
+wrap_existing_impl!(CheckedSub, checked_sub, isize, isize, Option<isize>);
+
+pub trait WrappingMul<RHS = Self>: Mul<RHS> {
+    fn wrapping_mul(self, v: RHS) -> <Self as Mul<RHS>>::Output;
+}
+
+wrap_existing_impl!(WrappingMul, wrapping_mul, u8, u8, u8);
+wrap_existing_impl!(WrappingMul, wrapping_mul, u16, u16, u16);
+wrap_existing_impl!(WrappingMul, wrapping_mul, u32, u32, u32);
+wrap_existing_impl!(WrappingMul, wrapping_mul, u64, u64, u64);
+wrap_existing_impl!(WrappingMul, wrapping_mul, u128, u128, u128);
+wrap_existing_impl!(WrappingMul, wrapping_mul, usize, usize, usize);
+
+wrap_existing_impl!(WrappingMul, wrapping_mul, i8, i8, i8);
+wrap_existing_impl!(WrappingMul, wrapping_mul, i16, i16, i16);
+wrap_existing_impl!(WrappingMul, wrapping_mul, i32, i32, i32);
+wrap_existing_impl!(WrappingMul, wrapping_mul, i64, i64, i64);
+wrap_existing_impl!(WrappingMul, wrapping_mul, i128, i128, i128);
+wrap_existing_impl!(WrappingMul, wrapping_mul, isize, isize, isize);

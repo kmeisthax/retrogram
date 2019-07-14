@@ -9,3 +9,6 @@ mod popcount;
 pub use num24bit::u24;
 pub use popcount::Popcount;
 pub use traits::*;
+
+#[cfg(test)]
+mod tests;

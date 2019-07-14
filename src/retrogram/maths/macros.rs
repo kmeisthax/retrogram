@@ -92,6 +92,60 @@ macro_rules! binary_op_masked_impl {
     };
 }
 
+/// Allows implementing binary operations on a wrapped type.
+/// 
+/// All implementations are forwarded to the implementation provided by the
+/// target primitive, which is assumed to be `self.v`. If an RHS type is
+/// provided then the RHS is assumed to be primitive. Otherwise, we attempt to
+/// access `rhs.v` to unwrap a second primitive.
+/// 
+/// This variant of the macro does not declare an Output type.
+macro_rules! binary_op_masked_impl_notype {
+    ($type:ident, $trait_name:ident, $method_name:ident, $mask:expr) => {
+        impl $trait_name for $type {
+            fn $method_name(self, rhs: Self) -> Self {
+                $type {
+                    v: (self.v.$method_name(rhs.v)) & $mask
+                }
+            }
+        }
+    };
+    ($type:ident, $rhs_type:ident, $trait_name:ident, $method_name:ident, $mask:expr) => {
+        impl $trait_name<$rhs_type> for $type {
+            fn $method_name(self, rhs: $rhs_type) -> Self {
+                $type {
+                    v: (self.v.$method_name(rhs)) & $mask
+                }
+            }
+        }
+    };
+}
+
+/// Allows implementing binary operations on a wrapped type.
+/// 
+/// All implementations are forwarded to the implementation provided by the
+/// target primitive, which is assumed to be `self.v`. If an RHS type is
+/// provided then the RHS is assumed to be primitive. Otherwise, we attempt to
+/// access `rhs.v` to unwrap a second primitive.
+macro_rules! assign_binary_op_masked_impl {
+    ($type:ident, $trait_name:ident, $method_name:ident, $mask:expr) => {
+        impl $trait_name for $type {
+            fn $method_name(&mut self, rhs: Self) {
+                self.v.$method_name(rhs.v & $mask);
+                self.v &= $mask;
+            }
+        }
+    };
+    ($type:ident, $rhs_type:ident, $trait_name:ident, $method_name:ident, $mask:expr) => {
+        impl $trait_name<$rhs_type> for $type {
+            fn $method_name(&mut self, rhs: $rhs_type) {
+                self.v.$method_name(rhs & mask);
+                self.v &= $mask;
+            }
+        }
+    };
+}
+
 /// Declares the bit width of a particular type.
 /// 
 /// The RHS parameter, as explained for `BoundWidth`, corresponds to the RHS of
@@ -109,12 +163,12 @@ macro_rules! boundwidth_impl {
 }
 
 /// Wraps a given non-trait method in a trait for a type.
-macro_rules! checked_impl {
+macro_rules! wrap_existing_impl {
     ($trait_name:ident, $method:ident, $t:ty, $rhs:ty, $out:ty) => {
         impl $trait_name for $t {
             #[inline]
-            fn $method(&self, v: &$rhs) -> Option<$out> {
-                <$t>::$method(*self, *v)
+            fn $method(self, v: $rhs) -> $out {
+                <$t>::$method(self, v)
             }
         }
     }
