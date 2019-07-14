@@ -4,10 +4,21 @@ extern crate lazy_static;
 #[macro_use]
 extern crate serde_plain;
 
-mod retrogram;
+#[macro_use]
+pub mod memory;
+pub mod reg;
+pub mod ast;
+pub mod arch;
+pub mod platform;
+pub mod analysis;
+pub mod database;
+pub mod asm;
+pub mod project;
+pub mod input;
+pub mod cli;
+mod maths;
 
 use std::{str, io};
-use crate::retrogram::{cli, project};
 
 #[derive(PartialEq, Eq)]
 enum Commands {
@@ -84,8 +95,6 @@ fn main() -> io::Result<()> {
         },
         Err(e) => eprintln!("Cannot open project file, got error {}", e) //TODO: You shouldn't need a project file if you specified everything else correctly.
     }
-
-    let image = prog.iter_images().next().ok_or(io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
 
     match command {
         Some(Commands::Scan) => cli::scan(&prog, &start_pc)?,
