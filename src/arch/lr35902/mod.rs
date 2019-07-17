@@ -3,6 +3,9 @@
 mod types;
 mod dis;
 mod trace;
+mod fork;
 
 pub use types::*;
 pub use dis::disassemble;
+pub use fork::prereq;
+pub use trace::trace;

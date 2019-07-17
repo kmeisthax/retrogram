@@ -16,7 +16,7 @@ pub enum Register {
 }
 
 impl Register {
-    fn reglist_from_sym(s: &str) -> Vec<Register> {
+    pub fn reglist_from_sym(s: &str) -> Vec<Register> {
         match s.to_ascii_lowercase().as_str() {
             "a" => vec![Register::A],
             "b" => vec![Register::B],
@@ -29,6 +29,8 @@ impl Register {
             "bc" => vec![Register::B, Register::C],
             "de" => vec![Register::D, Register::E],
             "hl" => vec![Register::H, Register::L],
+            "hld" => vec![Register::H, Register::L],
+            "hli" => vec![Register::H, Register::L],
             "sp" => vec![Register::S, Register::P],
             _ => vec![]
         }

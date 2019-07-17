@@ -69,7 +69,7 @@ fn hram_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
 lazy_static! {
     /// z80 instruction encoding uses this 3-bit enumeration to encode the target of
     /// 8-bit ALU or register transfer operations.
-    static ref ALU_TARGET_REGS: [Operand; 8] = [op::sym("b"), op::sym("c"), op::sym("d"), op::sym("e"), op::sym("h"), op::sym("l"), op::indir(op::sym("hl")), op::sym("a")];
+    pub static ref ALU_TARGET_REGS: [Operand; 8] = [op::sym("b"), op::sym("c"), op::sym("d"), op::sym("e"), op::sym("h"), op::sym("l"), op::indir(op::sym("hl")), op::sym("a")];
 }
 
 /// z80 instruction encoding uses this 2-bit enumeration to encode the target of
@@ -81,7 +81,7 @@ static ALU_TARGET_PAIRS: [&str; 4] = ["bc", "de", "hl", "sp"];
 static STACK_TARGET_PAIRS: [&str; 4] = ["bc", "de", "hl", "af"];
 
 /// z80 instruction encoding uses this 2-bit enumeration for memory pointers.
-static ALU_TARGET_MEM: [&str; 4] = ["bc", "de", "hli", "hld"];
+pub static ALU_TARGET_MEM: [&str; 4] = ["bc", "de", "hli", "hld"];
 
 /// z80 instruction encoding uses this 3-bit enumeration to encode most common
 /// ALU operations. The source register is always A for these operations, which
