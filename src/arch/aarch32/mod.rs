@@ -4,6 +4,8 @@
 
 mod types;
 mod dis;
+mod arm;
+mod thumb;
 
 pub use types::*;
 pub use dis::disassemble;
