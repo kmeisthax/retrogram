@@ -1,7 +1,35 @@
 //! THUMB instruction set disassembly
 
 use crate::{memory, analysis};
+use crate::analysis::Reference as refr;
+use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32::{Pointer, Offset, Bus, Instruction};
+use crate::arch::aarch32::Operand as op;
+use crate::arch::aarch32::arm::condcode;
+
+fn cond_branch(p: &memory::Pointer<Pointer>, cond: u16, offset: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    // signed_offset = (target - base + 4) / 2
+    // therefore target = signed_offset * 2 - 4 + base
+    let signed_offset = (((offset as u8) as i8) as i32) << 1;
+    let target = (signed_offset - 4 + p.as_pointer().clone() as i32) as Pointer;
+    let target_ptr = p.contextualize(target);
+    
+    match cond {
+        //Unconditional conditional branches are undefined and are thus treated as illegal
+        15 => (None, 0, false, false, vec![]),
+
+        //TODO: The jump target can be in high RAM, how do we handle that?
+        //TODO: This generates a reference to the SWI handler in THUMB mode,
+        //which cannot happen on ARM hardware.
+        16 => (Some(Instruction::new("SWI", vec![op::int(offset as u32)])), 2, true, true,
+                vec![refr::new_static_ref(p.clone(), p.contextualize(0x00000008),
+                    refkind::Subroutine)]),
+        _ => (Some(Instruction::new(&format!("B{}", condcode(cond as u32)), vec![op::cptr(target)])),
+            2, true, false, vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Code)])
+    }
+}
 
 /// Disassemble the instruction at `p` in `mem`.
 /// 
@@ -34,7 +62,8 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
             let math_rd_rn = instr & 0x0700 >> 8;
             let dp_opcode = instr & 0x03C0 >> 6;
             let lsro_opcode = instr & 0x0E00 >> 9;
-            let offset = instr & 0x07FF;
+            let cond = instr & 0x0F00 >> 8;
+            let large_offset = instr & 0x07FF;
 
             match (instr >> 13, instr & 0x1000 >> 12, instr & 0x0800 >> 11, instr & 0x0400 >> 10) {
                 (0, 1, 1, 0) => (None, 0, false, false, vec![]), //add/sub reg
@@ -51,7 +80,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (5, 0, _, _) => (None, 0, false, false, vec![]), //SP/PC increment
                 (5, 1, _, _) => (None, 0, false, false, vec![]), //misc instruction space
                 (6, 0, _, _) => (None, 0, false, false, vec![]), //ldm/stm
-                (6, 1, _, _) => (None, 0, false, false, vec![]), //cond branch, undefined, swi
+                (6, 1, _, _) => cond_branch(p, cond, immed), //cond branch, undefined, swi
                 (7, 0, 0, _) => (None, 0, false, false, vec![]), //uncond branch
                 (7, 0, 1, _) => (None, 0, false, false, vec![]), //BLX suffix or undefined
                 (7, 1, 0, _) => (None, 0, false, false, vec![]), //BL/BLX prefix

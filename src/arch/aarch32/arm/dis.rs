@@ -2,6 +2,7 @@
 
 use crate::{memory, analysis, ast, reg};
 use crate::arch::aarch32::{Aarch32Register, Pointer, Offset, Operand, Instruction, Bus};
+use crate::arch::aarch32::arm::condcode;
 
 fn shift_symbol(shift: u32, shift_imm: u32) -> &'static str {
     match (shift, shift_imm) {
@@ -84,28 +85,6 @@ fn decode_dpinst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, op
     let is_nonfinal = is_nonbranching || cond != 14;
 
     (Some(Instruction::new(&format!("{}{}", dp_opcode, condcode(cond)), shifter_operand(rn, rd, immediate_bit, address_operand))), 4, is_nonfinal, is_nonbranching, target)
-}
-
-fn condcode(instr: u32) -> &'static str {
-    match instr {
-        0 => "EQ",
-        1 => "NE",
-        2 => "CS",
-        3 => "CC",
-        4 => "MI",
-        5 => "PL",
-        6 => "VS",
-        7 => "VC",
-        8 => "HI",
-        9 => "LS",
-        10 => "GE",
-        11 => "LT",
-        12 => "GT",
-        13 => "LE",
-        14 => "AL",
-        15 => panic!("Condition code not valid for conditional instruction"),
-        _ => panic!("Not a valid condition code")
-    }
 }
 
 fn decode_ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, opcode: u32, rn: Aarch32Register, rd: Aarch32Register, address_operand: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
