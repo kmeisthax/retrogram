@@ -31,6 +31,23 @@ fn cond_branch(p: &memory::Pointer<Pointer>, cond: u16, offset: u16) ->
     }
 }
 
+fn uncond_branch(p: &memory::Pointer<Pointer>, offset: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    // signed_offset = (target - base + 4) / 2
+    // therefore target = signed_offset * 2 - 4 + base
+    let sign_extend = match offset & 0x0400 != 0 {
+        true => 0xF800,
+        false => 0x0000
+    };
+    let signed_offset = (((offset | sign_extend) as i16) as i32) << 1;
+    let target = (signed_offset - 4 + p.as_pointer().clone() as i32) as Pointer;
+    let target_ptr = p.contextualize(target);
+    
+    (Some(Instruction::new("B", vec![op::cptr(target)])), 2, true, false,
+        vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Code)])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -81,7 +98,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (5, 1, _, _) => (None, 0, false, false, vec![]), //misc instruction space
                 (6, 0, _, _) => (None, 0, false, false, vec![]), //ldm/stm
                 (6, 1, _, _) => cond_branch(p, cond, immed), //cond branch, undefined, swi
-                (7, 0, 0, _) => (None, 0, false, false, vec![]), //uncond branch
+                (7, 0, 0, _) => uncond_branch(p, large_offset), //uncond branch
                 (7, 0, 1, _) => (None, 0, false, false, vec![]), //BLX suffix or undefined
                 (7, 1, 0, _) => (None, 0, false, false, vec![]), //BL/BLX prefix
                 (7, 1, 1, _) => (None, 0, false, false, vec![]), //BL suffix
