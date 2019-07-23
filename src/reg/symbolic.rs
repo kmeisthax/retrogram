@@ -2,9 +2,11 @@
 //! mutated.
 
 use std::ops::{Sub, Not, BitAnd, BitOr, BitXor, Shl, Shr, Add};
-use num::traits::{Bounded, Zero, One};
+use std::cmp::min;
+use std::convert::TryFrom;
+use num::traits::{Bounded, Zero, One, CheckedShl};
 use serde::{Serialize, Deserialize};
-use crate::reg::{Convertable, Bitwise};
+use crate::reg::{Convertable, TryConvertable, Bitwise};
 use crate::maths::BoundWidth;
 
 /// Represents a processor register bounded to a particular set of states.
@@ -87,6 +89,21 @@ impl<T, R> Convertable<R> for Symbolic<T> where T: From<R> + Bitwise, R: Bitwise
             bits_set: T::from(v.bits_set),
             bits_cleared: zero_extension | T::from(v.bits_cleared),
         }
+    }
+}
+
+impl<T, R> TryConvertable<R> for Symbolic<T> where T: TryFrom<R> + Bitwise, R: Bitwise {
+    type Error = <T as TryFrom<R>>::Error;
+
+    fn try_convert_from(v: Symbolic<R>) -> Result<Self, Self::Error> {
+        let conv_width = min(T::bound_width(), R::bound_width());
+        let mask = !(!R::zero()).checked_shl(conv_width).unwrap_or(R::zero());
+        let zero_extension = (!T::zero()).checked_shl(conv_width).unwrap_or(T::zero());
+        
+        Ok(Symbolic {
+            bits_set: T::try_from(v.bits_set)?,
+            bits_cleared: zero_extension | T::try_from(v.bits_cleared & mask)?,
+        })
     }
 }
 
@@ -323,6 +340,17 @@ impl<T,R> Shl<R> for Symbolic<T> where T: Shl<R>, R: Clone,
             bits_set: self.bits_set << rhs.clone(),
             bits_cleared: self.bits_cleared << rhs | extension
         }
+    }
+}
+
+impl<T> CheckedShl for Symbolic<T> where T: CheckedShl + Zero + Not<Output = T> + BitOr<Output = T> {
+    fn checked_shl(&self, rhs: u32) -> Option<Self> {
+        let extension = !(!T::zero().checked_shl(rhs)?);
+
+        Some(Symbolic {
+            bits_set: self.bits_set.checked_shl(rhs)?,
+            bits_cleared: self.bits_cleared.checked_shl(rhs)? | extension
+        })
     }
 }
 

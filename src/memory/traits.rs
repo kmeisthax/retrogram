@@ -76,21 +76,21 @@ impl <T, P> Offset<P> for T
 /// the given type. However, Rust doesn't recognize these bounds, so you must
 /// copy and update them in any code that uses `Desegmentable` until I figure
 /// out how to fix that.
-pub trait Desegmentable<U> : Clone + Bounded + From<U> + BoundWidth<usize> + Shl<usize> + BitOr + BitAnd + Zero + One
-    + reg::Bitwise + From<<Self as Shl<usize>>::Output> + From<<Self as BitOr>::Output>
+pub trait Desegmentable<U> : Clone + Bounded + From<U> + BoundWidth<u32> + Shl<u32> + BitOr + BitAnd + Zero + One
+    + reg::Bitwise + From<<Self as Shl<u32>>::Output> + From<<Self as BitOr>::Output>
     + From<<Self as BitAnd>::Output>
-    where U: BoundWidth<usize>,
-        reg::Symbolic<Self>: Shl<usize>,
-        reg::Symbolic<<Self as Shl<usize>>::Output> : From<<reg::Symbolic<Self> as Shl<usize>>::Output> {
+    where U: BoundWidth<u32>,
+        reg::Symbolic<Self>: Shl<u32>,
+        reg::Symbolic<<Self as Shl<u32>>::Output> : From<<reg::Symbolic<Self> as Shl<u32>>::Output> {
 
 }
 
 impl<T, U> Desegmentable<U> for T
-    where T: Clone + Bounded + From<U> + BoundWidth<usize> + Shl<usize> + BitOr + BitAnd + Zero + One + Not + reg::Bitwise
-        + From<<T as Not>::Output> + From<<T as Shl<usize>>::Output> + From<<T as BitOr>::Output>
+    where T: Clone + Bounded + From<U> + BoundWidth<u32> + Shl<u32> + BitOr + BitAnd + Zero + One + Not + reg::Bitwise
+        + From<<T as Not>::Output> + From<<T as Shl<u32>>::Output> + From<<T as BitOr>::Output>
         + From<<T as BitAnd>::Output>,
-        U: BoundWidth<usize>,
-        reg::Symbolic<T>: Shl<usize>,
-        reg::Symbolic<<T as Shl<usize>>::Output> : From<<reg::Symbolic<T> as Shl<usize>>::Output> {
+        U: BoundWidth<u32>,
+        reg::Symbolic<T>: Shl<u32>,
+        reg::Symbolic<<T as Shl<u32>>::Output> : From<<reg::Symbolic<T> as Shl<u32>>::Output> {
 
 }
