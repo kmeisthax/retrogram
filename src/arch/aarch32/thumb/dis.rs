@@ -78,6 +78,40 @@ fn special_data(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_r
     }
 }
 
+fn data_processing(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_rd: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+
+    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+    let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let rm_operand = op::sym(&rm_reg.to_string());
+    let branch_target = match rd_reg {
+        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
+        _ => vec![]
+    };
+    let is_nonbranching = rd_reg != Aarch32Register::R15;
+
+    match dp_opcode {
+        0 => (Some(Instruction::new("AND", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        1 => (Some(Instruction::new("EOR", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        2 => (Some(Instruction::new("LSL", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        3 => (Some(Instruction::new("LSR", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        4 => (Some(Instruction::new("ASR", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        5 => (Some(Instruction::new("ADC", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        7 => (Some(Instruction::new("ROR", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        6 => (Some(Instruction::new("SBC", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        8 => (Some(Instruction::new("TST", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        9 => (Some(Instruction::new("NEG", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        0xA => (Some(Instruction::new("CMP", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        0xB => (Some(Instruction::new("CMM", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        0xC => (Some(Instruction::new("ORR", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        0xD => (Some(Instruction::new("MUL", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        0xE => (Some(Instruction::new("BIC", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        0xF => (Some(Instruction::new("MVN", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        _ => panic!("Not a valid THUMB data processing instruction")
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -117,7 +151,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (0, 1, 1, 1) => (None, 0, false, false, vec![]), //add/sub imm
                 (0, _, _, _) => (None, 0, false, false, vec![]), //shift imm
                 (1, _, _, _) => (None, 0, false, false, vec![]), //math imm
-                (2, 0, 0, 0) => (None, 0, false, false, vec![]), //data-processing reg
+                (2, 0, 0, 0) => data_processing(p, dp_opcode, rn, rd), //data-processing reg
                 (2, 0, 0, 1) => special_data(p, dp_opcode, rn, rd), //branch/exchange, special data processing
                 (2, 0, 1, _) => (None, 0, false, false, vec![]), //load literal pool
                 (2, 1, _, _) => (None, 0, false, false, vec![]), //load/store register offset
