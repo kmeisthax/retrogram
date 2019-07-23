@@ -3,7 +3,7 @@
 use crate::{memory, analysis};
 use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
-use crate::arch::aarch32::{Pointer, Offset, Bus, Instruction};
+use crate::arch::aarch32::{Aarch32Register, Pointer, Offset, Bus, Instruction};
 use crate::arch::aarch32::Operand as op;
 use crate::arch::aarch32::arm::condcode;
 
@@ -48,6 +48,36 @@ fn uncond_branch(p: &memory::Pointer<Pointer>, offset: u16) ->
         vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Code)])
 }
 
+fn special_data(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_rd: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let opcode = dp_opcode >> 2;
+    let h1 = (dp_opcode & 0x2) << 2;
+    let h2 = (dp_opcode & 0x1) << 3;
+    let l = (dp_opcode & 0x2) != 0;
+    let rm = h2 | low_rm;
+    let rd = h1 | low_rd;
+
+    let rd_reg = Aarch32Register::from_instr(rd as u32).expect("Invalid register");
+    let rm_reg = Aarch32Register::from_instr(rm as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let rm_operand = op::sym(&rm_reg.to_string());
+    let branch_target = match rd_reg {
+        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
+        _ => vec![]
+    };
+    let is_nonbranching = rd_reg != Aarch32Register::R15;
+
+    match (opcode, l) {
+        (0, _) => (Some(Instruction::new("ADD", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        (1, _) => (Some(Instruction::new("CMP", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        (2, _) => (Some(Instruction::new("MOV", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        (3, false) => (Some(Instruction::new("BX", vec![rm_operand])), 2, false, false, vec![refr::new_dyn_ref(p.clone(), refkind::Code)]),
+        (3, true) => (Some(Instruction::new("BLX", vec![rm_operand])), 2, true, false, vec![refr::new_dyn_ref(p.clone(), refkind::Code)]),
+        _ => panic!("Invalid opcode or L flag")
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -65,7 +95,7 @@ fn uncond_branch(p: &memory::Pointer<Pointer>, offset: u16) ->
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
 pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    (Option<Instruction>, Offset, bool, bool, Vec<refr<Pointer>>) {
     
     match mem.read_leword::<u16>(p).into_concrete() {
         Some(instr) => {
@@ -88,7 +118,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (0, _, _, _) => (None, 0, false, false, vec![]), //shift imm
                 (1, _, _, _) => (None, 0, false, false, vec![]), //math imm
                 (2, 0, 0, 0) => (None, 0, false, false, vec![]), //data-processing reg
-                (2, 0, 0, 1) => (None, 0, false, false, vec![]), //branch/exchange, special data processing
+                (2, 0, 0, 1) => special_data(p, dp_opcode, rn, rd), //branch/exchange, special data processing
                 (2, 0, 1, _) => (None, 0, false, false, vec![]), //load literal pool
                 (2, 1, _, _) => (None, 0, false, false, vec![]), //load/store register offset
                 (3, b, l, _) => (None, 0, false, false, vec![]), //load/store word/byte immediate offset

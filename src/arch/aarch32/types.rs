@@ -2,7 +2,7 @@
 
 use crate::{memory, ast};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Aarch32Register {
     R0, R1, R2, R3,
     R4, R5, R6, R7,
