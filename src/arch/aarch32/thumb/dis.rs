@@ -180,6 +180,28 @@ fn shifter_immed(p: &memory::Pointer<Pointer>, shift_opcode: u16, immed: u16, lo
     }
 }
 
+fn math_immed(p: &memory::Pointer<Pointer>, math_opcode: u16, low_rd: u16, immed: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let immed_operand = op::int(immed);
+    //TODO: This particular form of target could be statically analyzed.
+    let branch_target = match rd_reg {
+        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
+        _ => vec![]
+    };
+    let is_nonbranching = rd_reg != Aarch32Register::R15;
+
+    match math_opcode {
+        0 => (Some(Instruction::new("MOV", vec![rd_operand, immed_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        1 => (Some(Instruction::new("CMP", vec![rd_operand, immed_operand])), 2, true, true, vec![]),
+        2 => (Some(Instruction::new("ADD", vec![rd_operand, immed_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        3 => (Some(Instruction::new("SUB", vec![rd_operand, immed_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        _ => panic!("Invalid math opcode")
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -219,7 +241,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (0, 1, 1, 0) => add_sub_register(p, opc, rm, rn, rd), //add/sub reg
                 (0, 1, 1, 1) => add_sub_immed(p, opc, rm, rn, rd), //add/sub imm
                 (0, _, _, _) => shifter_immed(p, shift_opcode, shift_immed, rn, rd), //shift imm
-                (1, _, _, _) => (None, 0, false, false, vec![]), //math imm
+                (1, _, _, _) => math_immed(p, shift_opcode, math_rd_rn, immed), //math imm
                 (2, 0, 0, 0) => data_processing(p, dp_opcode, rn, rd), //data-processing reg
                 (2, 0, 0, 1) => special_data(p, dp_opcode, rn, rd), //branch/exchange, special data processing
                 (2, 0, 1, _) => (None, 0, false, false, vec![]), //load literal pool
