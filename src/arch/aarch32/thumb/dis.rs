@@ -134,6 +134,27 @@ fn add_sub_register(p: &memory::Pointer<Pointer>, add_sub_bit: u16, low_rm: u16,
     }
 }
 
+fn add_sub_immed(p: &memory::Pointer<Pointer>, add_sub_bit: u16, immed: u16, low_rn: u16, low_rd: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+    let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let rn_operand = op::sym(&rn_reg.to_string());
+    let immed_operand = op::int(immed);
+    let branch_target = match rd_reg {
+        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
+        _ => vec![]
+    };
+    let is_nonbranching = rd_reg != Aarch32Register::R15;
+
+    match add_sub_bit {
+        0 => (Some(Instruction::new("ADD", vec![rd_operand, rn_operand, immed_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        1 => (Some(Instruction::new("SUB", vec![rd_operand, rn_operand, immed_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        _ => panic!("Neither an add nor sub")
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -171,7 +192,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
 
             match (instr >> 13, instr & 0x1000 >> 12, instr & 0x0800 >> 11, instr & 0x0400 >> 10) {
                 (0, 1, 1, 0) => add_sub_register(p, opc, rm, rn, rd), //add/sub reg
-                (0, 1, 1, 1) => (None, 0, false, false, vec![]), //add/sub imm
+                (0, 1, 1, 1) => add_sub_immed(p, opc, rm, rn, rd), //add/sub imm
                 (0, _, _, _) => (None, 0, false, false, vec![]), //shift imm
                 (1, _, _, _) => (None, 0, false, false, vec![]), //math imm
                 (2, 0, 0, 0) => data_processing(p, dp_opcode, rn, rd), //data-processing reg
