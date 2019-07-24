@@ -112,6 +112,28 @@ fn data_processing(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, lo
     }
 }
 
+fn add_sub_register(p: &memory::Pointer<Pointer>, add_sub_bit: u16, low_rm: u16, low_rn: u16, low_rd: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+    let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
+    let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let rn_operand = op::sym(&rn_reg.to_string());
+    let rm_operand = op::sym(&rm_reg.to_string());
+    let branch_target = match rd_reg {
+        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
+        _ => vec![]
+    };
+    let is_nonbranching = rd_reg != Aarch32Register::R15;
+
+    match add_sub_bit {
+        0 => (Some(Instruction::new("ADD", vec![rd_operand, rn_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        1 => (Some(Instruction::new("SUB", vec![rd_operand, rn_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        _ => panic!("Neither an add nor sub")
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -138,6 +160,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
             let shift_immed = instr & 0x07C0 >> 6;
             let shift_opcode = instr & 0x1800 >> 11; //also used by math imm
             let rm = instr & 0x01C0 >> 6; //sometimes also rn or add/sub immed
+            let opc = instr & 0x0200 >> 9; //add/sub bit for instructions
             let add_sub_op = instr & 0x0200 >> 9;
             let immed = instr & 0x00FF; //sometimes also small-offset
             let math_rd_rn = instr & 0x0700 >> 8;
@@ -147,7 +170,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
             let large_offset = instr & 0x07FF;
 
             match (instr >> 13, instr & 0x1000 >> 12, instr & 0x0800 >> 11, instr & 0x0400 >> 10) {
-                (0, 1, 1, 0) => (None, 0, false, false, vec![]), //add/sub reg
+                (0, 1, 1, 0) => add_sub_register(p, opc, rm, rn, rd), //add/sub reg
                 (0, 1, 1, 1) => (None, 0, false, false, vec![]), //add/sub imm
                 (0, _, _, _) => (None, 0, false, false, vec![]), //shift imm
                 (1, _, _, _) => (None, 0, false, false, vec![]), //math imm
