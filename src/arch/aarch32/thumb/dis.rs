@@ -155,6 +155,31 @@ fn add_sub_immed(p: &memory::Pointer<Pointer>, add_sub_bit: u16, immed: u16, low
     }
 }
 
+fn shifter_immed(p: &memory::Pointer<Pointer>, shift_opcode: u16, immed: u16, low_rm: u16, low_rd: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+    let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let rm_operand = op::sym(&rm_reg.to_string());
+    let nz_immed = match immed {
+        0 => 32,
+        s => s
+    };
+    let branch_target = match rd_reg {
+        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
+        _ => vec![]
+    };
+    let is_nonbranching = rd_reg != Aarch32Register::R15;
+
+    match shift_opcode {
+        0 => (Some(Instruction::new("LSL", vec![rd_operand, rm_operand, op::int(immed)])), 2, is_nonbranching, is_nonbranching, branch_target),
+        1 => (Some(Instruction::new("LSR", vec![rd_operand, rm_operand, op::int(nz_immed)])), 2, is_nonbranching, is_nonbranching, branch_target),
+        2 => (Some(Instruction::new("ASR", vec![rd_operand, rm_operand, op::int(nz_immed)])), 2, is_nonbranching, is_nonbranching, branch_target),
+        _ => panic!("Invalid opcode for shifter immediate format")
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -193,7 +218,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
             match (instr >> 13, instr & 0x1000 >> 12, instr & 0x0800 >> 11, instr & 0x0400 >> 10) {
                 (0, 1, 1, 0) => add_sub_register(p, opc, rm, rn, rd), //add/sub reg
                 (0, 1, 1, 1) => add_sub_immed(p, opc, rm, rn, rd), //add/sub imm
-                (0, _, _, _) => (None, 0, false, false, vec![]), //shift imm
+                (0, _, _, _) => shifter_immed(p, shift_opcode, shift_immed, rn, rd), //shift imm
                 (1, _, _, _) => (None, 0, false, false, vec![]), //math imm
                 (2, 0, 0, 0) => data_processing(p, dp_opcode, rn, rd), //data-processing reg
                 (2, 0, 0, 1) => special_data(p, dp_opcode, rn, rd), //branch/exchange, special data processing
