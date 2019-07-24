@@ -265,3 +265,30 @@ fn test_symbolic_bounds() {
     assert!(sym_value.is_valid(sym_value.lower_bound().expect("Must be upper bounded")));
     assert!(sym_value.is_valid(sym_value.upper_bound().expect("Must be lower bounded")));
 }
+
+#[test]
+fn test_concrete_conv() {
+    use crate::reg::Convertable;
+
+    let value : u8 = 0xC0;
+    let sym_value = reg::Symbolic::from(value);
+
+    let wide_value = u16::from(value);
+    let wide_sym_value = reg::Symbolic::<u16>::convert_from(sym_value);
+
+    assert_eq!(Some(wide_value), wide_sym_value.into_concrete());
+}
+
+#[test]
+fn test_concrete_tryconv() {
+    use std::convert::TryFrom;
+    use crate::reg::TryConvertable;
+
+    let value : u16 = 0xC0;
+    let sym_value = reg::Symbolic::from(value);
+
+    let narrow_value = u8::try_from(value).expect("Narrow conversion failed");
+    let narrow_sym_value = reg::Symbolic::<u8>::try_convert_from(sym_value).expect("Narrow symbolic conversion failed");
+    
+    assert_eq!(Some(narrow_value), narrow_sym_value.into_concrete());
+}

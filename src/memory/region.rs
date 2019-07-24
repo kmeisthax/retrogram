@@ -190,10 +190,10 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
 }
 
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
-    where P: memory::PtrNum<S>, S: memory::Offset<P> + TryFrom<usize>,
+    where P: memory::PtrNum<S>, S: memory::Offset<P> + TryFrom<u32>,
         MV: reg::Bitwise, IO: One,
         reg::Symbolic<MV>: Default, 
-        <S as TryFrom<usize>>::Error : Debug {
+        <S as TryFrom<u32>>::Error : Debug {
     
     /// Read an arbitary little-endian integer type from memory.
     /// 
@@ -207,9 +207,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         where EV: memory::Desegmentable<MV> + reg::Bitwise,
             MV: reg::Bitwise,
             reg::Symbolic<EV>: reg::Bitwise {
-        let ev_units = <EV as BoundWidth<usize>>::bound_width();
-        let mv_units = <MV as BoundWidth<usize>>::bound_width();
-        let units_reqd = (ev_units as f32 / mv_units as f32).round() as usize;
+        let ev_units = <EV as BoundWidth<u32>>::bound_width();
+        let mv_units = <MV as BoundWidth<u32>>::bound_width();
+        let units_reqd = (ev_units as f32 / mv_units as f32).round() as u32;
         let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::from(EV::zero());
 
         for i in 0..units_reqd {
@@ -233,9 +233,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         where EV: memory::Desegmentable<MV> + reg::Bitwise,
             MV: reg::Bitwise,
             reg::Symbolic<EV>: reg::Bitwise {
-        let ev_units = <EV as BoundWidth<usize>>::bound_width();
-        let mv_units = <MV as BoundWidth<usize>>::bound_width();
-        let units_reqd = (ev_units as f32 / mv_units as f32).round() as usize;
+        let ev_units = <EV as BoundWidth<u32>>::bound_width();
+        let mv_units = <MV as BoundWidth<u32>>::bound_width();
+        let units_reqd = (ev_units as f32 / mv_units as f32).round() as u32;
         let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::from(EV::zero());
 
         for i in (0..units_reqd).rev() {

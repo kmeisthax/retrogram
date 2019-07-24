@@ -6,7 +6,7 @@ use std::fmt;
 use std::fmt::{Formatter, Display};
 use std::str::FromStr;
 use std::convert::{TryFrom, TryInto};
-use num::{Zero, One, Bounded};
+use num_traits::{Zero, One, Bounded, CheckedShl};
 use crate::maths::{CheckedSub, WrappingMul};
 
 #[allow(non_camel_case_types)]
@@ -73,6 +73,18 @@ impl CheckedSub for u24 {
     fn checked_sub(self, rhs: Self) -> Option<<Self as Sub>::Output> {
         Some(u24 {
             v: self.v.checked_sub(rhs.v)? & 0xFFFFFF
+        })
+    }
+}
+
+impl CheckedShl for u24 {
+    fn checked_shl(&self, rhs: u32) -> Option<u24> {
+        if rhs > 24 {
+            return None;
+        }
+
+        Some(u24 {
+            v: self.v.checked_shl(rhs)? & 0xFFFFFF
         })
     }
 }
