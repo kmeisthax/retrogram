@@ -263,6 +263,24 @@ fn load_store_immed_offset_word(p: &memory::Pointer<Pointer>, b: u16, l: u16, of
     (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![rn_operand, offset_operand], "]")])), 2, true, true, vec![])
 }
 
+fn load_store_immed_offset_halfword(p: &memory::Pointer<Pointer>, l: u16, offset: u16, low_rn: u16, low_rd: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+    let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let rn_operand = op::sym(&rn_reg.to_string());
+    let offset_operand = op::int(offset * 2);
+
+    let opcode_name = match l {
+        0 => "STRH",
+        1 => "LDRH",
+        _ => panic!("Invalid direction bit!")
+    };
+
+    (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![rn_operand, offset_operand], "]")])), 2, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -308,7 +326,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (2, 0, 1, _) => load_pool_constant(p, rd, immed), //load literal pool
                 (2, 1, _, _) => load_store_register_offset(p, lsro_opcode, rm, rn, rd), //load/store register offset
                 (3, b, l, _) => load_store_immed_offset_word(p, b, l, shift_immed, rn, rd), //load/store word/byte immediate offset
-                (4, 0, l, _) => (None, 0, false, false, vec![]), //load/store halfword immediate offset
+                (4, 0, l, _) => load_store_immed_offset_halfword(p, l, shift_immed, rn, rd), //load/store halfword immediate offset
                 (4, 1, l, _) => (None, 0, false, false, vec![]), //load/store stack offset
                 (5, 0, _, _) => (None, 0, false, false, vec![]), //SP/PC increment
                 (5, 1, _, _) => (None, 0, false, false, vec![]), //misc instruction space
