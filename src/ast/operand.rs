@@ -25,8 +25,8 @@ pub enum Operand<I, S, F, P> {
     /// The indirection of the given operand. (e.g. HL to [HL])
     Indirect(Box<Operand<I, S, F, P>>),
 
-    /// The addition of two operands
-    Add(Box<Operand<I, S, F, P>>, Box<Operand<I, S, F, P>>),
+    /// Some infix operand, e.g. +, * etc
+    Infix(Box<Operand<I, S, F, P>>, String, Box<Operand<I, S, F, P>>),
 
     ///A symbol prefixed to an operand
     PrefixSymbol(String, Box<Operand<I, S, F, P>>),
@@ -84,7 +84,11 @@ impl<I, S, F, P> Operand<I, S, F, P> {
     }
 
     pub fn add(op1: Self, op2: Self) -> Self {
-        Operand::Add(Box::new(op1), Box::new(op2))
+        Operand::Infix(Box::new(op1), "+".to_string(), Box::new(op2))
+    }
+
+    pub fn infix(op1: Self, infix_sym: &str, op2: Self) -> Self {
+        Operand::Infix(Box::new(op1), infix_sym.to_string(), Box::new(op2))
     }
 
     pub fn pref(sym: &str, op: Self) -> Self {

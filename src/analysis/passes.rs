@@ -81,7 +81,7 @@ pub fn replace_operand_with_label<I, S, F, P, AMV, AS, AIO>(src_operand: ast::Op
         ast::Operand::DataReference(op) => ast::Operand::DataReference(Box::new(replace_operand_with_label(*op, db, start_addr, memory, ReferenceKind::Data))),
         ast::Operand::CodeReference(op) => ast::Operand::CodeReference(Box::new(replace_operand_with_label(*op, db, start_addr, memory, ReferenceKind::Code))),
         ast::Operand::Indirect(op) => ast::Operand::Indirect(Box::new(replace_operand_with_label(*op, db, start_addr, memory, refkind))),
-        ast::Operand::Add(opl, opr) => ast::Operand::Add(Box::new(replace_operand_with_label(*opl, db, start_addr, memory, refkind)), Box::new(replace_operand_with_label(*opr, db, start_addr, memory, refkind))),
+        ast::Operand::Infix(opl, infix, opr) => ast::Operand::Infix(Box::new(replace_operand_with_label(*opl, db, start_addr, memory, refkind)), infix, Box::new(replace_operand_with_label(*opr, db, start_addr, memory, refkind))),
         _ => src_operand
     }
 }
