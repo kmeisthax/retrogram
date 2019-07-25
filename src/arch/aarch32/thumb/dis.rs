@@ -238,6 +238,31 @@ fn load_store_register_offset(p: &memory::Pointer<Pointer>, opcode: u16, low_rm:
     (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![rn_operand, rm_operand], "]")])), 2, true, true, vec![])
 }
 
+fn load_store_immed_offset_word(p: &memory::Pointer<Pointer>, b: u16, l: u16, offset: u16, low_rn: u16, low_rd: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+    let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let rn_operand = op::sym(&rn_reg.to_string());
+    let size = match b {
+        0 => 4,
+        1 => 1,
+        _ => panic!("Invalid size bit")
+    };
+    let offset_operand = op::int(offset * size);
+
+    let opcode_name = match (b, l) {
+        (0, 0) => "STR",
+        (1, 0) => "STRB",
+        (0, 1) => "LDR",
+        (1, 1) => "LDRB",
+        _ => panic!("Invalid size/direction bits!")
+    };
+
+    (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![rn_operand, offset_operand], "]")])), 2, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -282,7 +307,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (2, 0, 0, 1) => special_data(p, dp_opcode, rn, rd), //branch/exchange, special data processing
                 (2, 0, 1, _) => load_pool_constant(p, rd, immed), //load literal pool
                 (2, 1, _, _) => load_store_register_offset(p, lsro_opcode, rm, rn, rd), //load/store register offset
-                (3, b, l, _) => (None, 0, false, false, vec![]), //load/store word/byte immediate offset
+                (3, b, l, _) => load_store_immed_offset_word(p, b, l, shift_immed, rn, rd), //load/store word/byte immediate offset
                 (4, 0, l, _) => (None, 0, false, false, vec![]), //load/store halfword immediate offset
                 (4, 1, l, _) => (None, 0, false, false, vec![]), //load/store stack offset
                 (5, 0, _, _) => (None, 0, false, false, vec![]), //SP/PC increment
