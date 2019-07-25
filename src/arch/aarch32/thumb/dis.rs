@@ -297,6 +297,22 @@ fn load_store_stack_offset(p: &memory::Pointer<Pointer>, l: u16, low_rd: u16, of
     (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![op::sym("SP"), offset_operand], "]")])), 2, true, true, vec![])
 }
 
+fn compute_rel_addr(p: &memory::Pointer<Pointer>, s: u16, low_rd: u16, offset: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let offset_operand = op::int(offset * 4);
+
+    let s_operand = op::sym(match s {
+        0 => "PC",
+        1 => "SP",
+        _ => panic!("Invalid direction bit!")
+    });
+
+    (Some(Instruction::new("ADD", vec![rd_operand, op::wrap("[", vec![s_operand, offset_operand], "]")])), 2, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -344,7 +360,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (3, b, l, _) => load_store_immed_offset_word(p, b, l, shift_immed, rn, rd), //load/store word/byte immediate offset
                 (4, 0, l, _) => load_store_immed_offset_halfword(p, l, shift_immed, rn, rd), //load/store halfword immediate offset
                 (4, 1, l, _) => load_store_stack_offset(p, l, math_rd_rn, immed), //load/store stack offset
-                (5, 0, _, _) => (None, 0, false, false, vec![]), //SP/PC increment
+                (5, 0, s, _) => compute_rel_addr(p, s, math_rd_rn, immed), //SP/PC rel addressing
                 (5, 1, _, _) => (None, 0, false, false, vec![]), //misc instruction space
                 (6, 0, _, _) => (None, 0, false, false, vec![]), //ldm/stm
                 (6, 1, _, _) => cond_branch(p, cond, immed), //cond branch, undefined, swi
