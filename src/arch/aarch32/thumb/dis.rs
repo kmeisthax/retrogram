@@ -202,6 +202,18 @@ fn math_immed(p: &memory::Pointer<Pointer>, math_opcode: u16, low_rd: u16, immed
     }
 }
 
+fn load_pool_constant(p: &memory::Pointer<Pointer>, low_rd: u16, immed: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let immed_operand = op::dptr((p.as_pointer().clone() & 0xFFFFFFFC) + 4 + (immed as u32 * 4));
+    let target_ptr = p.contextualize((p.as_pointer().clone() & 0xFFFFFFFC) + 4 + (immed as u32 * 4));
+    let ast = Instruction::new("LDR", vec![rd_operand, op::indir(op::wrap("", vec![op::sym("PC"), immed_operand], ""))]); 
+
+    (Some(ast), 2, true, true, vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Data)])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -244,7 +256,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (1, _, _, _) => math_immed(p, shift_opcode, math_rd_rn, immed), //math imm
                 (2, 0, 0, 0) => data_processing(p, dp_opcode, rn, rd), //data-processing reg
                 (2, 0, 0, 1) => special_data(p, dp_opcode, rn, rd), //branch/exchange, special data processing
-                (2, 0, 1, _) => (None, 0, false, false, vec![]), //load literal pool
+                (2, 0, 1, _) => load_pool_constant(p, rd, immed), //load literal pool
                 (2, 1, _, _) => (None, 0, false, false, vec![]), //load/store register offset
                 (3, b, l, _) => (None, 0, false, false, vec![]), //load/store word/byte immediate offset
                 (4, 0, l, _) => (None, 0, false, false, vec![]), //load/store halfword immediate offset
