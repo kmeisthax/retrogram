@@ -313,6 +313,29 @@ fn compute_rel_addr(p: &memory::Pointer<Pointer>, s: u16, low_rd: u16, offset: u
     (Some(Instruction::new("ADD", vec![rd_operand, op::wrap("[", vec![s_operand, offset_operand], "]")])), 2, true, true, vec![])
 }
 
+fn load_store_multiple(p: &memory::Pointer<Pointer>, l: u16, low_rn: u16, register_list: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
+    let rn_operand = op::sym(&rn_reg.to_string());
+    let instr = match l {
+        0 => "STMIA",
+        1 => "LDMIA",
+        _ => panic!("Invalid L bit")
+    };
+    let mut register_list_operand = vec![];
+
+    for i in 0..7 {
+        if register_list & (1 << i) != 0 {
+            let reg = Aarch32Register::from_instr(i).expect("This should be valid");
+            let reg_operand = op::sym(&reg.to_string());
+            register_list_operand.push(reg_operand);
+        }
+    }
+
+    (Some(Instruction::new(instr, vec![op::suff(rn_operand, "!"), op::wrap("{", register_list_operand, "}")])), 2, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -340,7 +363,6 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
             let shift_opcode = instr & 0x1800 >> 11; //also used by math imm
             let rm = instr & 0x01C0 >> 6; //sometimes also rn or add/sub immed
             let opc = instr & 0x0200 >> 9; //add/sub bit for instructions
-            let add_sub_op = instr & 0x0200 >> 9;
             let immed = instr & 0x00FF; //sometimes also small-offset
             let math_rd_rn = instr & 0x0700 >> 8;
             let dp_opcode = instr & 0x03C0 >> 6;
@@ -349,22 +371,22 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
             let large_offset = instr & 0x07FF;
 
             match (instr >> 13, instr & 0x1000 >> 12, instr & 0x0800 >> 11, instr & 0x0400 >> 10) {
-                (0, 1, 1, 0) => add_sub_register(p, opc, rm, rn, rd), //add/sub reg
-                (0, 1, 1, 1) => add_sub_immed(p, opc, rm, rn, rd), //add/sub imm
-                (0, _, _, _) => shifter_immed(p, shift_opcode, shift_immed, rn, rd), //shift imm
-                (1, _, _, _) => math_immed(p, shift_opcode, math_rd_rn, immed), //math imm
-                (2, 0, 0, 0) => data_processing(p, dp_opcode, rn, rd), //data-processing reg
-                (2, 0, 0, 1) => special_data(p, dp_opcode, rn, rd), //branch/exchange, special data processing
-                (2, 0, 1, _) => load_pool_constant(p, rd, immed), //load literal pool
-                (2, 1, _, _) => load_store_register_offset(p, lsro_opcode, rm, rn, rd), //load/store register offset
-                (3, b, l, _) => load_store_immed_offset_word(p, b, l, shift_immed, rn, rd), //load/store word/byte immediate offset
-                (4, 0, l, _) => load_store_immed_offset_halfword(p, l, shift_immed, rn, rd), //load/store halfword immediate offset
-                (4, 1, l, _) => load_store_stack_offset(p, l, math_rd_rn, immed), //load/store stack offset
-                (5, 0, s, _) => compute_rel_addr(p, s, math_rd_rn, immed), //SP/PC rel addressing
+                (0, 1, 1, 0) => add_sub_register(p, opc, rm, rn, rd),
+                (0, 1, 1, 1) => add_sub_immed(p, opc, rm, rn, rd),
+                (0, _, _, _) => shifter_immed(p, shift_opcode, shift_immed, rn, rd),
+                (1, _, _, _) => math_immed(p, shift_opcode, math_rd_rn, immed),
+                (2, 0, 0, 0) => data_processing(p, dp_opcode, rn, rd),
+                (2, 0, 0, 1) => special_data(p, dp_opcode, rn, rd),
+                (2, 0, 1, _) => load_pool_constant(p, rd, immed),
+                (2, 1, _, _) => load_store_register_offset(p, lsro_opcode, rm, rn, rd),
+                (3, b, l, _) => load_store_immed_offset_word(p, b, l, shift_immed, rn, rd),
+                (4, 0, l, _) => load_store_immed_offset_halfword(p, l, shift_immed, rn, rd),
+                (4, 1, l, _) => load_store_stack_offset(p, l, math_rd_rn, immed),
+                (5, 0, s, _) => compute_rel_addr(p, s, math_rd_rn, immed),
                 (5, 1, _, _) => (None, 0, false, false, vec![]), //misc instruction space
-                (6, 0, _, _) => (None, 0, false, false, vec![]), //ldm/stm
-                (6, 1, _, _) => cond_branch(p, cond, immed), //cond branch, undefined, swi
-                (7, 0, 0, _) => uncond_branch(p, large_offset), //uncond branch
+                (6, 0, l, _) => load_store_multiple(p, l, math_rd_rn, immed),
+                (6, 1, _, _) => cond_branch(p, cond, immed),
+                (7, 0, 0, _) => uncond_branch(p, large_offset),
                 (7, 0, 1, _) => (None, 0, false, false, vec![]), //BLX suffix or undefined
                 (7, 1, 0, _) => (None, 0, false, false, vec![]), //BL/BLX prefix
                 (7, 1, 1, _) => (None, 0, false, false, vec![]), //BL suffix
