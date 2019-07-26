@@ -1,5 +1,7 @@
 //! AST type for literal values
 
+use crate::memory;
+
 ///A literal value, such as an integer, pointer, or other kind of reference.
 #[derive(Clone, Debug)]
 pub enum Literal<I, S, F, P = I> {
@@ -13,7 +15,7 @@ pub enum Literal<I, S, F, P = I> {
     Float(F),
 
     /// Pointer constant to data (such as a global variable etc)
-    Pointer(P),
+    Pointer(memory::Pointer<P>),
 
     /// Some kind of string constant
     String(String),

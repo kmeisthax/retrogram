@@ -97,112 +97,112 @@ fn op_lit(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
 
 fn op_zpage_ptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_unit(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))],
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval)))], ""))],
         None => vec![op::indir(op::wrap("", vec![op::miss()], ""))]
     }
 }
 
 fn op_zpage_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_unit(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("X")], ""))],
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval))), op::sym("X")], ""))],
         None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("X")], ""))]
     }
 }
 
 fn op_zpage_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_unit(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("Y")], ""))],
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval))), op::sym("Y")], ""))],
         None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("Y")], ""))]
     }
 }
 
 fn op_stack(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_unit(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("S")], ""))],
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval))), op::sym("S")], ""))],
         None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("S")], ""))]
     }
 }
 
 fn op_ptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_leword::<u16>(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))],
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval)))], ""))],
         None => vec![op::indir(op::wrap("", vec![op::miss()], ""))]
     }
 }
 
 fn op_ptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_leword::<u16>(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("X")], ""))],
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval))), op::sym("X")], ""))],
         None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("X")], ""))]
     }
 }
 
 fn op_ptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_leword::<u16>(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("Y")], ""))],
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval))), op::sym("Y")], ""))],
         None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("Y")], ""))]
     }
 }
 
 fn op_fullptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_leword::<u24>(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))],
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval)))], ""))],
         None => vec![op::indir(op::wrap("", vec![op::miss()], ""))]
     }
 }
 
 fn op_fullptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_leword::<u24>(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("X")], ""))],
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval))), op::sym("X")], ""))],
         None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("X")], ""))]
     }
 }
 
 fn op_fullptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_leword::<u24>(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("Y")], ""))],
+        Some(litval) => vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval))), op::sym("Y")], ""))],
         None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("Y")], ""))]
     }
 }
 
 fn op_zpage_dblptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_unit(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))], ")"))],
+        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval)))], ""))], ")"))],
         None => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::miss()], ""))], ")"))]
     }
 }
 
 fn op_zpage_dblptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_unit(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("X")], ""))], ")"))],
+        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval))), op::sym("X")], ""))], ")"))],
         None => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::miss(), op::sym("X")], ""))], ")"))]
     }
 }
 
 fn op_zpage_dblptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_unit(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(litval)], "")), op::sym("Y")], ")"))],
+        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval)))], "")), op::sym("Y")], ")"))],
         None => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::miss()], "")), op::sym("Y")], ")"))]
     }
 }
 
 fn op_stack_dblptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_unit(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(litval), op::sym("S")], ""))], ")")), op::sym("Y")],
+        Some(litval) => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval))), op::sym("S")], ""))], ")")), op::sym("Y")],
         None => vec![op::indir(op::wrap("(", vec![op::indir(op::wrap("", vec![op::miss(), op::sym("S")], ""))], ")")), op::sym("Y")]
     }
 }
 
 fn op_zpage_dblfarptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_unit(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("[", vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))], "]"))],
+        Some(litval) => vec![op::indir(op::wrap("[", vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval)))], ""))], "]"))],
         None => vec![op::indir(op::wrap("[", vec![op::indir(op::wrap("", vec![op::miss()], ""))], "]"))]
     }
 }
 
 fn op_zpage_dblfarptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_unit(p).into_concrete() {
-        Some(litval) => vec![op::indir(op::wrap("[", vec![op::indir(op::wrap("", vec![op::dptr(litval)], ""))], "]")), op::sym("Y")],
+        Some(litval) => vec![op::indir(op::wrap("[", vec![op::indir(op::wrap("", vec![op::dptr(p.contextualize(u24::from(litval)))], ""))], "]")), op::sym("Y")],
         None => vec![op::indir(op::wrap("[", vec![op::indir(op::wrap("", vec![op::miss()], ""))], "]")), op::sym("Y")]
     }
 }

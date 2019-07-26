@@ -13,7 +13,7 @@ fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
 
 fn dptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
-        return op::dptr(val);
+        return op::dptr(p.contextualize(val));
     }
 
     op::miss()
@@ -29,7 +29,7 @@ fn cptr_target(p: &memory::Pointer<Pointer>, mem: &Bus, kind: analysis::Referenc
 
 fn cptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     match mem.read_leword::<u16>(p).into_concrete() {
-        Some(target) => op::cptr(target),
+        Some(target) => op::cptr(p.contextualize(target)),
         None => op::miss()
     }
 }
@@ -53,14 +53,14 @@ fn pcrel_target(p: &memory::Pointer<Pointer>, mem: &Bus, kind: analysis::Referen
 
 fn pcrel_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     match mem.read_unit(p).into_concrete() {
-        Some(target) => op::cptr(((p.as_pointer() + 1) as i16 + (target as i8) as i16) as u16),
+        Some(target) => op::cptr(p.contextualize(((p.as_pointer() + 1) as i16 + (target as i8) as i16) as u16)),
         None => op::miss()
     }
 }
 
 fn hram_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
-        return op::dptr(0xFF00 + lobit as u16);
+        return op::dptr(p.contextualize(0xFF00 + lobit as u16));
     }
 
     op::miss()
@@ -203,7 +203,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
                 (3, _, 0, 5) => (Some(inst::new("push", vec![op::sym(stackpair)])), 1, true, true, vec![]),
                 (3, _, 1, 5) => (None, 0, false, true, vec![]),
                 (3, _, _, 6) => (Some(inst::new(aluop, vec![op::sym("a"), int_op8(&(p.clone()+1), mem)])), 2, true, true, vec![]),
-                (3, _, _, 7) => (Some(inst::new("rst", vec![op::cptr(op & 0x38)])), 1, true, true, vec![analysis::Reference::new_static_ref(p.clone(), p.contextualize((op & 0x38) as u16), analysis::ReferenceKind::Subroutine)]),
+                (3, _, _, 7) => (Some(inst::new("rst", vec![op::cptr(p.contextualize((op & 0x38) as Pointer))])), 1, true, true, vec![analysis::Reference::new_static_ref(p.clone(), p.contextualize((op & 0x38) as u16), analysis::ReferenceKind::Subroutine)]),
 
                 _ => (None, 0, false, true, vec![])
             }

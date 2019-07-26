@@ -1,6 +1,7 @@
 //! Operand AST type
 
 use std::str;
+use crate::memory;
 use crate::ast::{Literal, Label};
 
 #[derive(Clone, Debug)]
@@ -55,12 +56,12 @@ impl<I, S, F, P> Operand<I, S, F, P> {
         Operand::Literal(Literal::Float(F::from(flot)))
     }
 
-    pub fn dptr<MP>(ptr: MP) -> Self where P: From<MP> {
-        Operand::DataReference(Box::new(Operand::Literal(Literal::Pointer(P::from(ptr)))))
+    pub fn dptr(ptr: memory::Pointer<P>) -> Self {
+        Operand::DataReference(Box::new(Operand::Literal(Literal::Pointer(ptr))))
     }
 
-    pub fn cptr<MP>(ptr: MP) -> Self where P: From<MP> {
-        Operand::CodeReference(Box::new(Operand::Literal(Literal::Pointer(P::from(ptr)))))
+    pub fn cptr(ptr: memory::Pointer<P>) -> Self {
+        Operand::CodeReference(Box::new(Operand::Literal(Literal::Pointer(ptr))))
     }
 
     pub fn dlbl(label: Label) -> Self {

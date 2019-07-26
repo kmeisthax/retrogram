@@ -68,8 +68,7 @@ pub fn replace_operand_with_label<I, S, F, P, AMV, AS, AIO>(src_operand: ast::Op
         ast::Operand<I, S, F, P>: Clone {
     match src_operand {
         ast::Operand::Literal(ast::Literal::Pointer(pt)) => {
-            let mut cpt = start_addr.contextualize(pt.clone());
-            cpt = memory.minimize_context(cpt);
+            let cpt = memory.minimize_context(pt);
 
             if let Some(sym_id) = db.pointer_symbol(&cpt) {
                 let sym = db.symbol(sym_id).expect("Database handed an invalid symbol back");

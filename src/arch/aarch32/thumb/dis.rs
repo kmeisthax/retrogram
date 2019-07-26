@@ -1,11 +1,12 @@
 //! THUMB instruction set disassembly
 
-use crate::{memory, analysis};
+use crate::{memory, analysis, reg};
 use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32::{Aarch32Register, Pointer, Offset, Bus, Instruction};
 use crate::arch::aarch32::Operand as op;
 use crate::arch::aarch32::arm::condcode;
+use crate::arch::aarch32::thumb::THUMB_STATE;
 
 fn cond_branch(p: &memory::Pointer<Pointer>, cond: u16, offset: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
@@ -13,8 +14,10 @@ fn cond_branch(p: &memory::Pointer<Pointer>, cond: u16, offset: u16) ->
     // signed_offset = (target - base + 4) / 2
     // therefore target = signed_offset * 2 - 4 + base
     let signed_offset = (((offset as u8) as i8) as i32) << 1;
-    let target = (signed_offset - 4 + p.as_pointer().clone() as i32) as Pointer;
-    let target_ptr = p.contextualize(target);
+    let target = p.contextualize((signed_offset - 4 + p.as_pointer().clone() as i32) as Pointer);
+    let mut swi_target = p.contextualize(0x00000008);
+    
+    swi_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
     
     match cond {
         //Unconditional conditional branches are undefined and are thus treated as illegal
@@ -24,10 +27,9 @@ fn cond_branch(p: &memory::Pointer<Pointer>, cond: u16, offset: u16) ->
         //TODO: This generates a reference to the SWI handler in THUMB mode,
         //which cannot happen on ARM hardware.
         16 => (Some(Instruction::new("SWI", vec![op::int(offset as u32)])), 2, true, true,
-                vec![refr::new_static_ref(p.clone(), p.contextualize(0x00000008),
-                    refkind::Subroutine)]),
-        _ => (Some(Instruction::new(&format!("B{}", condcode(cond as u32)), vec![op::cptr(target)])),
-            2, true, false, vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Code)])
+                vec![refr::new_static_ref(p.clone(), swi_target, refkind::Subroutine)]),
+        _ => (Some(Instruction::new(&format!("B{}", condcode(cond as u32)), vec![op::cptr(target.clone())])),
+            2, true, false, vec![refr::new_static_ref(p.clone(), target, refkind::Code)])
     }
 }
 
@@ -41,11 +43,10 @@ fn uncond_branch(p: &memory::Pointer<Pointer>, offset: u16) ->
         false => 0x0000
     };
     let signed_offset = (((offset | sign_extend) as i16) as i32) << 1;
-    let target = (signed_offset - 4 + p.as_pointer().clone() as i32) as Pointer;
-    let target_ptr = p.contextualize(target);
+    let target = p.contextualize((signed_offset - 4 + p.as_pointer().clone() as i32) as Pointer);
     
-    (Some(Instruction::new("B", vec![op::cptr(target)])), 2, true, false,
-        vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Code)])
+    (Some(Instruction::new("B", vec![op::cptr(target.clone())])), 2, true, false,
+        vec![refr::new_static_ref(p.clone(), target, refkind::Code)])
 }
 
 fn special_data(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_rd: u16) ->
@@ -207,8 +208,8 @@ fn load_pool_constant(p: &memory::Pointer<Pointer>, low_rd: u16, immed: u16) ->
     
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
-    let immed_operand = op::dptr((p.as_pointer().clone() & 0xFFFFFFFC) + 4 + (immed as u32 * 4));
     let target_ptr = p.contextualize((p.as_pointer().clone() & 0xFFFFFFFC) + 4 + (immed as u32 * 4));
+    let immed_operand = op::dptr(target_ptr.clone());
     let ast = Instruction::new("LDR", vec![rd_operand, op::indir(op::wrap("", vec![op::sym("PC"), immed_operand], ""))]); 
 
     (Some(ast), 2, true, true, vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Data)])
@@ -336,6 +337,33 @@ fn load_store_multiple(p: &memory::Pointer<Pointer>, l: u16, low_rn: u16, regist
     (Some(Instruction::new(instr, vec![op::suff(rn_operand, "!"), op::wrap("{", register_list_operand, "}")])), 2, true, true, vec![])
 }
 
+fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    match mem.read_leword::<u16>(&(p.clone() + 2)).into_concrete() {
+        Some(low_instr) if low_instr & 0xE000 == 0xE000 => {
+            let h = (low_instr & 0x1800) >> 11;
+            let low_offset = low_instr & 0x07FF;
+            let sign = match high_offset & 0x0400 {
+                0 => 0,
+                _ => 0xFFC00000
+            };
+
+            let offset : u32 = sign | (high_offset as u32) << 11 | (low_offset as u32);
+            let target = p.contextualize((p.as_pointer().clone() as i32 + offset as i32) as u32);
+            let mut arm_target = target.clone();
+            arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
+
+            match h {
+                1 => (Some(Instruction::new("BLX", vec![op::cptr(arm_target.clone())])), 4, true, false, vec![refr::new_static_ref(p.clone(), arm_target, refkind::Subroutine)]),
+                3 => (Some(Instruction::new("BL", vec![op::cptr(target.clone())])), 4, true, false, vec![refr::new_static_ref(p.clone(), target, refkind::Subroutine)]),
+                _ => (None, 0, false, false, vec![])
+            }
+        },
+        _ => (None, 0, false, false, vec![])
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -388,7 +416,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (6, 1, _, _) => cond_branch(p, cond, immed),
                 (7, 0, 0, _) => uncond_branch(p, large_offset),
                 (7, 0, 1, _) => (None, 0, false, false, vec![]), //BLX suffix or undefined
-                (7, 1, 0, _) => (None, 0, false, false, vec![]), //BL/BLX prefix
+                (7, 1, 0, _) => uncond_branch_link(p, mem, large_offset),
                 (7, 1, 1, _) => (None, 0, false, false, vec![]), //BL suffix
                 _ => (None, 0, false, false, vec![])
             }

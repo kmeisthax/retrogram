@@ -215,14 +215,14 @@ fn decode_ldmstm(p: &memory::Pointer<Pointer>, cond: u32, opcode: u32, rn: Aarch
 fn decode_bl(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     let is_link = (offset & 0x01000000) != 0;
     let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
-    let target = pc.as_pointer().wrapping_add((offset & 0x007FFFFF) | signbit);
+    let target = pc.contextualize(pc.as_pointer().wrapping_add((offset & 0x007FFFFF) | signbit));
 
     let is_nonbranching = is_link;
     let is_nonfinal = is_nonbranching || cond != 14;
 
     match is_link {
-        true => (Some(ast::Instruction::new(&format!("BL{}", condcode(cond)), vec![ast::Operand::cptr(target)])), 4, is_nonfinal, is_nonbranching, vec![analysis::Reference::new_static_ref(pc.clone(), pc.contextualize(target), analysis::ReferenceKind::Subroutine)]),
-        false => (Some(ast::Instruction::new(&format!("B{}", condcode(cond)), vec![ast::Operand::cptr(target)])), 4, is_nonfinal, is_nonbranching, vec![analysis::Reference::new_static_ref(pc.clone(), pc.contextualize(target), analysis::ReferenceKind::Code)])
+        true => (Some(ast::Instruction::new(&format!("BL{}", condcode(cond)), vec![ast::Operand::cptr(target.clone())])), 4, is_nonfinal, is_nonbranching, vec![analysis::Reference::new_static_ref(pc.clone(), target.clone(), analysis::ReferenceKind::Subroutine)]),
+        false => (Some(ast::Instruction::new(&format!("B{}", condcode(cond)), vec![ast::Operand::cptr(target.clone())])), 4, is_nonfinal, is_nonbranching, vec![analysis::Reference::new_static_ref(pc.clone(), target, analysis::ReferenceKind::Code)])
     }
 }
 
