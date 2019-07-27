@@ -36,7 +36,7 @@ impl<P, MV, IO> Image for UnknownImage<P, MV, IO> where P: Clone + CheckedSub, <
     }
 
     fn decode_addr(&self, ptr: &Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset> {
-        match base.checked_sub(ptr.as_pointer().clone()) {
+        match ptr.as_pointer().clone().checked_sub(base) {
             Some(p) => p.try_into().ok(),
             None => None
         }
@@ -79,7 +79,7 @@ impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: Clone + Checked
     }
 
     fn decode_addr(&self, ptr: &Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset> {
-        match base.checked_sub(ptr.as_pointer().clone()) {
+        match ptr.as_pointer().clone().checked_sub(base) {
             Some(p) => p.try_into().ok(),
             None => None
         }
