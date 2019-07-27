@@ -96,19 +96,19 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT>(prog: &project::Program,
 pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
     let platform = prog.platform().ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified platform, analysis cannot continue."))?;
     let arch = prog.arch().or_else(|| platform.default_arch()).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified architecture, analysis cannot continue."))?;
-    let _asm = prog.assembler().or_else(|| arch.default_asm()).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified assembler for architecture, analysis cannot continue."))?;
+    let asm = prog.assembler().or_else(|| arch.default_asm()).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified assembler for architecture, analysis cannot continue."))?;
     let image = prog.iter_images().next().ok_or(io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    match (arch, platform) {
-        (arch::ArchName::LR35902, platform::PlatformName::GB) => dis_inner(prog, start_spec,
+    match (arch, platform, asm) {
+        (arch::ArchName::LR35902, platform::PlatformName::GB, _) => dis_inner(prog, start_spec,
             &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?,
             &arch::lr35902::disassemble,
             &|asm| println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm))),
-        (arch::ArchName::AARCH32, platform::PlatformName::AGB) => dis_inner(prog, start_spec,
+        (arch::ArchName::AARCH32, platform::PlatformName::AGB, _) => dis_inner(prog, start_spec,
             &platform::agb::construct_platform(&mut file)?,
             &arch::aarch32::disassemble,
-            &|_asm| println!("")),
+            &|asm| println!("{}", asm::armips::ArmipsAstFormattee::wrap(&asm))),
         _ => return Err(io::Error::new(io::ErrorKind::Other, "oops"))
     }
 }

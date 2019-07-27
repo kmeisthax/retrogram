@@ -9,3 +9,4 @@ mod thumb;
 
 pub use types::*;
 pub use dis::disassemble;
+pub use thumb::THUMB_STATE;
