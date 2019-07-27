@@ -75,13 +75,13 @@ impl<'a, I, S, F, P> fmt::Display for ArmipsAstFormattee<'a, I, S, F, P>
         P: Clone + From<u16> + fmt::Display + cmp::PartialOrd + fmt::LowerHex + fmt::UpperHex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let loc = self.tree.section_loc();
-        let thumb_state = loc.get_platform_context(THUMB_STATE).into_concrete();
+        let thumb_state = loc.get_arch_context(THUMB_STATE).into_concrete();
 
-        write!(f, ".org 0x{:X}", loc.as_pointer())?;
+        write!(f, ".org 0x{:X}\n", loc.as_pointer())?;
         match thumb_state {
-            Some(0) => write!(f, ".arm")?,
-            Some(1) => write!(f, ".thumb")?,
-            _ => return Err(fmt::Error::default())
+            Some(0) => write!(f, ".arm\n")?,
+            Some(1) => write!(f, ".thumb\n")?,
+            _ => panic!("Thumb state must be specified!!!")
         }
 
         for line in self.tree.iter_lines() {
