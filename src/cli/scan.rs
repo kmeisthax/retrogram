@@ -1,7 +1,6 @@
 //! CLI command: scan
 
 use std::{io, fs};
-use std::fmt::Debug;
 use crate::{project, platform, arch, ast, input, analysis, database, memory, cli};
 
 /// Scan a specific starting PC and add the results of the analysis to the
@@ -10,7 +9,7 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
         disassembler: &DIS,
         bus: &memory::Memory<P, MV, S, IO>) -> io::Result<()>
     where P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
-        S: memory::Offset<P>,
+        S: memory::Offset<P> + cli::Nameable,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool,
             bool, Vec<analysis::Reference<P>>) {
     let (orig_asm, xrefs, _pc_offset, blocks) = analysis::disassemble_block(start_pc.clone(), bus, disassembler)?;
@@ -63,7 +62,7 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
 fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, start_spec: &str, disassembler: DIS,
     bus: &memory::Memory<P, MV, S, IO>, architectural_ctxt_parse: APARSE) -> io::Result<()>
     where for <'dw> P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
-        for <'dw> S: memory::Offset<P> + Debug + serde::Deserialize<'dw> + serde::Serialize,
+        for <'dw> S: memory::Offset<P> + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>),
         APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()> {
 

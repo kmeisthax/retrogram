@@ -23,7 +23,8 @@ use crate::{ast, memory, analysis};
 pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>,
     plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) ->
         io::Result<(ast::Section<I, SI, F, P>, HashSet<analysis::Reference<P>>, Option<S>, Vec<analysis::Block<P, S>>)>
-    where P: memory::PtrNum<S> + analysis::Mappable + fmt::Display, S: memory::Offset<P>,
+    where P: memory::PtrNum<S> + analysis::Mappable + fmt::Display + fmt::UpperHex,
+        S: memory::Offset<P> + fmt::Display,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) ->
             (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>) {
     
@@ -59,7 +60,11 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
                     return Ok((asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks));
                 }
             },
-            (None, _, _, _, _) => return Ok((asm, targets, None, Vec::new()))
+            (None, _, _, _, _) => {
+                println!("Analysis of {:X} failed after {} bytes", start_pc, cur_blk_size);
+
+                return Ok((asm, targets, None, Vec::new()));
+            }
         }
     }
 }
