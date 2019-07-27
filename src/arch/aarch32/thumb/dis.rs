@@ -72,7 +72,7 @@ fn special_data(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_r
         (1, _) => (Some(Instruction::new("CMP", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
         (2, _) => (Some(Instruction::new("MOV", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
         (3, false) => (Some(Instruction::new("BX", vec![rm_operand])), 2, false, false, vec![refr::new_dyn_ref(p.clone(), refkind::Code)]),
-        (3, true) => (Some(Instruction::new("BLX", vec![rm_operand])), 2, true, false, vec![refr::new_dyn_ref(p.clone(), refkind::Code)]),
+        (3, true) => (Some(Instruction::new("BLX", vec![rm_operand])), 2, true, false, vec![refr::new_dyn_ref(p.clone(), refkind::Subroutine)]),
         _ => panic!("Invalid opcode or L flag")
     }
 }
@@ -336,6 +336,87 @@ fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16)
     }
 }
 
+fn sp_adjust(immed: u16) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    let opbit = (immed & 0x80) >> 7;
+    let target = (immed & 0x7F) << 2;
+    
+    match opbit {
+        0 => (Some(Instruction::new("ADD", vec![op::sym("SP"), op::int(target)])), 2, true, true, vec![]),
+        1 => (Some(Instruction::new("SUB", vec![op::sym("SP"), op::int(target)])), 2, true, true, vec![]),
+        _ => panic!("Invalid opbit")
+    }
+}
+
+fn sign_zero_extend(immed: u16, low_rm: u16, low_rd: u16) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    let opcode = (immed & 0xC0) >> 6;
+    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+    let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let rm_operand = op::sym(&rm_reg.to_string());
+
+    match opcode {
+        0 => (Some(Instruction::new("SXTH", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        1 => (Some(Instruction::new("SXTB", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        2 => (Some(Instruction::new("UXTH", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        3 => (Some(Instruction::new("UXTB", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        _ => panic!("Invalid opcode")
+    }
+}
+
+fn endian_reverse(immed: u16, low_rm: u16, low_rd: u16) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    let opcode = (immed & 0xC0) >> 6;
+    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+    let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
+    let rd_operand = op::sym(&rd_reg.to_string());
+    let rm_operand = op::sym(&rm_reg.to_string());
+
+    match opcode {
+        0 => (Some(Instruction::new("REV", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        1 => (Some(Instruction::new("REV16", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        2 => (None, 0, false, false, vec![]),
+        3 => (Some(Instruction::new("REVSH", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        _ => panic!("Invalid opcode")
+    }
+}
+
+fn push_pop(l: u16, r: u16, register_list: u16) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    let mut register_list_operand = vec![];
+
+    for i in 0..7 {
+        if register_list & (1 << i) != 0 {
+            let reg = Aarch32Register::from_instr(i).expect("This should be valid");
+            let reg_operand = op::sym(&reg.to_string());
+            register_list_operand.push(reg_operand);
+        }
+    }
+
+    let is_callret = r != 0;
+
+    if is_callret {
+        match l {
+            0 => register_list_operand.push(op::sym("LR")),
+            1 => register_list_operand.push(op::sym("PC")),
+            _ => panic!("Invalid L bit")
+        }
+    }
+
+    match l {
+        0 => (Some(Instruction::new("PUSH", register_list_operand)), 2, true, true, vec![]),
+        1 => (Some(Instruction::new("POP", register_list_operand)), 2, !is_callret, !is_callret, vec![]),
+        _ => panic!("Invalid L bit")
+    }
+}
+
+fn breakpoint(p: &memory::Pointer<Pointer>, immed: u16) ->
+    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let mut bkpt_target = p.contextualize(0x0000000C);
+    
+    bkpt_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
+    
+    (Some(Instruction::new("BKPT", vec![op::int(immed as u32)])), 2, true, true, vec![refr::new_static_ref(p.clone(), bkpt_target, refkind::Subroutine)])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -383,7 +464,14 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (4, 0, l, _) => load_store_immed_offset_halfword(l, shift_immed, rn, rd),
                 (4, 1, l, _) => load_store_stack_offset(l, math_rd_rn, immed),
                 (5, 0, s, _) => compute_rel_addr(s, math_rd_rn, immed),
-                (5, 1, _, _) => (None, 0, false, false, vec![]), //misc instruction space
+                (5, 1, a, b) => match (a, b, instr & 0x0200 >> 9, instr & 0x0100 >> 8) {
+                    (0, 0, 0, 0) => sp_adjust(immed),
+                    (0, 0, 1, 0) => sign_zero_extend(immed, rn, rd),
+                    (1, 0, 1, 0) => endian_reverse(immed, rn, rd),
+                    (l, 1, 0, r) => push_pop(l, r, immed),
+                    (1, 1, 1, 0) => breakpoint(p, immed),
+                    _ => (None, 0, false, false, vec![]) //undefined
+                },
                 (6, 0, l, _) => load_store_multiple(l, math_rd_rn, immed),
                 (6, 1, _, _) => cond_branch(p, cond, immed),
                 (7, 0, 0, _) => uncond_branch(p, large_offset),
