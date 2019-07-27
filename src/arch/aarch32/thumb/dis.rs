@@ -327,7 +327,7 @@ fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16)
             arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
 
             match h {
-                1 => (Some(Instruction::new("BLX", vec![op::cptr(arm_target.clone())])), 4, true, false, vec![refr::new_static_ref(p.clone(), arm_target, refkind::Subroutine)]),
+                1 if low_offset & 1 == 0 => (Some(Instruction::new("BLX", vec![op::cptr(arm_target.clone())])), 4, true, false, vec![refr::new_static_ref(p.clone(), arm_target, refkind::Subroutine)]),
                 3 => (Some(Instruction::new("BL", vec![op::cptr(target.clone())])), 4, true, false, vec![refr::new_static_ref(p.clone(), target, refkind::Subroutine)]),
                 _ => (None, 0, false, false, vec![])
             }
