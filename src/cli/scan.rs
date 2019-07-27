@@ -81,7 +81,14 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, s
     
     let start_pc = input::parse_ptr(start_spec, db, bus, architectural_ctxt_parse).expect("Must specify a valid address to analyze");
     println!("Starting scan from {:X}", start_pc);
-    scan_pc_for_arch(&mut db, &start_pc, &disassembler, bus)?;
+    match scan_pc_for_arch(&mut db, &start_pc, &disassembler, bus) {
+        Ok(_) => {},
+        Err(e) => {
+            println!("Initial scan failed due to {}", e);
+
+            return Err(e);
+        }
+    };
 
     loop {
         let unanalyzed = db.unanalyzed_static_xrefs();
@@ -100,10 +107,19 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, s
 
             if let Some(target_pc) = target_pc {
                 println!("Found missing xref at {:X}", target_pc);
-                scan_pc_for_arch(&mut db, &target_pc, &disassembler, bus)?;
+                match scan_pc_for_arch(&mut db, &target_pc, &disassembler, bus) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        println!("Cross-reference scan failed due to {}", e);
+
+                        return Err(e);
+                    }
+                }
             }
         }
     }
+
+    println!("Scan complete, writing database");
 
     pjdb.write(prog.as_database_path())?;
 
