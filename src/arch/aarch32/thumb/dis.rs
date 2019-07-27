@@ -24,8 +24,6 @@ fn cond_branch(p: &memory::Pointer<Pointer>, cond: u16, offset: u16) ->
         15 => (None, 0, false, false, vec![]),
 
         //TODO: The jump target can be in high RAM, how do we handle that?
-        //TODO: This generates a reference to the SWI handler in THUMB mode,
-        //which cannot happen on ARM hardware.
         16 => (Some(Instruction::new("SWI", vec![op::int(offset as u32)])), 2, true, true,
                 vec![refr::new_static_ref(p.clone(), swi_target, refkind::Subroutine)]),
         _ => (Some(Instruction::new(&format!("B{}", condcode(cond as u32)), vec![op::cptr(target.clone())])),
@@ -79,41 +77,36 @@ fn special_data(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_r
     }
 }
 
-fn data_processing(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_rd: u16) ->
+fn data_processing(dp_opcode: u16, low_rm: u16, low_rd: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
 
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
     let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rm_operand = op::sym(&rm_reg.to_string());
-    let branch_target = match rd_reg {
-        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
-        _ => vec![]
-    };
-    let is_nonbranching = rd_reg != Aarch32Register::R15;
 
     match dp_opcode {
-        0 => (Some(Instruction::new("AND", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        1 => (Some(Instruction::new("EOR", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        2 => (Some(Instruction::new("LSL", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        3 => (Some(Instruction::new("LSR", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        4 => (Some(Instruction::new("ASR", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        5 => (Some(Instruction::new("ADC", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        7 => (Some(Instruction::new("ROR", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        6 => (Some(Instruction::new("SBC", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        0 => (Some(Instruction::new("AND", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        1 => (Some(Instruction::new("EOR", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        2 => (Some(Instruction::new("LSL", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        3 => (Some(Instruction::new("LSR", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        4 => (Some(Instruction::new("ASR", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        5 => (Some(Instruction::new("ADC", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        7 => (Some(Instruction::new("ROR", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        6 => (Some(Instruction::new("SBC", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
         8 => (Some(Instruction::new("TST", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        9 => (Some(Instruction::new("NEG", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        9 => (Some(Instruction::new("NEG", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
         0xA => (Some(Instruction::new("CMP", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
         0xB => (Some(Instruction::new("CMM", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        0xC => (Some(Instruction::new("ORR", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        0xD => (Some(Instruction::new("MUL", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        0xE => (Some(Instruction::new("BIC", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        0xF => (Some(Instruction::new("MVN", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        0xC => (Some(Instruction::new("ORR", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        0xD => (Some(Instruction::new("MUL", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        0xE => (Some(Instruction::new("BIC", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        0xF => (Some(Instruction::new("MVN", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
         _ => panic!("Not a valid THUMB data processing instruction")
     }
 }
 
-fn add_sub_register(p: &memory::Pointer<Pointer>, add_sub_bit: u16, low_rm: u16, low_rn: u16, low_rd: u16) ->
+fn add_sub_register(add_sub_bit: u16, low_rm: u16, low_rn: u16, low_rd: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
@@ -122,20 +115,15 @@ fn add_sub_register(p: &memory::Pointer<Pointer>, add_sub_bit: u16, low_rm: u16,
     let rd_operand = op::sym(&rd_reg.to_string());
     let rn_operand = op::sym(&rn_reg.to_string());
     let rm_operand = op::sym(&rm_reg.to_string());
-    let branch_target = match rd_reg {
-        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
-        _ => vec![]
-    };
-    let is_nonbranching = rd_reg != Aarch32Register::R15;
 
     match add_sub_bit {
-        0 => (Some(Instruction::new("ADD", vec![rd_operand, rn_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        1 => (Some(Instruction::new("SUB", vec![rd_operand, rn_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        0 => (Some(Instruction::new("ADD", vec![rd_operand, rn_operand, rm_operand])), 2, true, true, vec![]),
+        1 => (Some(Instruction::new("SUB", vec![rd_operand, rn_operand, rm_operand])), 2, true, true, vec![]),
         _ => panic!("Neither an add nor sub")
     }
 }
 
-fn add_sub_immed(p: &memory::Pointer<Pointer>, add_sub_bit: u16, immed: u16, low_rn: u16, low_rd: u16) ->
+fn add_sub_immed(add_sub_bit: u16, immed: u16, low_rn: u16, low_rd: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
@@ -143,20 +131,15 @@ fn add_sub_immed(p: &memory::Pointer<Pointer>, add_sub_bit: u16, immed: u16, low
     let rd_operand = op::sym(&rd_reg.to_string());
     let rn_operand = op::sym(&rn_reg.to_string());
     let immed_operand = op::int(immed);
-    let branch_target = match rd_reg {
-        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
-        _ => vec![]
-    };
-    let is_nonbranching = rd_reg != Aarch32Register::R15;
 
     match add_sub_bit {
-        0 => (Some(Instruction::new("ADD", vec![rd_operand, rn_operand, immed_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        1 => (Some(Instruction::new("SUB", vec![rd_operand, rn_operand, immed_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        0 => (Some(Instruction::new("ADD", vec![rd_operand, rn_operand, immed_operand])), 2, true, true, vec![]),
+        1 => (Some(Instruction::new("SUB", vec![rd_operand, rn_operand, immed_operand])), 2, true, true, vec![]),
         _ => panic!("Neither an add nor sub")
     }
 }
 
-fn shifter_immed(p: &memory::Pointer<Pointer>, shift_opcode: u16, immed: u16, low_rm: u16, low_rd: u16) ->
+fn shifter_immed(shift_opcode: u16, immed: u16, low_rm: u16, low_rd: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
@@ -167,38 +150,27 @@ fn shifter_immed(p: &memory::Pointer<Pointer>, shift_opcode: u16, immed: u16, lo
         0 => 32,
         s => s
     };
-    let branch_target = match rd_reg {
-        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
-        _ => vec![]
-    };
-    let is_nonbranching = rd_reg != Aarch32Register::R15;
 
     match shift_opcode {
-        0 => (Some(Instruction::new("LSL", vec![rd_operand, rm_operand, op::int(immed)])), 2, is_nonbranching, is_nonbranching, branch_target),
-        1 => (Some(Instruction::new("LSR", vec![rd_operand, rm_operand, op::int(nz_immed)])), 2, is_nonbranching, is_nonbranching, branch_target),
-        2 => (Some(Instruction::new("ASR", vec![rd_operand, rm_operand, op::int(nz_immed)])), 2, is_nonbranching, is_nonbranching, branch_target),
+        0 => (Some(Instruction::new("LSL", vec![rd_operand, rm_operand, op::int(immed)])), 2, true, true, vec![]),
+        1 => (Some(Instruction::new("LSR", vec![rd_operand, rm_operand, op::int(nz_immed)])), 2, true, true, vec![]),
+        2 => (Some(Instruction::new("ASR", vec![rd_operand, rm_operand, op::int(nz_immed)])), 2, true, true, vec![]),
         _ => panic!("Invalid opcode for shifter immediate format")
     }
 }
 
-fn math_immed(p: &memory::Pointer<Pointer>, math_opcode: u16, low_rd: u16, immed: u16) ->
+fn math_immed(math_opcode: u16, low_rd: u16, immed: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let immed_operand = op::int(immed);
-    //TODO: This particular form of target could be statically analyzed.
-    let branch_target = match rd_reg {
-        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
-        _ => vec![]
-    };
-    let is_nonbranching = rd_reg != Aarch32Register::R15;
 
     match math_opcode {
-        0 => (Some(Instruction::new("MOV", vec![rd_operand, immed_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        0 => (Some(Instruction::new("MOV", vec![rd_operand, immed_operand])), 2, true, true, vec![]),
         1 => (Some(Instruction::new("CMP", vec![rd_operand, immed_operand])), 2, true, true, vec![]),
-        2 => (Some(Instruction::new("ADD", vec![rd_operand, immed_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        3 => (Some(Instruction::new("SUB", vec![rd_operand, immed_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
+        2 => (Some(Instruction::new("ADD", vec![rd_operand, immed_operand])), 2, true, true, vec![]),
+        3 => (Some(Instruction::new("SUB", vec![rd_operand, immed_operand])), 2, true, true, vec![]),
         _ => panic!("Invalid math opcode")
     }
 }
@@ -215,7 +187,7 @@ fn load_pool_constant(p: &memory::Pointer<Pointer>, low_rd: u16, immed: u16) ->
     (Some(ast), 2, true, true, vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Data)])
 }
 
-fn load_store_register_offset(p: &memory::Pointer<Pointer>, opcode: u16, low_rm: u16, low_rn: u16, low_rd: u16) ->
+fn load_store_register_offset(opcode: u16, low_rm: u16, low_rn: u16, low_rd: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
@@ -239,7 +211,7 @@ fn load_store_register_offset(p: &memory::Pointer<Pointer>, opcode: u16, low_rm:
     (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![rn_operand, rm_operand], "]")])), 2, true, true, vec![])
 }
 
-fn load_store_immed_offset_word(p: &memory::Pointer<Pointer>, b: u16, l: u16, offset: u16, low_rn: u16, low_rd: u16) ->
+fn load_store_immed_offset_word(b: u16, l: u16, offset: u16, low_rn: u16, low_rd: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
@@ -264,7 +236,7 @@ fn load_store_immed_offset_word(p: &memory::Pointer<Pointer>, b: u16, l: u16, of
     (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![rn_operand, offset_operand], "]")])), 2, true, true, vec![])
 }
 
-fn load_store_immed_offset_halfword(p: &memory::Pointer<Pointer>, l: u16, offset: u16, low_rn: u16, low_rd: u16) ->
+fn load_store_immed_offset_halfword(l: u16, offset: u16, low_rn: u16, low_rd: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
@@ -282,7 +254,7 @@ fn load_store_immed_offset_halfword(p: &memory::Pointer<Pointer>, l: u16, offset
     (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![rn_operand, offset_operand], "]")])), 2, true, true, vec![])
 }
 
-fn load_store_stack_offset(p: &memory::Pointer<Pointer>, l: u16, low_rd: u16, offset: u16) ->
+fn load_store_stack_offset(l: u16, low_rd: u16, offset: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
@@ -298,7 +270,7 @@ fn load_store_stack_offset(p: &memory::Pointer<Pointer>, l: u16, low_rd: u16, of
     (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![op::sym("SP"), offset_operand], "]")])), 2, true, true, vec![])
 }
 
-fn compute_rel_addr(p: &memory::Pointer<Pointer>, s: u16, low_rd: u16, offset: u16) ->
+fn compute_rel_addr(s: u16, low_rd: u16, offset: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
@@ -314,7 +286,7 @@ fn compute_rel_addr(p: &memory::Pointer<Pointer>, s: u16, low_rd: u16, offset: u
     (Some(Instruction::new("ADD", vec![rd_operand, op::wrap("[", vec![s_operand, offset_operand], "]")])), 2, true, true, vec![])
 }
 
-fn load_store_multiple(p: &memory::Pointer<Pointer>, l: u16, low_rn: u16, register_list: u16) ->
+fn load_store_multiple(l: u16, low_rn: u16, register_list: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
     let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
@@ -346,12 +318,12 @@ fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16)
             let low_offset = low_instr & 0x07FF;
             let sign = match high_offset & 0x0400 {
                 0 => 0,
-                _ => 0xFFC00000
+                _ => 0xFF800000
             };
 
-            let offset : u32 = sign | (high_offset as u32) << 11 | (low_offset as u32);
+            let offset : u32 = sign | (high_offset as u32) << 12 | (low_offset as u32) << 1;
             let target = p.contextualize((p.as_pointer().clone() as i32 + offset as i32) as u32);
-            let mut arm_target = target.clone();
+            let mut arm_target = p.contextualize((p.as_pointer().clone() as i32 + offset as i32) as u32 & 0xFFFFFFFC);
             arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
 
             match h {
@@ -399,20 +371,20 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
             let large_offset = instr & 0x07FF;
 
             match (instr >> 13, instr & 0x1000 >> 12, instr & 0x0800 >> 11, instr & 0x0400 >> 10) {
-                (0, 1, 1, 0) => add_sub_register(p, opc, rm, rn, rd),
-                (0, 1, 1, 1) => add_sub_immed(p, opc, rm, rn, rd),
-                (0, _, _, _) => shifter_immed(p, shift_opcode, shift_immed, rn, rd),
-                (1, _, _, _) => math_immed(p, shift_opcode, math_rd_rn, immed),
-                (2, 0, 0, 0) => data_processing(p, dp_opcode, rn, rd),
+                (0, 1, 1, 0) => add_sub_register(opc, rm, rn, rd),
+                (0, 1, 1, 1) => add_sub_immed(opc, rm, rn, rd),
+                (0, _, _, _) => shifter_immed(shift_opcode, shift_immed, rn, rd),
+                (1, _, _, _) => math_immed(shift_opcode, math_rd_rn, immed),
+                (2, 0, 0, 0) => data_processing(dp_opcode, rn, rd),
                 (2, 0, 0, 1) => special_data(p, dp_opcode, rn, rd),
                 (2, 0, 1, _) => load_pool_constant(p, rd, immed),
-                (2, 1, _, _) => load_store_register_offset(p, lsro_opcode, rm, rn, rd),
-                (3, b, l, _) => load_store_immed_offset_word(p, b, l, shift_immed, rn, rd),
-                (4, 0, l, _) => load_store_immed_offset_halfword(p, l, shift_immed, rn, rd),
-                (4, 1, l, _) => load_store_stack_offset(p, l, math_rd_rn, immed),
-                (5, 0, s, _) => compute_rel_addr(p, s, math_rd_rn, immed),
+                (2, 1, _, _) => load_store_register_offset(lsro_opcode, rm, rn, rd),
+                (3, b, l, _) => load_store_immed_offset_word(b, l, shift_immed, rn, rd),
+                (4, 0, l, _) => load_store_immed_offset_halfword(l, shift_immed, rn, rd),
+                (4, 1, l, _) => load_store_stack_offset(l, math_rd_rn, immed),
+                (5, 0, s, _) => compute_rel_addr(s, math_rd_rn, immed),
                 (5, 1, _, _) => (None, 0, false, false, vec![]), //misc instruction space
-                (6, 0, l, _) => load_store_multiple(p, l, math_rd_rn, immed),
+                (6, 0, l, _) => load_store_multiple(l, math_rd_rn, immed),
                 (6, 1, _, _) => cond_branch(p, cond, immed),
                 (7, 0, 0, _) => uncond_branch(p, large_offset),
                 (7, 0, 1, _) => (None, 0, false, false, vec![]), //BLX suffix or undefined
