@@ -181,7 +181,7 @@ fn load_pool_constant(p: &memory::Pointer<Pointer>, low_rd: u16, immed: u16) ->
     let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let target_ptr = p.contextualize((p.as_pointer().clone() & 0xFFFFFFFC) + 4 + (immed as u32 * 4));
-    let immed_operand = op::dptr(target_ptr.clone());
+    let immed_operand = op::int(immed as u32 * 4);
     let ast = Instruction::new("LDR", vec![rd_operand, op::indir(op::wrap("", vec![op::sym("PC"), immed_operand], ""))]); 
 
     (Some(ast), 2, true, true, vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Data)])
@@ -405,8 +405,8 @@ fn push_pop(l: u16, r: u16, register_list: u16) -> (Option<Instruction>, Offset,
     }
 
     match l {
-        0 => (Some(Instruction::new("PUSH", register_list_operand)), 2, true, true, vec![]),
-        1 => (Some(Instruction::new("POP", register_list_operand)), 2, !is_callret, !is_callret, vec![]),
+        0 => (Some(Instruction::new("PUSH", vec![op::wrap("{", register_list_operand, "}")])), 2, true, true, vec![]),
+        1 => (Some(Instruction::new("POP", vec![op::wrap("{", register_list_operand, "}")])), 2, !is_callret, !is_callret, vec![]),
         _ => panic!("Invalid L bit")
     }
 }

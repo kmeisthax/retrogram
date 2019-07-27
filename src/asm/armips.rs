@@ -23,7 +23,7 @@ impl<'a, I, S, F, P> ArmipsAstFormattee<'a, I, S, F, P> where I: fmt::Display, S
             ast::Operand::Literal(ast::Literal::Integer(i)) => write!(f, "{}", i)?,
             ast::Operand::Literal(ast::Literal::SignedInteger(i)) => write!(f, "{}", i)?,
             ast::Operand::Literal(ast::Literal::Float(fl)) => write!(f, "{}", fl)?,
-            ast::Operand::Literal(ast::Literal::Pointer(p)) => write!(f, "0x{:x}", p)?,
+            ast::Operand::Literal(ast::Literal::Pointer(p)) => write!(f, "0x{:x}", p.as_pointer())?,
             ast::Operand::Literal(ast::Literal::String(s)) => write!(f, "{}", s)?,
             ast::Operand::Literal(ast::Literal::Missing) => write!(f, "?")?,
             ast::Operand::Label(lbl) if lbl.parent_name() == None => write!(f, "{}", lbl.name())?,
