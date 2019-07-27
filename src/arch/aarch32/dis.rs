@@ -1,7 +1,7 @@
 //! Disassembly of all AArch32 code
 
 use crate::{memory, analysis};
-use crate::arch::aarch32::{Pointer, Offset, Bus, Instruction};
+use crate::arch::aarch32::{Pointer, Offset, Bus, Instruction, THUMB_STATE};
 use crate::arch::aarch32::arm::disassemble as armdis;
 use crate::arch::aarch32::thumb::disassemble as thumbdis;
 
@@ -24,7 +24,7 @@ use crate::arch::aarch32::thumb::disassemble as thumbdis;
 pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
-    match p.get_arch_context("T").into_concrete() {
+    match p.get_arch_context(THUMB_STATE).into_concrete() {
         Some(0) => armdis(p, mem),
         Some(1) => thumbdis(p, mem),
         _ => (None, 0, false, true, vec![])

@@ -20,9 +20,13 @@ use crate::{ast, memory, analysis};
 ///    location, returns, or executes an invalid instruction.
 /// 
 /// This function also returns the offset to the end of the last instruction.
-pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>, plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) -> io::Result<(ast::Section<I, SI, F, P>, HashSet<analysis::Reference<P>>, Option<S>, Vec<analysis::Block<P, S>>)>
+pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>,
+    plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) ->
+        io::Result<(ast::Section<I, SI, F, P>, HashSet<analysis::Reference<P>>, Option<S>, Vec<analysis::Block<P, S>>)>
     where P: memory::PtrNum<S> + analysis::Mappable + fmt::Display, S: memory::Offset<P>,
-        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>) {
+        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) ->
+            (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>) {
+    
     let mut pc = start_pc.clone();
     let mut asm = ast::Section::new(&format!("Untitled Section at {}", pc.as_pointer()), &pc);
     let mut targets = HashSet::new();
