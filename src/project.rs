@@ -196,6 +196,8 @@ impl DataSource {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Project {
     programs: HashMap<String, Program>,
+
+    #[serde(default)]
     data_sources: HashMap<String, DataSource>
 }
 
