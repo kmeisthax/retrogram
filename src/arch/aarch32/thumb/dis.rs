@@ -50,7 +50,7 @@ fn uncond_branch(p: &memory::Pointer<Pointer>, offset: u16) ->
 fn special_data(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_rd: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
-    let opcode = dp_opcode >> 2;
+    let opcode = (dp_opcode & 0xC) >> 2;
     let h1 = (dp_opcode & 0x2) << 2;
     let h2 = (dp_opcode & 0x1) << 3;
     let l = (dp_opcode & 0x2) != 0;
@@ -283,7 +283,7 @@ fn compute_rel_addr(s: u16, low_rd: u16, offset: u16) ->
         _ => panic!("Invalid direction bit!")
     });
 
-    (Some(Instruction::new("ADD", vec![rd_operand, op::wrap("[", vec![s_operand, offset_operand], "]")])), 2, true, true, vec![])
+    (Some(Instruction::new("ADD", vec![rd_operand, s_operand, offset_operand])), 2, true, true, vec![])
 }
 
 fn load_store_multiple(l: u16, low_rn: u16, register_list: u16) ->
