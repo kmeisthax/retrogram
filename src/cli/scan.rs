@@ -1,6 +1,7 @@
 //! CLI command: scan
 
 use std::{io, fs};
+use std::collections::HashSet;
 use crate::{project, platform, arch, ast, input, analysis, database, memory, cli};
 
 /// Scan a specific starting PC and add the results of the analysis to the
@@ -12,7 +13,11 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
         S: memory::Offset<P> + cli::Nameable,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool,
             bool, Vec<analysis::Reference<P>>) {
-    let (orig_asm, xrefs, _pc_offset, blocks) = analysis::disassemble_block(start_pc.clone(), bus, disassembler)?;
+    let (orig_asm, xrefs, pc_offset, blocks) = analysis::disassemble_block(start_pc.clone(), bus, disassembler)?;
+
+    if pc_offset == None {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("There is no valid code at {:X}", start_pc)));
+    }
     
     for block in blocks {
         db.insert_block(block);
@@ -89,12 +94,11 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, s
         }
     };
 
+    let mut failed_analysis = HashSet::new();
+
     loop {
         let unanalyzed = db.unanalyzed_static_xrefs();
-
-        if unanalyzed.len() == 0 {
-            break;
-        }
+        let mut more_analysis_done = false;
 
         for xref_id in unanalyzed {
             let mut target_pc = None;
@@ -105,16 +109,22 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, s
             }
 
             if let Some(target_pc) = target_pc {
-                println!("Found missing xref at {:X}", target_pc);
-                match scan_pc_for_arch(&mut db, &target_pc, &disassembler, bus) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        println!("Cross-reference scan failed due to {}", e);
+                if !failed_analysis.contains(&target_pc) {
+                    println!("Found missing xref at {:X}", target_pc);
+                    match scan_pc_for_arch(&mut db, &target_pc, &disassembler, bus) {
+                        Ok(_) => more_analysis_done = true,
+                        Err(e) => {
+                            println!("{}", e);
 
-                        return Err(e);
+                            failed_analysis.insert(target_pc);
+                        }
                     }
                 }
             }
+        }
+
+        if !more_analysis_done {
+            break;
         }
     }
 
