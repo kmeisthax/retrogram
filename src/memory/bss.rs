@@ -93,9 +93,12 @@ impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: Clone + Checked
         stripped_ptr
     }
 
-    fn insert_user_context(&self, mut ptr: Pointer<Self::Pointer>, ctxts: &[u64]) -> Pointer<Self::Pointer> {
+    fn insert_user_context(&self, mut ptr: Pointer<Self::Pointer>, ctxts: &[&str]) -> Pointer<Self::Pointer> {
         match ctxts.get(0) {
-            Some(ctxt) => ptr.set_platform_context(self.banking_ctxt, reg::Symbolic::from(*ctxt)),
+            Some(ctxt) => match u64::from_str_radix(ctxt, 16) {
+                Ok(cval) => ptr.set_platform_context(self.banking_ctxt, reg::Symbolic::from(cval)),
+                _ => {}
+            },
             _ => {}
         }
 

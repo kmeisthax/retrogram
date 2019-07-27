@@ -6,7 +6,9 @@ mod types;
 mod dis;
 mod arm;
 mod thumb;
+mod context;
 
 pub use types::*;
 pub use dis::disassemble;
+pub use context::architectural_ctxt_parse;
 pub use thumb::THUMB_STATE;

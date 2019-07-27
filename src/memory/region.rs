@@ -260,7 +260,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         ptr
     }
     
-    pub fn insert_user_context(&self, ptr: Pointer<P>, ctxts: &[u64]) -> Pointer<P> {
+    pub fn insert_user_context(&self, ptr: Pointer<P>, ctxts: &[&str]) -> Pointer<P> {
         for view in &self.views {
             if view.is_ptr_within(ptr.clone()) {
                 return view.image.insert_user_context(ptr, ctxts);

@@ -60,11 +60,12 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
 /// 
 /// TODO: The current set of lifetime bounds preclude the use of zero-copy
 /// deserialization. We should figure out a way around that.
-fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS>(prog: &project::Program, start_spec: &str, disassembler: &DIS,
-    bus: &memory::Memory<P, MV, S, IO>) -> io::Result<()>
+fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, start_spec: &str, disassembler: DIS,
+    bus: &memory::Memory<P, MV, S, IO>, architectural_ctxt_parse: APARSE) -> io::Result<()>
     where for <'dw> P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
         for <'dw> S: memory::Offset<P> + Debug + serde::Deserialize<'dw> + serde::Serialize,
-        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>) {
+        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>),
+        APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()> {
 
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
@@ -78,9 +79,9 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS>(prog: &project::Program, start_spe
     let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
     db.update_indexes();
     
-    let start_pc = input::parse_ptr(start_spec, db, bus).expect("Must specify a valid address to analyze");
+    let start_pc = input::parse_ptr(start_spec, db, bus, architectural_ctxt_parse).expect("Must specify a valid address to analyze");
     println!("Starting scan from {:X}", start_pc);
-    scan_pc_for_arch(&mut db, &start_pc, disassembler, bus)?;
+    scan_pc_for_arch(&mut db, &start_pc, &disassembler, bus)?;
 
     loop {
         let unanalyzed = db.unanalyzed_static_xrefs();
@@ -99,7 +100,7 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS>(prog: &project::Program, start_spe
 
             if let Some(target_pc) = target_pc {
                 println!("Found missing xref at {:X}", target_pc);
-                scan_pc_for_arch(&mut db, &target_pc, disassembler, bus)?;
+                scan_pc_for_arch(&mut db, &target_pc, &disassembler, bus)?;
             }
         }
     }
@@ -117,8 +118,14 @@ pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
     let mut file = fs::File::open(image)?;
     
     match (arch, platform) {
-        (arch::ArchName::LR35902, platform::PlatformName::GB) => scan_for_arch(prog, start_spec, &arch::lr35902::disassemble, &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?),
-        (arch::ArchName::AARCH32, platform::PlatformName::AGB) => scan_for_arch(prog, start_spec, &arch::aarch32::disassemble, &platform::agb::construct_platform(&mut file)?),
+        (arch::ArchName::LR35902, platform::PlatformName::GB) =>
+            scan_for_arch(prog, start_spec, arch::lr35902::disassemble,
+                &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?,
+                |_, _| Some(())),
+        (arch::ArchName::AARCH32, platform::PlatformName::AGB) =>
+            scan_for_arch(prog, start_spec, arch::aarch32::disassemble,
+                &platform::agb::construct_platform(&mut file)?,
+                arch::aarch32::architectural_ctxt_parse),
         _ => return Err(io::Error::new(io::ErrorKind::Other, "The given combination of architecture, platform, and/or assembler are not compatible."))
     }
 }

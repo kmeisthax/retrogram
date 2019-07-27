@@ -25,9 +25,14 @@ use crate::{memory, analysis, database, ast, cli};
 /// This function assumes the default context type of `u64`. No known platform
 /// requires a wider context type and adding more type parameters to every user
 /// of `memory::Pointer` is inadvisable.
-pub fn parse_ptr<P, MV, S, IO>(text_str: &str, db: &database::Database<P, S>, bus: &memory::Memory<P, MV, S, IO>) -> Option<memory::Pointer<P>>
+/// 
+/// Architectures are allowed to provide their own context parse function which
+/// can consume contexts from the list and assign contexts to the pointer.
+pub fn parse_ptr<P, MV, S, IO, APARSE>(text_str: &str, db: &database::Database<P, S>,
+    bus: &memory::Memory<P, MV, S, IO>, architecture_parse: APARSE) -> Option<memory::Pointer<P>>
     where P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
-        S: memory::Offset<P> {
+        S: memory::Offset<P>,
+        APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()> {
     if let Ok(text_lbl) = ast::Label::from_str(text_str) {
         if let Some(sym_id) = db.label_symbol(&text_lbl) {
             let sym = db.symbol(sym_id).expect("DB handed back invalid symbol ID");
@@ -38,14 +43,18 @@ pub fn parse_ptr<P, MV, S, IO>(text_str: &str, db: &database::Database<P, S>, bu
     let mut v = Vec::new();
 
     for piece in text_str.split(":") {
-        v.push(u64::from_str_radix(piece, 16).ok()?);
+        v.push(piece);
     }
 
     if let Some(pival) = v.get(v.len() - 1) {
-        let pval = P::try_from(*pival).ok()?;
-        let ptr = memory::Pointer::from(pval);
+        //TODO: P should directly convert the pointer from str
+        let pval = P::try_from(u64::from_str_radix(pival, 16).ok()?).ok()?;
+        let mut ptr = memory::Pointer::from(pval);
+        let mut context_slice = &v[..v.len() - 1];
 
-        Some(bus.insert_user_context(ptr, &v[..v.len() - 1]))
+        architecture_parse(&mut context_slice, &mut ptr)?;
+
+        Some(bus.insert_user_context(ptr, context_slice))
     } else {
         None
     }

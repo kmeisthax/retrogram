@@ -163,10 +163,13 @@ impl<M> memory::Image for GameBoyROMImage<M> where M: Mapper {
         stripped_ptr
     }
 
-    fn insert_user_context(&self, mut ptr: memory::Pointer<Self::Pointer>, ctxts: &[u64]) -> memory::Pointer<Self::Pointer> {
+    fn insert_user_context(&self, mut ptr: memory::Pointer<Self::Pointer>, ctxts: &[&str]) -> memory::Pointer<Self::Pointer> {
         if *ptr.as_pointer() > 0x4000 {
             match ctxts.get(0) {
-                Some(ctxt) => ptr.set_platform_context("R", reg::Symbolic::from(*ctxt)),
+                Some(ctxt) => match u64::from_str_radix(ctxt, 16) {
+                    Ok(cval) => ptr.set_platform_context("R", reg::Symbolic::from(cval)),
+                    _ => {}
+                },
                 _ => {}
             }
         }

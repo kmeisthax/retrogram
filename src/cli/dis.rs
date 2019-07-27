@@ -4,17 +4,19 @@ use std::{io, fs};
 use std::collections::BTreeSet;
 use crate::{asm, ast, arch, analysis, project, platform, input, memory, cli};
 
-fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT>(prog: &project::Program,
+fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(prog: &project::Program,
         start_spec: &str,
         bus: &memory::Memory<P, MV, MS, IO>,
-        disassemble: &DIS,
-        format_and_print: &FMT) -> io::Result<()>
+        disassemble: DIS,
+        format_and_print: FMT,
+        architectural_ctxt_parse: APARSE) -> io::Result<()>
     where for <'dw> P: memory::PtrNum<MS> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw>,
         for <'dw> MS: memory::Offset<P> + analysis::Mappable + serde::Deserialize<'dw>,
         ast::Operand<I, S, F, P>: Clone,
         ast::Line<I, S, F, P>: Clone,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, MS, IO>) -> (Option<ast::Instruction<I, S, F, P>>, MS, bool, bool, Vec<analysis::Reference<P>>),
-        FMT: Fn(&ast::Section<I, S, F, P>) {
+        FMT: Fn(&ast::Section<I, S, F, P>),
+        APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()> {
     
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
@@ -28,7 +30,7 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT>(prog: &project::Program,
     let db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "You did not specify a name for the program to disassemble."))?);
     db.update_indexes();
 
-    let start_pc = input::parse_ptr(start_spec, db, bus).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Must specify a valid address to analyze"))?;
+    let start_pc = input::parse_ptr(start_spec, db, bus, architectural_ctxt_parse).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Must specify a valid address to analyze"))?;
     let start_block_id = db.find_block_membership(&start_pc).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The given memory location has not yet been successfully analyzed. Please scan it first."))?;
 
     let mut disassembly_blocks = BTreeSet::new();
@@ -72,7 +74,7 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT>(prog: &project::Program,
     }
 
     for block in disassembly_blocks {
-        let (orig_asm, _xrefs, pc_offset, _blocks) = analysis::disassemble_block(block.as_start().clone(), bus, disassemble)?;
+        let (orig_asm, _xrefs, pc_offset, _blocks) = analysis::disassemble_block(block.as_start().clone(), bus, &disassemble)?;
         if let Some(pc_offset) = pc_offset {
             if pc_offset > block.as_length().clone() {
                 if let Ok(too_big) = MS::try_from(pc_offset - block.as_length().clone()) {
@@ -103,12 +105,14 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
     match (arch, platform, asm) {
         (arch::ArchName::LR35902, platform::PlatformName::GB, _) => dis_inner(prog, start_spec,
             &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?,
-            &arch::lr35902::disassemble,
-            &|asm| println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm))),
+            arch::lr35902::disassemble,
+            |asm| println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm)),
+            |_, _| Some(())),
         (arch::ArchName::AARCH32, platform::PlatformName::AGB, _) => dis_inner(prog, start_spec,
             &platform::agb::construct_platform(&mut file)?,
-            &arch::aarch32::disassemble,
-            &|asm| println!("{}", asm::armips::ArmipsAstFormattee::wrap(&asm))),
+            arch::aarch32::disassemble,
+            |asm| println!("{}", asm::armips::ArmipsAstFormattee::wrap(&asm)),
+            arch::aarch32::architectural_ctxt_parse),
         _ => return Err(io::Error::new(io::ErrorKind::Other, "oops"))
     }
 }

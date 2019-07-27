@@ -47,7 +47,7 @@ pub trait Image {
     /// question. Images are not required to implement this method, the default
     /// merely does not alter the pointer. Platforms should document their use
     /// of contexts as appropriate.
-    fn insert_user_context(&self, ptr: Pointer<Self::Pointer>, _ctxts: &[u64]) -> Pointer<Self::Pointer> {
+    fn insert_user_context(&self, ptr: Pointer<Self::Pointer>, _ctxts: &[&str]) -> Pointer<Self::Pointer> {
         ptr
     }
 }
