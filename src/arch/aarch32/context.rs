@@ -46,7 +46,9 @@ pub fn architectural_ctxt_parse<P>(context_slice: &mut &[&str], ptr: &mut memory
         *context_slice = &context_slice[1..];
     }
     
-    while let Some(ctxt_str) = context_slice.get(context_slice.len() - 1) {
+    while context_slice.len() > 0 {
+        let ctxt_str = context_slice.get(context_slice.len() - 1).expect("I already checked the length");
+        
         if recognize_context(ctxt_str, ptr) == None {
             break;
         }

@@ -58,15 +58,15 @@ struct Region<P, MV, S = P, IO = usize> {
 
 impl<P, MV, S, IO> Region<P, MV, S, IO> where P: memory::PtrNum<S>, S: memory::Offset<P> {
     pub fn is_ptr_within(&self, ptr: Pointer<P>) -> bool {
-        if let Ok(offset) = S::try_from(ptr.clone().into_pointer() - self.start.clone()) {
-            if let Some(_ms_offset) = self.image.decode_addr(&ptr, self.start.clone()) {
-                self.start <= ptr.clone().into_pointer() && offset < self.length
-            } else {
-                false
+        if let Some(maybe_offset) = ptr.clone().into_pointer().checked_sub(self.start.clone()) {
+            if let Ok(offset) = S::try_from(maybe_offset) {
+                if let Some(_ms_offset) = self.image.decode_addr(&ptr, self.start.clone()) {
+                    return self.start <= ptr.clone().into_pointer() && offset < self.length;
+                }
             }
-        } else {
-            false
         }
+
+        false
     }
 }
 
