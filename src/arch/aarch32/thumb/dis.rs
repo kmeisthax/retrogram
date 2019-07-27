@@ -43,7 +43,7 @@ fn uncond_branch(p: &memory::Pointer<Pointer>, offset: u16) ->
     let signed_offset = (((offset | sign_extend) as i16) as i32) << 1;
     let target = p.contextualize((signed_offset - 4 + p.as_pointer().clone() as i32) as Pointer);
     
-    (Some(Instruction::new("B", vec![op::cptr(target.clone())])), 2, true, false,
+    (Some(Instruction::new("B", vec![op::cptr(target.clone())])), 2, false, false,
         vec![refr::new_static_ref(p.clone(), target, refkind::Code)])
 }
 
@@ -72,7 +72,7 @@ fn special_data(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_r
         (1, _) => (Some(Instruction::new("CMP", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
         (2, _) => (Some(Instruction::new("MOV", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
         (3, false) => (Some(Instruction::new("BX", vec![rm_operand])), 2, false, false, vec![refr::new_dyn_ref(p.clone(), refkind::Code)]),
-        (3, true) => (Some(Instruction::new("BLX", vec![rm_operand])), 2, true, false, vec![refr::new_dyn_ref(p.clone(), refkind::Subroutine)]),
+        (3, true) => (Some(Instruction::new("BLX", vec![rm_operand])), 2, true, true, vec![refr::new_dyn_ref(p.clone(), refkind::Subroutine)]),
         _ => panic!("Invalid opcode or L flag")
     }
 }
@@ -311,6 +311,8 @@ fn load_store_multiple(l: u16, low_rn: u16, register_list: u16) ->
 
 fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+
+        dbg!(high_offset);
     
     match mem.read_leword::<u16>(&(p.clone() + 2)).into_concrete() {
         Some(low_instr) if low_instr & 0xE000 == 0xE000 => {
@@ -326,9 +328,11 @@ fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16)
             let mut arm_target = p.contextualize((p.as_pointer().clone() as i32 + offset as i32) as u32 & 0xFFFFFFFC);
             arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
 
+            dbg!(target.as_pointer());
+
             match h {
-                1 if low_offset & 1 == 0 => (Some(Instruction::new("BLX", vec![op::cptr(arm_target.clone())])), 4, true, false, vec![refr::new_static_ref(p.clone(), arm_target, refkind::Subroutine)]),
-                3 => (Some(Instruction::new("BL", vec![op::cptr(target.clone())])), 4, true, false, vec![refr::new_static_ref(p.clone(), target, refkind::Subroutine)]),
+                1 if low_offset & 1 == 0 => (Some(Instruction::new("BLX", vec![op::cptr(arm_target.clone())])), 4, true, true, vec![refr::new_static_ref(p.clone(), arm_target, refkind::Subroutine)]),
+                3 => (Some(Instruction::new("BL", vec![op::cptr(target.clone())])), 4, true, true, vec![refr::new_static_ref(p.clone(), target, refkind::Subroutine)]),
                 _ => (None, 0, false, false, vec![])
             }
         },
@@ -439,19 +443,19 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
     match mem.read_leword::<u16>(p).into_concrete() {
         Some(instr) => {
             let rd = instr & 0x0007; //sometimes also sbz
-            let rn = instr & 0x0038 >> 3; //sometimes also rm or rs
-            let shift_immed = instr & 0x07C0 >> 6;
-            let shift_opcode = instr & 0x1800 >> 11; //also used by math imm
-            let rm = instr & 0x01C0 >> 6; //sometimes also rn or add/sub immed
-            let opc = instr & 0x0200 >> 9; //add/sub bit for instructions
+            let rn = (instr & 0x0038) >> 3; //sometimes also rm or rs
+            let shift_immed = (instr & 0x07C0) >> 6;
+            let shift_opcode = (instr & 0x1800) >> 11; //also used by math imm
+            let rm = (instr & 0x01C0) >> 6; //sometimes also rn or add/sub immed
+            let opc = (instr & 0x0200) >> 9; //add/sub bit for instructions
             let immed = instr & 0x00FF; //sometimes also small-offset
-            let math_rd_rn = instr & 0x0700 >> 8;
-            let dp_opcode = instr & 0x03C0 >> 6;
-            let lsro_opcode = instr & 0x0E00 >> 9;
-            let cond = instr & 0x0F00 >> 8;
+            let math_rd_rn = (instr & 0x0700) >> 8;
+            let dp_opcode = (instr & 0x03C0) >> 6;
+            let lsro_opcode = (instr & 0x0E00) >> 9;
+            let cond = (instr & 0x0F00) >> 8;
             let large_offset = instr & 0x07FF;
 
-            match (instr >> 13, instr & 0x1000 >> 12, instr & 0x0800 >> 11, instr & 0x0400 >> 10) {
+            match (instr >> 13, (instr & 0x1000) >> 12, (instr & 0x0800) >> 11, (instr & 0x0400) >> 10) {
                 (0, 1, 1, 0) => add_sub_register(opc, rm, rn, rd),
                 (0, 1, 1, 1) => add_sub_immed(opc, rm, rn, rd),
                 (0, _, _, _) => shifter_immed(shift_opcode, shift_immed, rn, rd),
@@ -464,7 +468,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                 (4, 0, l, _) => load_store_immed_offset_halfword(l, shift_immed, rn, rd),
                 (4, 1, l, _) => load_store_stack_offset(l, math_rd_rn, immed),
                 (5, 0, s, _) => compute_rel_addr(s, math_rd_rn, immed),
-                (5, 1, a, b) => match (a, b, instr & 0x0200 >> 9, instr & 0x0100 >> 8) {
+                (5, 1, a, b) => match (a, b, (instr & 0x0200) >> 9, (instr & 0x0100) >> 8) {
                     (0, 0, 0, 0) => sp_adjust(immed),
                     (0, 0, 1, 0) => sign_zero_extend(immed, rn, rd),
                     (1, 0, 1, 0) => endian_reverse(immed, rn, rd),
