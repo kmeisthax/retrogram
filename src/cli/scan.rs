@@ -2,6 +2,7 @@
 
 use std::{io, fs};
 use std::collections::HashSet;
+use num_traits::Zero;
 use crate::{project, platform, arch, ast, input, analysis, database, memory, cli};
 
 /// Scan a specific starting PC and add the results of the analysis to the
@@ -10,13 +11,19 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
         disassembler: &DIS,
         bus: &memory::Memory<P, MV, S, IO>) -> io::Result<()>
     where P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
-        S: memory::Offset<P> + cli::Nameable,
+        S: memory::Offset<P> + cli::Nameable + Zero,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool,
             bool, Vec<analysis::Reference<P>>) {
-    let (orig_asm, xrefs, pc_offset, blocks) = analysis::disassemble_block(start_pc.clone(), bus, disassembler)?;
+    let (orig_asm, xrefs, pc_offset, blocks, is_improperly_ended) = analysis::disassemble_block(start_pc.clone(), bus, disassembler)?;
 
-    if pc_offset == None {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("There is no valid code at {:X}", start_pc)));
+    if is_improperly_ended {
+        if pc_offset == Some(S::zero()) {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, format!("There is no valid code at {:X}", start_pc)));
+        } else if pc_offset == None {
+            return Err(io::Error::new(io::ErrorKind::Other, format!("Disassembly size cannot be expressed in current type system, caused by analysis of {:X}", start_pc)));
+        } else {
+            eprintln!("Improperly terminated block discovered in {:X}", start_pc);
+        }
     }
     
     for block in blocks {
@@ -84,11 +91,11 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, s
     db.update_indexes();
     
     let start_pc = input::parse_ptr(start_spec, db, bus, architectural_ctxt_parse).expect("Must specify a valid address to analyze");
-    println!("Starting scan from {:X}", start_pc);
+    eprintln!("Starting scan from {:X}", start_pc);
     match scan_pc_for_arch(&mut db, &start_pc, &disassembler, bus) {
         Ok(_) => {},
         Err(e) => {
-            println!("Initial scan failed due to {}", e);
+            eprintln!("Initial scan failed due to {}", e);
 
             return Err(e);
         }
@@ -110,11 +117,13 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, s
 
             if let Some(target_pc) = target_pc {
                 if !failed_analysis.contains(&target_pc) {
-                    println!("Found missing xref at {:X}", target_pc);
                     match scan_pc_for_arch(&mut db, &target_pc, &disassembler, bus) {
-                        Ok(_) => more_analysis_done = true,
+                        Ok(_) => {
+                            eprintln!("Found additional code at {:X}", target_pc);
+                            more_analysis_done = true;
+                        },
                         Err(e) => {
-                            println!("{}", e);
+                            eprintln!("{}", e);
 
                             failed_analysis.insert(target_pc);
                         }
@@ -128,7 +137,7 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, s
         }
     }
 
-    println!("Scan complete, writing database");
+    eprintln!("Scan complete, writing database");
 
     pjdb.write(prog.as_database_path())?;
 

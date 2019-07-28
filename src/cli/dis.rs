@@ -74,7 +74,7 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(prog: &project::Program,
     }
 
     for block in disassembly_blocks {
-        let (orig_asm, _xrefs, pc_offset, _blocks) = analysis::disassemble_block(block.as_start().clone(), bus, &disassemble)?;
+        let (orig_asm, _xrefs, pc_offset, _blocks, is_improperly_ended) = analysis::disassemble_block(block.as_start().clone(), bus, &disassemble)?;
         if let Some(pc_offset) = pc_offset {
             if pc_offset > block.as_length().clone() {
                 if let Ok(too_big) = MS::try_from(pc_offset - block.as_length().clone()) {
@@ -85,6 +85,10 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(prog: &project::Program,
                     eprintln!("WARN: Block at {} is too small by {}", block.as_start(), too_small);
                 }
             }
+        }
+
+        if is_improperly_ended {
+            eprintln!("WARN: Block at {} terminates at an invalid instruction", block.as_start());
         }
 
         let labeled_asm = analysis::replace_labels(orig_asm, db, bus);
