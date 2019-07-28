@@ -192,15 +192,24 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
 
         name = format!("{}_{:X}", name, ptr.as_pointer());
 
-        self.insert_symbol(ast::Label::new_placeholder(&name, None), ptr);
+        self.upsert_symbol(ast::Label::new_placeholder(&name, None), ptr);
 
         ast::Label::new(&name, None)
     }
 
     pub fn insert_crossreference(&mut self, myref: analysis::Reference<P>) {
         let id = self.xrefs.len();
+        let source_bucket = self.xref_source_index.entry(myref.as_source().clone()).or_insert_with(|| HashSet::new());
 
-        self.xref_source_index.entry(myref.as_source().clone()).or_insert_with(|| HashSet::new()).insert(id);
+        for other_id in source_bucket.iter() {
+            if let Some(other) = self.xrefs.get(*other_id) {
+                if other.as_source() == myref.as_source() && other.as_target() == myref.as_target() {
+                    return;
+                }
+            }
+        }
+
+        source_bucket.insert(id);
         if let Some(target) = myref.as_target() {
             self.xref_target_index.entry(target.clone()).or_insert_with(|| HashSet::new()).insert(id);
         }
