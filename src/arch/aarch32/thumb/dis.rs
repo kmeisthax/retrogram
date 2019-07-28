@@ -311,8 +311,6 @@ fn load_store_multiple(l: u16, low_rn: u16, register_list: u16) ->
 
 fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16) ->
     (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-
-        dbg!(high_offset);
     
     match mem.read_leword::<u16>(&(p.clone() + 2)).into_concrete() {
         Some(low_instr) if low_instr & 0xE000 == 0xE000 => {
@@ -327,8 +325,6 @@ fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16)
             let target = p.contextualize((p.as_pointer().clone() as i32 + offset as i32) as u32);
             let mut arm_target = p.contextualize((p.as_pointer().clone() as i32 + offset as i32) as u32 & 0xFFFFFFFC);
             arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
-
-            dbg!(target.as_pointer());
 
             match h {
                 1 if low_offset & 1 == 0 => (Some(Instruction::new("BLX", vec![op::cptr(arm_target.clone())])), 4, true, true, vec![refr::new_static_ref(p.clone(), arm_target, refkind::Subroutine)]),
