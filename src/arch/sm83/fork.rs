@@ -1,9 +1,9 @@
-//! Symbolic fork analysis for LR35902
+//! Symbolic fork analysis for SM83
 
 use crate::memory;
 use crate::ast::Operand as op;
-use crate::arch::lr35902::{Register, Pointer, Bus, State};
-use crate::arch::lr35902::dis::{ALU_TARGET_REGS, ALU_TARGET_MEM};
+use crate::arch::sm83::{Register, Pointer, Bus, State};
+use crate::arch::sm83::dis::{ALU_TARGET_REGS, ALU_TARGET_MEM};
 
 fn memlist_op16(regs: Vec<Register>, p: &memory::Pointer<Pointer>, mem: &Bus) -> (Vec<Register>, Vec<memory::Pointer<Pointer>>, bool) {
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {

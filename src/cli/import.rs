@@ -4,8 +4,6 @@
 use std::{io, fs};
 use crate::{project, database, arch, platform, analysis};
 
-//pub fn parse_symbol_file<F>(file: F, db: &mut Database<lr35902::Pointer, lr35902::Offset>) -> io::Result<()> where F: io::BufRead
-
 pub fn import_for_arch<P, S, IMP>(prog: &project::Program, datasrc: &project::DataSource, imp: IMP) -> io::Result<()>
     where for <'dw> P: analysis::Mappable + serde::Deserialize<'dw>,
         for <'dw> S: serde::Deserialize<'dw>,
@@ -37,7 +35,7 @@ pub fn import(prog: &project::Program, datasrc: &project::DataSource) -> io::Res
     let format = datasrc.format().ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified data source format"))?;
 
     match (arch, platform, format) {
-        (arch::ArchName::LR35902, platform::PlatformName::GB, database::ExternalFormat::RGBDSSymbolFile) => import_for_arch(prog, datasrc, &database::rgbds::parse_symbol_file),
+        (arch::ArchName::SM83, platform::PlatformName::GB, database::ExternalFormat::RGBDSSymbolFile) => import_for_arch(prog, datasrc, &database::rgbds::parse_symbol_file),
         //(arch::ArchName::AARCH32, platform::PlatformName::AGB) => scan_for_arch(prog, start_spec, &arch::aarch32::disassemble, &platform::agb::construct_platform(&mut file)?),
         _ => return Err(io::Error::new(io::ErrorKind::Other, "The given combination of architecture, platform, and/or assembler are not compatible."))
     }

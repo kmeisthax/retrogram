@@ -1,8 +1,8 @@
-//! Facilities for tracing LR35902 code
+//! Facilities for tracing SM83 code
 
 use crate::{memory, reg};
 use crate::reg::{Convertable, TryConvertable};
-use crate::arch::lr35902::{Register, Pointer, Bus, State, Value};
+use crate::arch::sm83::{Register, Pointer, Bus, State, Value};
 
 /// Given a targetreg operand, produce a symbolic value of what that target reg
 /// would be given the current state.

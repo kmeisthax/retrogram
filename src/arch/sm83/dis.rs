@@ -1,7 +1,7 @@
 use crate::{analysis, memory};
 use crate::ast::Operand as op;
 use crate::ast::Instruction as inst;
-use crate::arch::lr35902::{Pointer, Offset, Bus, Operand, Instruction};
+use crate::arch::sm83::{Pointer, Offset, Bus, Operand, Instruction};
 
 fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
@@ -85,7 +85,7 @@ pub static ALU_TARGET_MEM: [&str; 4] = ["bc", "de", "hli", "hld"];
 
 /// z80 instruction encoding uses this 3-bit enumeration to encode most common
 /// ALU operations. The source register is always A for these operations, which
-/// are actually a holdover from 8080 and have been carried into LR35902.
+/// are actually a holdover from 8080 and have been carried into SM83.
 static ALU_OPS: [&str; 8] = ["add", "adc", "sub", "sbc", "and", "xor", "or", "cp"];
 
 /// z80 instruction encoding uses this 2-bit enumeration to encode condition

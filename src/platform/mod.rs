@@ -26,7 +26,7 @@ impl PlatformName {
     /// fail.
     pub fn default_arch(&self) -> Option<arch::ArchName> {
         match self {
-            PlatformName::GB => Some(arch::ArchName::LR35902),
+            PlatformName::GB => Some(arch::ArchName::SM83),
             PlatformName::AGB => Some(arch::ArchName::AARCH32),
             PlatformName::SFC => Some(arch::ArchName::W65C816)
         }

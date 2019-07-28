@@ -25,7 +25,7 @@ This is what a retrogram project file might look like:
         "programs": {
             "mygame": {
                 "platform": "gb",
-                "arch": "lr35902",
+                "arch": "sm83",
                 "assembler": "rgbds",
                 "images": ["mygame.gbc"],
                 "data_sources": ["mygame_sym"]
@@ -111,7 +111,7 @@ The same address without the `T:` would be treated as non-THUMB.
 Retrogram supports, or currently has support planned, for the following
 processor architectures, platforms, and assemblers:
 
- * LR35902, aka "GB Z80" (more or less complete)
+ * SM83, aka LR35902, aka "GB Z80" (more or less complete)
    * Game Boy platform model
    * RGBDS syntax
  * ARM/THUMB (in progress)

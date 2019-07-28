@@ -2,13 +2,13 @@
 
 use std::io;
 use crate::{reg, memory};
-use crate::arch::lr35902;
+use crate::arch::sm83;
 
 /// Any type which decodes the banked memory region (0x4000) of a Game Boy ROM
 /// image.
 trait Mapper {
 
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize>;
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize>;
 }
 
 /// Mapper type which does not support banking.
@@ -25,7 +25,7 @@ impl LinearMapper {
 }
 
 impl Mapper for LinearMapper {
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize> {
         Some((ptr.as_pointer() & 0x3FFF + 0x4000) as usize)
     }
 }
@@ -41,7 +41,7 @@ impl MBC1Mapper {
 }
 
 impl Mapper for MBC1Mapper {
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(0x00) => None,
             Some(0x20) => None,
@@ -64,7 +64,7 @@ impl MBC2Mapper {
 }
 
 impl Mapper for MBC2Mapper {
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + ((b & 0xF) * 0x4000) as usize),
             None => None
@@ -83,7 +83,7 @@ impl MBC3Mapper {
 }
 
 impl Mapper for MBC3Mapper {
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None
@@ -102,7 +102,7 @@ impl MBC5Mapper {
 }
 
 impl Mapper for MBC5Mapper {
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<lr35902::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None
@@ -136,9 +136,9 @@ impl<M> GameBoyROMImage<M> where M: Mapper {
 }
 
 impl<M> memory::Image for GameBoyROMImage<M> where M: Mapper {
-    type Pointer = lr35902::Pointer;
+    type Pointer = sm83::Pointer;
     type Offset = usize;
-    type Data = lr35902::Data;
+    type Data = sm83::Data;
 
     fn retrieve(&self, offset: Self::Offset, count: Self::Offset) -> Option<&[Self::Data]> {
         Some(&self.data[offset as usize..(offset + count) as usize])
@@ -193,11 +193,11 @@ impl Default for PlatformVariant {
     }
 }
 
-pub fn create_context<V>(values: &Vec<V>) -> Option<memory::Pointer<lr35902::Pointer>>
-    where V: Clone + PartialOrd + From<lr35902::Pointer>,
-        lr35902::Pointer: From<V>,
+pub fn create_context<V>(values: &Vec<V>) -> Option<memory::Pointer<sm83::Pointer>>
+    where V: Clone + PartialOrd + From<sm83::Pointer>,
+        sm83::Pointer: From<V>,
         u64: From<V> {
-    let mut context = memory::Pointer::from(lr35902::Pointer::from(values[values.len() - 1].clone()));
+    let mut context = memory::Pointer::from(sm83::Pointer::from(values[values.len() - 1].clone()));
 
     if values.len() > 1 {
         if values[values.len() - 1] >= V::from(0xE000) {
@@ -225,8 +225,8 @@ pub fn create_context<V>(values: &Vec<V>) -> Option<memory::Pointer<lr35902::Poi
 /// You may optionally specify a `PlatformVariant` to control which MBC behavior
 /// is used to analyze the image. If unspecified, the ROM header will be used to
 /// determine which MBC was intended to be used alongside this program.
-pub fn construct_platform<F>(file: &mut F, mut pv: PlatformVariant) -> io::Result<lr35902::Bus> where F: io::Read + io::Seek {
-    let mut bus = lr35902::Bus::new();
+pub fn construct_platform<F>(file: &mut F, mut pv: PlatformVariant) -> io::Result<sm83::Bus> where F: io::Read + io::Seek {
+    let mut bus = sm83::Bus::new();
 
     pv = match pv {
         PlatformVariant::UnknownMapper => {

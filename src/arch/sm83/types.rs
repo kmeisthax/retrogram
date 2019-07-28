@@ -1,4 +1,4 @@
-//! Types used in modeling the LR35902
+//! Types used in modeling the SM83
 
 use std::str;
 use crate::{memory, ast, reg};
@@ -37,16 +37,16 @@ impl Register {
     }
 }
 
-/// The type which represents a value contained in an LR35902 register.
+/// The type which represents a value contained in an SM83 register.
 pub type Value = u8;
 
-/// The type which represents an LR35902 memory address.
+/// The type which represents an SM83 memory address.
 pub type Pointer = u16;
 
 /// The type which represents a positive memory offset.
 pub type Offset = u16;
 
-/// The type which represents a signed value contained in an LR35902 register or register pair.
+/// The type which represents a signed value contained in an SM83 register or register pair.
 pub type SignedValue = i16;
 
 /// The type which represents data stored in memory as seen by the processor.
@@ -71,5 +71,5 @@ pub type Instruction = ast::Instruction<Offset, SignedValue, f32, Pointer>;
 pub type Section = ast::Section<Offset, SignedValue, f32, Pointer>;
 
 /// The register state type which represents the execution state of a given
-/// LR35902 program.
+/// SM83 program.
 pub type State = reg::State<Register, Value, memory::Pointer<Pointer>, Value>;

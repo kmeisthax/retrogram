@@ -152,8 +152,8 @@ pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
     let mut file = fs::File::open(image)?;
     
     match (arch, platform) {
-        (arch::ArchName::LR35902, platform::PlatformName::GB) =>
-            scan_for_arch(prog, start_spec, arch::lr35902::disassemble,
+        (arch::ArchName::SM83, platform::PlatformName::GB) =>
+            scan_for_arch(prog, start_spec, arch::sm83::disassemble,
                 &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?,
                 |_, _| Some(())),
         (arch::ArchName::AARCH32, platform::PlatformName::AGB) =>

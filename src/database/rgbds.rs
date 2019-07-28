@@ -4,7 +4,7 @@ use std::{io, fs};
 use std::ops::{Shl, BitOr};
 use std::io::BufRead;
 use crate::ast;
-use crate::arch::lr35902;
+use crate::arch::sm83;
 use crate::platform::gb;
 use crate::database::Database;
 use crate::project;
@@ -41,7 +41,7 @@ fn str2hex<I>(thestr: &str) -> Option<I> where I: From<u8> + Shl + From<<I as Sh
 
 /// Read the symbols from an RGBDS symbol file.
 pub fn parse_symbol_file(_prog: &project::Program, _dsrc: &project::DataSource, files: &mut [io::BufReader<fs::File>],
-    db: &mut Database<lr35902::Pointer, lr35902::Offset>) -> io::Result<()> {
+    db: &mut Database<sm83::Pointer, sm83::Offset>) -> io::Result<()> {
     
     for file in files {
         for line in file.lines() {

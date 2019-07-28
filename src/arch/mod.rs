@@ -29,7 +29,7 @@
 //! To determine what the disassemble function should do, please consult the
 //! documenation of an existing disassembler implementation.
 
-pub mod lr35902;
+pub mod sm83;
 pub mod aarch32;
 pub mod w65c816;
 
@@ -40,7 +40,7 @@ use crate::asm;
 /// Enumeration of all architectures that ship with Retrogram.
 #[derive(Copy, Clone, Serialize, Debug)]
 pub enum ArchName {
-    LR35902,
+    SM83,
     AARCH32,
     W65C816,
 }
@@ -52,7 +52,7 @@ impl ArchName {
     /// lookup may fail.
     pub fn default_asm(&self) -> Option<asm::AssemblerName> {
         match self {
-            ArchName::LR35902 => Some(asm::AssemblerName::RGBDS),
+            ArchName::SM83 => Some(asm::AssemblerName::RGBDS),
             ArchName::AARCH32 => None,
             ArchName::W65C816 => None,
         }
@@ -64,8 +64,9 @@ impl str::FromStr for ArchName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_ref() {
-            "lr35902" => Ok(ArchName::LR35902),
-            "gbz80" => Ok(ArchName::LR35902),
+            "sm83" => Ok(ArchName::SM83),
+            "lr35902" => Ok(ArchName::SM83),
+            "gbz80" => Ok(ArchName::SM83),
             "arm" => Ok(ArchName::AARCH32),
             "arm32" => Ok(ArchName::AARCH32),
             "aarch32" => Ok(ArchName::AARCH32),

@@ -107,9 +107,9 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
     let mut file = fs::File::open(image)?;
 
     match (arch, platform, asm) {
-        (arch::ArchName::LR35902, platform::PlatformName::GB, _) => dis_inner(prog, start_spec,
+        (arch::ArchName::SM83, platform::PlatformName::GB, _) => dis_inner(prog, start_spec,
             &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?,
-            arch::lr35902::disassemble,
+            arch::sm83::disassemble,
             |asm| println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm)),
             |_, _| Some(())),
         (arch::ArchName::AARCH32, platform::PlatformName::AGB, _) => dis_inner(prog, start_spec,
