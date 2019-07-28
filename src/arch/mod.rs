@@ -1,4 +1,33 @@
 //! Implementations of processor architectures that Retrogram can analyze.
+//! 
+//! Each architecture is implemented as a child module to this one. At a bare
+//! minimum, the architectures must implement at least one function, called
+//! "disassemble", and a series of seven types that interact with various parts
+//! of retrogram's machinery:
+//! 
+//!  * `I`, or `Value` - The type of a valid integer register value. Should be
+//!    wide enough to hold any single register's value.
+//!  * `SI`, or `SignedValue` - The `I` type, but signed.
+//!  * `F`, or `Float` - The type of a valid floating-point register value. If
+//!    your architecture does not support floating point, just provide `f32`
+//!    until such time as we have a suitable never type to fit in here.
+//!  * `P`, or `Pointer` - The type of a valid memory address. Archiectures with
+//!    multiple buses (e.g. port I/O) must provide a Pointer type which can
+//!    represent any location on any bus. See the `memory::PtrNum` trait for
+//!    more information.
+//!  * `S`, or `Offset` - The type of a valid memory offset. It should be
+//!    possible to subtract two pointers and get an offset, and add that offset
+//!    to one pointer to get the other. Allowances are given for architectures
+//!    where not all pointers can be converted into a meaningful offset. See the
+//!    `memory::Offset` trait for more information.
+//!  * `MV`, or `Data` - The type of a single atomic memory unit, usually u8.
+//!    Architectures whose memory is word-addressed would have a wider data type
+//!    than a byte.
+//!  * `IO` - The type used to represent offsets into a single image. Defaults
+//!    to usize and should almost never be anything else.
+//! 
+//! To determine what the disassemble function should do, please consult the
+//! documenation of an existing disassembler implementation.
 
 pub mod lr35902;
 pub mod aarch32;
