@@ -110,12 +110,12 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
         (arch::ArchName::SM83, platform::PlatformName::GB, _) => dis_inner(prog, start_spec,
             &platform::gb::construct_platform(&mut file, platform::gb::PlatformVariant::MBC5Mapper)?,
             arch::sm83::disassemble,
-            |asm| println!("{}", asm::rgbds::RGBDSAstFormatee::wrap(&asm)),
+            |asm| println!("{}", asm::rgbds::SectionFmtWrap::wrap(&asm)),
             |_, _| Some(())),
         (arch::ArchName::AARCH32, platform::PlatformName::AGB, _) => dis_inner(prog, start_spec,
             &platform::agb::construct_platform(&mut file)?,
             arch::aarch32::disassemble,
-            |asm| println!("{}", asm::armips::ArmipsAstFormattee::wrap(&asm)),
+            |asm| println!("{}", asm::armips::SectionFmtWrap::wrap(&asm)),
             arch::aarch32::architectural_ctxt_parse),
         _ => return Err(io::Error::new(io::ErrorKind::Other, "oops"))
     }

@@ -73,7 +73,8 @@ pub fn main() -> io::Result<()> {
         match command {
             cli::Command::Scan => cli::scan(&prog, &start_pc)?,
             cli::Command::Disassemble => cli::dis(&prog, &start_pc)?,
-            cli::Command::Import => cli::import(&prog, &source)?
+            cli::Command::Import => cli::import(&prog, &source)?,
+            cli::Command::Backreference => cli::backref(&prog, &start_pc)?
         };
     } else {
         eprintln!("Please enter a command");

@@ -4,19 +4,19 @@ use std::fmt;
 use std::cmp::PartialOrd;
 use crate::ast;
 
-pub struct RGBDSAstFormatee<'a, I, S, F, P> {
-    tree: &'a ast::Section<I, S, F, P>
+pub struct OperandFmtWrap<'a, I, S, F, P> {
+    tree: &'a ast::Operand<I, S, F, P>
 }
 
-impl<'a, I, S, F, P> RGBDSAstFormatee<'a, I, S, F, P> {
-    pub fn wrap(tree: &'a ast::Section<I, S, F, P>) -> Self {
-        RGBDSAstFormatee {
+impl<'a, I, S, F, P> OperandFmtWrap<'a, I, S, F, P> {
+    pub fn wrap(tree: &'a ast::Operand<I, S, F, P>) -> Self {
+        OperandFmtWrap {
             tree: tree
         }
     }
 }
 
-impl<'a, I, S, F, P> RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
+impl<'a, I, S, F, P> OperandFmtWrap<'a, I, S, F, P> where I: fmt::Display, S: fmt::Display, F: fmt::Display, P: fmt::Display + fmt::LowerHex {
     fn write_operand(&self, operand: &ast::Operand<I, S, F, P>, f: &mut fmt::Formatter) -> fmt::Result {
         match operand {
             ast::Operand::Symbol(s) => write!(f, "{}", s)?,
@@ -70,7 +70,61 @@ impl<'a, I, S, F, P> RGBDSAstFormatee<'a, I, S, F, P> where I: fmt::Display, S: 
     }
 }
 
-impl<'a, I, S, F, P> fmt::Display for RGBDSAstFormatee<'a, I, S, F, P>
+impl<'a, I, S, F, P> fmt::Display for OperandFmtWrap<'a, I, S, F, P>
+    where I: fmt::Display, S: fmt::Display, F: fmt::Display,
+        P: Clone + From<u16> + fmt::Display + PartialOrd + fmt::LowerHex + fmt::UpperHex {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.write_operand(self.tree, f)
+    }
+}
+
+pub struct InstrFmtWrap<'a, I, S, F, P> {
+    tree: &'a ast::Instruction<I, S, F, P>
+}
+
+impl<'a, I, S, F, P> InstrFmtWrap<'a, I, S, F, P> {
+    pub fn wrap(tree: &'a ast::Instruction<I, S, F, P>) -> Self {
+        InstrFmtWrap {
+            tree: tree
+        }
+    }
+}
+
+impl<'a, I, S, F, P> fmt::Display for InstrFmtWrap<'a, I, S, F, P>
+    where I: fmt::Display, S: fmt::Display, F: fmt::Display,
+        P: Clone + From<u16> + fmt::Display + PartialOrd + fmt::LowerHex + fmt::UpperHex {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.tree.opcode())?;
+
+        let mut has_written_operand = false;
+        for operand in self.tree.iter_operands() {
+            if !has_written_operand {
+                write!(f, " ")?;
+                has_written_operand = true;
+            } else {
+                write!(f, ", ")?;
+            }
+            
+            write!(f, "{}", OperandFmtWrap::wrap(operand))?;
+        }
+
+        Ok(())
+    }
+}
+
+pub struct SectionFmtWrap<'a, I, S, F, P> {
+    tree: &'a ast::Section<I, S, F, P>
+}
+
+impl<'a, I, S, F, P> SectionFmtWrap<'a, I, S, F, P> {
+    pub fn wrap(tree: &'a ast::Section<I, S, F, P>) -> Self {
+        SectionFmtWrap {
+            tree: tree
+        }
+    }
+}
+
+impl<'a, I, S, F, P> fmt::Display for SectionFmtWrap<'a, I, S, F, P>
     where I: fmt::Display, S: fmt::Display, F: fmt::Display,
         P: Clone + From<u16> + fmt::Display + PartialOrd + fmt::LowerHex + fmt::UpperHex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -118,19 +172,7 @@ impl<'a, I, S, F, P> fmt::Display for RGBDSAstFormatee<'a, I, S, F, P>
             }
 
             if let Some(ref instr) = line.instr() {
-                write!(f, "    {}", instr.opcode())?;
-
-                let mut has_written_operand = false;
-                for operand in instr.iter_operands() {
-                    if !has_written_operand {
-                        write!(f, " ")?;
-                        has_written_operand = true;
-                    } else {
-                        write!(f, ", ")?;
-                    }
-
-                    self.write_operand(operand, f)?;
-                }
+                write!(f, "    {}", InstrFmtWrap::wrap(instr))?;
             }
 
             if let Some(ref comment) = line.comment() {

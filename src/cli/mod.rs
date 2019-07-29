@@ -3,12 +3,14 @@
 mod dis;
 mod scan;
 mod import;
+mod backref;
 mod traits;
 mod main;
 
 pub use dis::dis;
 pub use scan::scan;
 pub use import::import;
+pub use backref::backref;
 pub use traits::*;
 pub use main::main;
 
@@ -19,7 +21,8 @@ use std::str;
 pub enum Command {
     Scan,
     Disassemble,
-    Import
+    Import,
+    Backreference
 }
 
 impl str::FromStr for Command {
@@ -31,6 +34,7 @@ impl str::FromStr for Command {
             "scan" => Ok(Command::Scan),
             "chadtronic-scan" => Ok(Command::Scan),
             "import" => Ok(Command::Import),
+            "backrefs" => Ok(Command::Backreference),
             _ => Err(())
         }
     }

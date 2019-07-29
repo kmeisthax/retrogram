@@ -65,6 +65,8 @@ The program name specified must match a valid program name specified in the
  * `import` - Copy information from a data source into the retrogram project
    database. You must also specify an `--external_db` parameter naming a data
    source registered in your project.
+ * `backrefs` - List all code that references a particular memory address,
+   either as a jump/call target or as a memory location.
 
 ### Available parameters
 
