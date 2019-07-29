@@ -68,7 +68,7 @@ pub type Instruction = ast::Instruction<Offset, SignedValue, f32, Pointer>;
 /// The AST type which represents disassembled code.
 /// 
 /// TODO: When ! is stable, replace the floating-point type with !.
-pub type Section = ast::Section<Offset, SignedValue, f32, Pointer>;
+pub type Section = ast::Section<Offset, SignedValue, f32, Pointer, Data, Offset>;
 
 /// The register state type which represents the execution state of a given
 /// SM83 program.

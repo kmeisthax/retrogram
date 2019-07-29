@@ -52,9 +52,10 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
         }
     }
 
-    match orig_asm.iter_lines().next() {
-        Some(line) => {
-            db.insert_placeholder_label(line.source_address().clone(), analysis::ReferenceKind::Unknown);
+    //TODO: This seems to be polluting the symbol table for no reason.
+    match orig_asm.iter_directives().next() {
+        Some((_dir, loc)) => {
+            db.insert_placeholder_label(loc.clone(), analysis::ReferenceKind::Unknown);
         },
         _ => {}
     };

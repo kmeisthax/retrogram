@@ -2,37 +2,31 @@
 
 use std::slice;
 use crate::memory;
-use crate::ast::Line;
+use crate::ast::Directive;
 
 #[derive(Clone, Debug)]
-pub struct Section<I, S, F, P> {
+pub struct Section<I, SI, F, P, MV, S> {
     name: String,
-    loc: memory::Pointer<P>,
-    lines: Vec<Line<I, S, F, P>>
+    directives: Vec<(Directive<I, SI, F, P, MV, S>, memory::Pointer<P>)>
 }
 
-impl<I, S, F, P> Section<I, S, F, P> where P: Clone {
-    pub fn new(name: &str, loc: &memory::Pointer<P>) -> Self {
+impl<I, SI, F, P, MV, S> Section<I, SI, F, P, MV, S> where P: Clone {
+    pub fn new(name: &str) -> Self {
         Section {
             name: name.to_string(),
-            loc: loc.clone(),
-            lines: Vec::new()
+            directives: Vec::new()
         }
     }
 
-    pub fn iter_lines(&self) -> slice::Iter<Line<I, S, F, P>> {
-        self.lines.iter()
+    pub fn iter_directives(&self) -> slice::Iter<(Directive<I, SI, F, P, MV, S>, memory::Pointer<P>)> {
+        self.directives.iter()
     }
 
-    pub fn append_line(&mut self, line: Line<I, S, F, P>) {
-        self.lines.push(line);
+    pub fn append_directive(&mut self, dir: Directive<I, SI, F, P, MV, S>, loc: memory::Pointer<P>) {
+        self.directives.push((dir, loc));
     }
 
     pub fn section_name(&self) -> &str {
         &self.name
-    }
-
-    pub fn section_loc(&self) -> &memory::Pointer<P> {
-        &self.loc
     }
 }

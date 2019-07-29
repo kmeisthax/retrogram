@@ -86,7 +86,7 @@ pub type Instruction = ast::Instruction<Offset, SignedValue, f32, Pointer>;
 /// The AST type which represents disassembled code.
 /// 
 /// TODO: When ! is stable, replace the floating-point type with !.
-pub type Section = ast::Section<Offset, SignedValue, f32, Pointer>;
+pub type Section = ast::Section<Offset, SignedValue, f32, Pointer, Data, Offset>;
 
 fn op_lit(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_unit(p).into_concrete() {

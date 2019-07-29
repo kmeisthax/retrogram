@@ -83,4 +83,4 @@ pub type Operand = ast::Operand<Offset, Value, f32, Pointer>;
 pub type Instruction = ast::Instruction<Offset, Value, f32, Pointer>;
 
 /// The AST type which represents disassembled code.
-pub type Section = ast::Section<Offset, Value, f32, Pointer>;
+pub type Section = ast::Section<Offset, Value, f32, Pointer, Data, Offset>;

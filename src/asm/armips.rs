@@ -114,50 +114,58 @@ impl<'a, I, S, F, P> fmt::Display for InstrFmtWrap<'a, I, S, F, P>
     }
 }
 
-pub struct SectionFmtWrap<'a, I, S, F, P> {
-    tree: &'a ast::Section<I, S, F, P>
+pub struct SectionFmtWrap<'a, I, SI, F, P, MV, S> {
+    tree: &'a ast::Section<I, SI, F, P, MV, S>
 }
 
-impl<'a, I, S, F, P> SectionFmtWrap<'a, I, S, F, P> {
-    pub fn wrap(tree: &'a ast::Section<I, S, F, P>) -> Self {
+impl<'a, I, SI, F, P, MV, S> SectionFmtWrap<'a, I, SI, F, P, MV, S> {
+    pub fn wrap(tree: &'a ast::Section<I, SI, F, P, MV, S>) -> Self {
         SectionFmtWrap {
             tree: tree
         }
     }
 }
 
-impl<'a, I, S, F, P> fmt::Display for SectionFmtWrap<'a, I, S, F, P>
-    where I: fmt::Display, S: fmt::Display, F: fmt::Display,
-        P: Clone + From<u16> + fmt::Display + cmp::PartialOrd + fmt::LowerHex + fmt::UpperHex {
+impl<'a, I, SI, F, P, MV, S> fmt::Display for SectionFmtWrap<'a, I, SI, F, P, MV, S>
+    where I: fmt::Display, SI: fmt::Display, F: fmt::Display,
+        P: Clone + From<u16> + fmt::Display + cmp::PartialOrd + fmt::LowerHex + fmt::UpperHex,
+        MV: fmt::UpperHex,
+        S: fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let loc = self.tree.section_loc();
-        let thumb_state = loc.get_arch_context(THUMB_STATE).into_concrete();
+        for (directive, _loc) in self.tree.iter_directives() {
+            match directive {
+                ast::Directive::DeclareComment(comment) => write!(f, ";{}", comment)?,
+                ast::Directive::DeclareLabel(label) => {
+                    if let Some(_parent_label) = label.parent_name() {
+                        write!(f, "@@{}:\n", label.name())?;
+                    } else {
+                        write!(f, "{}:\n", label.name())?;
+                    }
+                },
+                ast::Directive::DeclareOrg(loc) => {
+                    let thumb_state = loc.get_arch_context(THUMB_STATE).into_concrete();
 
-        write!(f, ".org 0x{:X}\n", loc.as_pointer())?;
-        match thumb_state {
-            Some(0) => write!(f, ".arm\n")?,
-            Some(1) => write!(f, ".thumb\n")?,
-            _ => panic!("Thumb state must be specified!!!")
-        }
+                    write!(f, ".org 0x{:X}\n", loc.as_pointer())?;
+                    match thumb_state {
+                        Some(0) => write!(f, ".arm\n")?,
+                        Some(1) => write!(f, ".thumb\n")?,
+                        _ => panic!("Thumb state must be specified!!!")
+                    }
+                },
+                ast::Directive::EmitData(data) => {
+                    if data.len() > 0 {
+                        write!(f, ".db ")?;
 
-        for line in self.tree.iter_lines() {
-            if let Some(ref label) = line.label() {
-                if let Some(_parent_label) = label.parent_name() {
-                    write!(f, "@@{}:\n", label.name())?;
-                } else {
-                    write!(f, "{}:\n", label.name())?;
-                }
+                        for byte in data {
+                            write!(f, "0x{:X}", byte)?;
+                        }
+
+                        write!(f, "\n")?;
+                    }
+                },
+                ast::Directive::EmitInstr(instr) => write!(f, "    {}\n", InstrFmtWrap::wrap(instr))?,
+                ast::Directive::EmitSpace(offset) => write!(f, ".skip {}\n", offset)?
             }
-
-            if let Some(ref instr) = line.instr() {
-                write!(f, "    {}", InstrFmtWrap::wrap(instr))?;
-            }
-
-            if let Some(ref comment) = line.comment() {
-                write!(f, ";{}", comment)?;
-            }
-
-            write!(f, "\n")?;
         }
 
         Ok(())

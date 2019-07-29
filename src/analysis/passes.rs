@@ -32,14 +32,14 @@ use crate::{ast, memory, analysis};
 ///  * Whether or not the disassembly ended due to an invalid instruction
 pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<P>,
     plat: &memory::Memory<P, MV, S, IO>, disassemble: &DIS) ->
-        io::Result<(ast::Section<I, SI, F, P>, HashSet<analysis::Reference<P>>, Option<S>, Vec<analysis::Block<P, S>>, bool)>
+        io::Result<(ast::Section<I, SI, F, P, MV, S>, HashSet<analysis::Reference<P>>, Option<S>, Vec<analysis::Block<P, S>>, bool)>
     where P: memory::PtrNum<S> + analysis::Mappable + fmt::Display + fmt::UpperHex,
         S: memory::Offset<P> + fmt::Display,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) ->
             (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>) {
     
     let mut pc = start_pc.clone();
-    let mut asm = ast::Section::new(&format!("Untitled Section at {}", pc.as_pointer()), &pc);
+    let mut asm = ast::Section::new(&format!("Untitled Section at {}", pc.as_pointer()));
     let mut targets = HashSet::new();
     let mut blocks = Vec::new();
     let mut cur_block_pc = start_pc.clone();
@@ -48,7 +48,7 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
     loop {
         match disassemble(&pc, &plat) {
             (Some(instr), size, is_nonfinal, is_nonbranching, instr_targets) => {
-                asm.append_line(ast::Line::new(None, Some(instr), None, pc.clone().into_ptr()));
+                asm.append_directive(ast::Directive::EmitInstr(instr), pc.clone());
                 pc = pc.contextualize(P::from(pc.as_pointer().clone() + size.clone()));
                 cur_blk_size = S::try_from(cur_blk_size + size).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Could not increase size of block by instruction offset"))?;
 
@@ -111,25 +111,28 @@ pub fn replace_operand_with_label<I, S, F, P, AMV, AS, AIO>(src_operand: ast::Op
 /// 
 /// If a given pointer has no matching label, then a temporary label will be
 /// automatically generated and added to the database.
-pub fn replace_labels<I, S, F, P, AMV, AS, AIO>(src_assembly: ast::Section<I, S, F, P>, db: &mut Database<P, AS>, memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Section<I, S, F, P>
+pub fn replace_labels<I, S, F, P, AMV, AS, AIO>
+    (src_assembly: ast::Section<I, S, F, P, AMV, AS>,
+        db: &mut Database<P, AS>,
+        memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Section<I, S, F, P, AMV, AS>
     where P: memory::PtrNum<AS> + analysis::Mappable + Clone + UpperHex,
         AS: memory::Offset<P> + Clone,
-        ast::Line<I, S, F, P>: Clone, ast::Operand<I, S, F, P>: Clone {
-    let mut dst_assembly = ast::Section::new(src_assembly.section_name(), src_assembly.section_loc());
+        ast::Directive<I, S, F, P, AMV, AS>: Clone, ast::Operand<I, S, F, P>: Clone {
+    let mut dst_assembly = ast::Section::new(src_assembly.section_name());
 
-    for line in src_assembly.iter_lines() {
-        if let Some(instr) = line.instr() {
-            let mut new_operands = Vec::new();
+    for (directive, loc) in src_assembly.iter_directives() {
+        match directive {
+            ast::Directive::EmitInstr(instr) => {
+                let mut new_operands = Vec::new();
 
-            for operand in instr.iter_operands() {
-                new_operands.push(replace_operand_with_label(operand.clone(), db, &line.source_address(), memory, ReferenceKind::Unknown));
-            }
+                for operand in instr.iter_operands() {
+                    new_operands.push(replace_operand_with_label(operand.clone(), db, loc, memory, ReferenceKind::Unknown));
+                }
 
-            let new_instr = ast::Instruction::new(instr.opcode(), new_operands);
-            let (label, _old_instr, comment, src_addr) = line.clone().into_parts();
-            dst_assembly.append_line(ast::Line::new(label, Some(new_instr), comment, src_addr));
-        } else {
-            dst_assembly.append_line(line.clone());
+                let new_instr = ast::Instruction::new(instr.opcode(), new_operands);
+                dst_assembly.append_directive(ast::Directive::EmitInstr(new_instr), loc.clone());
+            },
+            _ => dst_assembly.append_directive(directive.clone(), loc.clone())
         }
     }
 
@@ -138,23 +141,30 @@ pub fn replace_labels<I, S, F, P, AMV, AS, AIO>(src_assembly: ast::Section<I, S,
 
 /// Given an Assembly, create a new Assembly with all labels inserted from the
 /// database.
-pub fn inject_labels<I, S, F, P, MS>(src_assembly: ast::Section<I, S, F, P>, db: &Database<P, MS>) -> ast::Section<I, S, F, P>
-    where P: analysis::Mappable, ast::Line<I, S, F, P>: Clone {
-    let mut dst_assembly = ast::Section::new(src_assembly.section_name(), src_assembly.section_loc());
+pub fn inject_labels<I, SI, F, P, MV, S>
+    (src_assembly: ast::Section<I, SI, F, P, MV, S>,
+        db: &Database<P, S>) -> ast::Section<I, SI, F, P, MV, S>
+    where P: analysis::Mappable, ast::Directive<I, SI, F, P, MV, S>: Clone {
     
-    for line in src_assembly.iter_lines() {
-        if let None = line.label() {
-            let (_label, old_instr, comment, src_addr) = line.clone().into_parts();
+    let mut dst_assembly = ast::Section::new(src_assembly.section_name());
+    
+    for (directive, loc) in src_assembly.iter_directives() {
+        //TODO: If two symbols exist at the same location only one gets injected
+        if let Some(sym_id) = db.pointer_symbol(&loc) {
+            //TODO: This needs better lookahead.
+            //TODO: This should validate that the symbol in the ASM matches the
+            //one the database gave us.
+            match directive {
+                ast::Directive::DeclareLabel(_) => dst_assembly.append_directive(directive.clone(), loc.clone()),
+                _ => {
+                    let sym = db.symbol(sym_id).expect("DB sent back invalid symbol ID");
 
-            if let Some(sym_id) = db.pointer_symbol(&src_addr) {
-                let sym = db.symbol(sym_id).expect("DB sent back invalid symbol ID");
-                
-                dst_assembly.append_line(ast::Line::new(Some(sym.as_label().clone()), old_instr, comment, src_addr));
-            } else {
-                dst_assembly.append_line(line.clone());
+                    dst_assembly.append_directive(ast::Directive::DeclareLabel(sym.as_label().clone()), loc.clone());
+                    dst_assembly.append_directive(directive.clone(), loc.clone());
+                }
             }
         } else {
-            dst_assembly.append_line(line.clone());
+            dst_assembly.append_directive(directive.clone(), loc.clone());
         }
     }
 

@@ -14,11 +14,7 @@ use crate::memory::Pointer;
 #[derive(Clone, Debug)]
 pub enum Directive<I, SI, F, P, MV, S> {
     /// Generate an instruction in the resulting instruction stream.
-    /// 
-    /// The memory pointer given indicates where the instruction is in memory.
-    /// It should not be treated as a directive to change the memory location
-    /// being assembled.
-    EmitInstr(Instruction<I, SI, F, P>, Pointer<P>),
+    EmitInstr(Instruction<I, SI, F, P>),
 
     /// Generate raw data in the resulting instruction stream.
     EmitData(Vec<MV>),

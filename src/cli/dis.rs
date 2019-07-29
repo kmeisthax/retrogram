@@ -13,9 +13,9 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(prog: &project::Program,
     where for <'dw> P: memory::PtrNum<MS> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw>,
         for <'dw> MS: memory::Offset<P> + analysis::Mappable + serde::Deserialize<'dw>,
         ast::Operand<I, S, F, P>: Clone,
-        ast::Line<I, S, F, P>: Clone,
+        ast::Directive<I, S, F, P, MV, MS>: Clone,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, MS, IO>) -> (Option<ast::Instruction<I, S, F, P>>, MS, bool, bool, Vec<analysis::Reference<P>>),
-        FMT: Fn(&ast::Section<I, S, F, P>),
+        FMT: Fn(&ast::Section<I, S, F, P, MV, MS>),
         APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()> {
     
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
