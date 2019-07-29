@@ -4,6 +4,7 @@ mod literal;
 mod operand;
 mod instr;
 mod label;
+mod directive;
 mod line;
 mod section;
 
