@@ -33,11 +33,11 @@ impl Label {
         }
     }
 
-    pub fn name(&self) -> &String {
+    pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn parent_name(&self) -> Option<&String> {
+    pub fn parent_name(&self) -> Option<&str> {
         if let Some(ref parent_label) = self.parent_name {
             Some(&parent_label)
         } else {
@@ -70,12 +70,12 @@ impl str::FromStr for Label {
                 parent_name: None,
                 is_autogen: true
             }),
-            (None, Some(parent), Some(child)) => Ok(Label {
+            (_, Some(parent), Some(child)) => Ok(Label {
                 name: child.to_string(),
                 parent_name: Some(parent.to_string()),
                 is_autogen: false
             }),
-            (None, Some(parent), None) => Ok(Label {
+            (_, Some(parent), None) => Ok(Label {
                 name: parent.to_string(),
                 parent_name: None,
                 is_autogen: false
