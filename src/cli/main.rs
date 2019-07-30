@@ -41,6 +41,7 @@ fn resolve_source(command: cli::Command, project: &mut project::Project, source_
 pub fn main() -> io::Result<()> {
     let mut command = None;
     let mut start_pc : String = "".to_string();
+    let mut end_pc : Option<String> = None;
     let mut version : Option<String> = None;
     let mut source_name : Option<String> = None;
     let mut prog = project::Program::default();
@@ -52,6 +53,7 @@ pub fn main() -> io::Result<()> {
 
         ap.refer(&mut command).add_argument("command", argparse::StoreOption, "The command to run.");
         ap.refer(&mut start_pc).add_argument("start_pc", argparse::Store, "The PC value to start analysis from");
+        ap.refer(&mut end_pc).add_argument("end_pc", argparse::StoreOption, "The PC value to end analysis at");
         ap.refer(&mut version).add_option(&["--program"], argparse::StoreOption, "Which program to analyze");
         ap.refer(&mut source_name).add_option(&["--external_db"], argparse::StoreOption, "The name of an external data source in the project to use");
         ap.refer(&mut project_filename).add_option(&["--project"], argparse::Store, "The project file to load (usually not needed)");
@@ -74,7 +76,8 @@ pub fn main() -> io::Result<()> {
             cli::Command::Scan => cli::scan(&prog, &start_pc)?,
             cli::Command::Disassemble => cli::dis(&prog, &start_pc)?,
             cli::Command::Import => cli::import(&prog, &source)?,
-            cli::Command::Backreference => cli::backref(&prog, &start_pc)?
+            cli::Command::Backreference => cli::backref(&prog, &start_pc)?,
+            cli::Command::Rename => cli::rename(&prog, &start_pc, &end_pc.ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a target label"))?)?
         };
     } else {
         eprintln!("Please enter a command");

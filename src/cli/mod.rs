@@ -4,6 +4,7 @@ mod dis;
 mod scan;
 mod import;
 mod backref;
+mod rename;
 mod traits;
 mod main;
 
@@ -11,6 +12,7 @@ pub use dis::dis;
 pub use scan::scan;
 pub use import::import;
 pub use backref::backref;
+pub use rename::rename;
 pub use traits::*;
 pub use main::main;
 
@@ -22,7 +24,8 @@ pub enum Command {
     Scan,
     Disassemble,
     Import,
-    Backreference
+    Backreference,
+    Rename
 }
 
 impl str::FromStr for Command {
@@ -35,6 +38,8 @@ impl str::FromStr for Command {
             "chadtronic-scan" => Ok(Command::Scan),
             "import" => Ok(Command::Import),
             "backrefs" => Ok(Command::Backreference),
+            "name" => Ok(Command::Rename),
+            "rename" => Ok(Command::Rename),
             _ => Err(())
         }
     }
