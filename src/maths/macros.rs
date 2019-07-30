@@ -173,3 +173,15 @@ macro_rules! wrap_existing_impl {
         }
     }
 }
+
+/// Wraps a given non-trait method in a trait for a type.
+macro_rules! wrap_from_str_radix_impl {
+    ($trait_name:ident, $method:ident, $t:ty) => {
+        impl $trait_name for $t {
+            #[inline]
+            fn $method(v: &str, radix: u32) -> Result<Self, ParseIntError> {
+                <$t>::$method(v, radix)
+            }
+        }
+    }
+}

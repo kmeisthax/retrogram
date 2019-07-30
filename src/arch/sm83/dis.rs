@@ -117,7 +117,6 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
-            //TODO: CB prefix
             match mem.read_unit(&(p.clone()+1)).into_concrete() {
                 Some(subop) => {
                     let targetreg = ALU_TARGET_REGS[(subop & 0x07) as usize].clone();

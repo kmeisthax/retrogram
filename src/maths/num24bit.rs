@@ -6,8 +6,9 @@ use std::fmt;
 use std::fmt::{Formatter, Display};
 use std::str::FromStr;
 use std::convert::{TryFrom, TryInto};
+use std::num::ParseIntError;
 use num_traits::{Zero, One, Bounded, CheckedShl};
-use crate::maths::{CheckedSub, WrappingMul};
+use crate::maths::{CheckedSub, WrappingMul, FromStrRadix};
 
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -27,6 +28,14 @@ impl FromStr for u24 {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(u24 {
             v: u32::from_str(s)?
+        })
+    }
+}
+
+impl FromStrRadix for u24 {
+    fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
+        u32::from_str_radix(src, radix).map(|v| u24 {
+            v: v & 0xFFFFFF
         })
     }
 }

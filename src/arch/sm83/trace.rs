@@ -254,10 +254,9 @@ fn trace_sp_adjust(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) ->
 /// 
 ///  * The new state after the execution has been traced
 ///  * The address of the next instruction to execute
-pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> Option<(State, memory::Pointer<Pointer>)> {
+pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> Option<(State, memory::Pointer<Pointer>)> {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
-            //TODO: CB prefix
             match mem.read_unit(&(p.clone()+1)).into_concrete() {
                 Some(subop) => {
                     let targetreg = subop & 0x07;

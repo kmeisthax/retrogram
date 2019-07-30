@@ -1,6 +1,7 @@
 //! My number traits
 
 use std::ops::{Shl, Sub, Mul};
+use std::num::ParseIntError;
 
 /// A trait which indicates the number of left shifts of the given type's
 /// smallest value (1) are required in order to overflow that type.
@@ -189,3 +190,20 @@ wrap_existing_impl!(WrappingMul, wrapping_mul, i32, i32, i32);
 wrap_existing_impl!(WrappingMul, wrapping_mul, i64, i64, i64);
 wrap_existing_impl!(WrappingMul, wrapping_mul, i128, i128, i128);
 wrap_existing_impl!(WrappingMul, wrapping_mul, isize, isize, isize);
+
+pub trait FromStrRadix where Self: Sized {
+    fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError>;
+}
+
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, u8);
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, u16);
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, u32);
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, u64);
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, u128);
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, usize);
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, i8);
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, i16);
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, i32);
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, i64);
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, i128);
+wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, isize);

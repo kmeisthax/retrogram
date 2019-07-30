@@ -2,7 +2,7 @@
 
 use std::{io, fs};
 use num_traits::One;
-use crate::{asm, ast, project, platform, memory, cli, analysis, arch, input};
+use crate::{asm, ast, project, platform, memory, cli, analysis, arch, input, maths};
 
 fn backref_inner<I, SI, F, P, MV, S, IO, DIS, FMT, APARSE>
     (prog: &project::Program,
@@ -11,7 +11,8 @@ fn backref_inner<I, SI, F, P, MV, S, IO, DIS, FMT, APARSE>
         dis: DIS,
         fmt: FMT,
         architectural_ctxt_parse: APARSE) -> io::Result<()>
-    where for <'dw> P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
+    where for <'dw> P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw> +
+            serde::Serialize + maths::FromStrRadix,
         for <'dw> S: memory::Offset<P> + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize + One,
         for <'dw> MV: serde::Deserialize<'dw>,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool,

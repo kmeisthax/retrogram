@@ -13,10 +13,6 @@ fn memlist_op16(regs: Vec<Register>, p: &memory::Pointer<Pointer>, mem: &Bus) ->
     (regs, vec![p.clone(), p.clone()+1], false)
 }
 
-fn memlist_dir16(regs: Vec<Register>, p: &memory::Pointer<Pointer>, mem: &Bus) -> (Vec<Register>, Vec<memory::Pointer<Pointer>>, bool) {
-    (regs, vec![p.clone(), p.clone()+1], true)
-}
-
 fn memlist_hi8(regs: Vec<Register>, p: &memory::Pointer<Pointer>, mem: &Bus) -> (Vec<Register>, Vec<memory::Pointer<Pointer>>, bool) {
     if let Some(val) = mem.read_unit(p).into_concrete() {
         return (regs, vec![mem.minimize_context(p.contextualize(0xFF00 | val as Pointer))], true);
@@ -69,7 +65,6 @@ fn memlist_indir16(regs: Vec<Register>, p: &memory::Pointer<Pointer>, mem: &Bus,
 pub fn prereq(p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) -> (Vec<Register>, Vec<memory::Pointer<Pointer>>, bool) {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
-            //TODO: CB prefix
             match mem.read_unit(&(p.clone()+1)).into_concrete() {
                 Some(subop) => {
                     match ALU_TARGET_REGS[(subop & 0x07) as usize].clone() {
@@ -123,7 +118,7 @@ pub fn prereq(p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) -> (Vec<Re
             match ((op >> 6) & 0x03, (op >> 5) & 0x01, (op >> 3) & 0x01, op & 0x07) {
                 (0, 0, _, 0) => panic!("Instruction shouldn't be decoded here"), /* 00, 08, 10, 18 */
                 (0, 1, _, 0) => memlist_pc8(vec![Register::F], &(p.clone()+1), mem), //jr cond, pc8
-                (0, _, 0, 1) => memlist_dir16(vec![], &(p.clone()+1), mem), //ld r16, u16
+                (0, _, 0, 1) => (vec![], vec![], true), //ld r16, u16
                 (0, _, 1, 1) => (vec![], vec![], true), //add hl, r16
                 (0, _, 0, 2) => (Register::reglist_from_sym(targetmem), vec![], true), //ld [r16], a
                 (0, _, 1, 2) => (Register::reglist_from_sym(targetmem), vec![], true), //ld a, [r16]

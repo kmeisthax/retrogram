@@ -228,12 +228,11 @@ fn decode_bl(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> (Option<I
 
 fn decode_swi(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     let target = offset & 0x00FFFFFF;
-
-    //TODO: when we add THUMB state context, the jump target for SWI needs to be
-    //stripped of it's THUMB state.
-
+    
     //TODO: The jump target can be in high RAM, how do we handle that?
-    (Some(ast::Instruction::new(&format!("SWI{}", condcode(cond)), vec![ast::Operand::int(target)])), 4, true, true, vec![analysis::Reference::new_static_ref(pc.clone(), pc.contextualize(0x00000008), analysis::ReferenceKind::Subroutine)])
+    (Some(ast::Instruction::new(&format!("SWI{}", condcode(cond)), vec![ast::Operand::int(target)])),
+        4, true, true,
+        vec![analysis::Reference::new_static_ref(pc.clone(), pc.contextualize(0x00000008), analysis::ReferenceKind::Subroutine)])
 }
 
 /// Decode a multiply instruction.

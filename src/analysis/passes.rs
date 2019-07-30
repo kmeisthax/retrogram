@@ -148,24 +148,28 @@ pub fn inject_labels<I, SI, F, P, MV, S>
     
     let mut dst_assembly = ast::Section::new(src_assembly.section_name());
     
+    // The set of locations that already have a label
+    let mut labeled_locations_set = HashSet::new();
+
+    for (directive, loc) in src_assembly.iter_directives() {
+        if let ast::Directive::DeclareLabel(_) = directive {
+            labeled_locations_set.insert(loc);
+        }
+    }
+    
     for (directive, loc) in src_assembly.iter_directives() {
         //TODO: If two symbols exist at the same location only one gets injected
         if let Some(sym_id) = db.pointer_symbol(&loc) {
-            //TODO: This needs better lookahead.
-            //TODO: This should validate that the symbol in the ASM matches the
-            //one the database gave us.
-            match directive {
-                ast::Directive::DeclareLabel(_) => dst_assembly.append_directive(directive.clone(), loc.clone()),
-                _ => {
-                    let sym = db.symbol(sym_id).expect("DB sent back invalid symbol ID");
+            if labeled_locations_set.contains(loc) {
+                labeled_locations_set.insert(loc);
 
-                    dst_assembly.append_directive(ast::Directive::DeclareLabel(sym.as_label().clone()), loc.clone());
-                    dst_assembly.append_directive(directive.clone(), loc.clone());
-                }
+                let sym = db.symbol(sym_id).expect("Database gave an invalid symbol ID instead of None!!!");
+
+                dst_assembly.append_directive(ast::Directive::DeclareLabel(sym.as_label().clone()), loc.clone());
             }
-        } else {
-            dst_assembly.append_directive(directive.clone(), loc.clone());
         }
+
+        dst_assembly.append_directive(directive.clone(), loc.clone());
     }
 
     dst_assembly

@@ -2,7 +2,7 @@
 
 use std::{io, fs};
 use std::collections::BTreeSet;
-use crate::{asm, ast, arch, analysis, project, platform, input, memory, cli};
+use crate::{asm, ast, arch, analysis, project, platform, input, memory, cli, maths};
 
 fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(prog: &project::Program,
         start_spec: &str,
@@ -10,7 +10,8 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(prog: &project::Program,
         disassemble: DIS,
         format_and_print: FMT,
         architectural_ctxt_parse: APARSE) -> io::Result<()>
-    where for <'dw> P: memory::PtrNum<MS> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw>,
+    where for <'dw> P: memory::PtrNum<MS> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw> +
+            maths::FromStrRadix,
         for <'dw> MS: memory::Offset<P> + analysis::Mappable + serde::Deserialize<'dw>,
         ast::Operand<I, S, F, P>: Clone,
         ast::Directive<I, S, F, P, MV, MS>: Clone,

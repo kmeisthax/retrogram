@@ -3,7 +3,7 @@
 use std::{io, fs};
 use std::collections::HashSet;
 use num_traits::Zero;
-use crate::{project, platform, arch, ast, input, analysis, database, memory, cli};
+use crate::{project, platform, arch, ast, input, analysis, database, memory, cli, maths};
 
 /// Scan a specific starting PC and add the results of the analysis to the
 /// database.
@@ -74,7 +74,8 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
 /// deserialization. We should figure out a way around that.
 fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, start_spec: &str, disassembler: DIS,
     bus: &memory::Memory<P, MV, S, IO>, architectural_ctxt_parse: APARSE) -> io::Result<()>
-    where for <'dw> P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
+    where for <'dw> P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw> +
+            serde::Serialize + maths::FromStrRadix,
         for <'dw> S: memory::Offset<P> + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
         DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>),
         APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()> {

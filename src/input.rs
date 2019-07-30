@@ -1,7 +1,7 @@
 //! Input utility functions
 
 use std::str::FromStr;
-use crate::{memory, analysis, database, ast, cli};
+use crate::{memory, analysis, database, ast, cli, maths};
 
 /// Parse any pointer specification entered in by a user.
 /// 
@@ -30,7 +30,7 @@ use crate::{memory, analysis, database, ast, cli};
 /// can consume contexts from the list and assign contexts to the pointer.
 pub fn parse_ptr<P, MV, S, IO, APARSE>(text_str: &str, db: &database::Database<P, S>,
     bus: &memory::Memory<P, MV, S, IO>, architecture_parse: APARSE) -> Option<memory::Pointer<P>>
-    where P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
+    where P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + maths::FromStrRadix,
         S: memory::Offset<P>,
         APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()> {
     if let Ok(text_lbl) = ast::Label::from_str(text_str) {
@@ -47,8 +47,7 @@ pub fn parse_ptr<P, MV, S, IO, APARSE>(text_str: &str, db: &database::Database<P
     }
 
     if let Some(pival) = v.get(v.len() - 1) {
-        //TODO: P should directly convert the pointer from str
-        let pval = P::try_from(u64::from_str_radix(pival, 16).ok()?).ok()?;
+        let pval = P::from_str_radix(pival, 16).ok()?;
         let mut ptr = memory::Pointer::from(pval);
         let mut context_slice = &v[..v.len() - 1];
 
