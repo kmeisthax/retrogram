@@ -87,17 +87,17 @@ fn decode_dpinst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, op
     (Some(Instruction::new(&format!("{}{}", dp_opcode, condcode(cond)), shifter_operand(rn, rd, immediate_bit, address_operand))), 4, is_nonfinal, is_nonbranching, target)
 }
 
-fn decode_ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, opcode: u32, rn: Aarch32Register, rd: Aarch32Register, address_operand: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn decode_ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, preindex: u32, offsetadd: u32, byte: u32, wbit: u32, load: u32, rn: Aarch32Register, rd: Aarch32Register, address_operand: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     let shift_imm = (address_operand & 0x00000F80) >> 7;
     let shift = (address_operand & 0x00000060) >> 5; //Shift type
     let rm = Aarch32Register::from_instr((address_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
     let is_shifted = shift_imm != 0 || shift != 0;
 
-    let is_load = opcode & 0x01 == 0x01;
-    let is_wbit = opcode & 0x02 == 0x02;
-    let is_byte = opcode & 0x04 == 0x04;
-    let is_offsetadd = opcode & 0x08 == 0x08;
-    let is_preindex = opcode & 0x10 == 0x10;
+    let is_load = load == 0x01;
+    let is_wbit = wbit == 0x02;
+    let is_byte = byte == 0x04;
+    let is_offsetadd = offsetadd == 0x08;
+    let is_preindex = preindex == 0x10;
 
     let offset12 = match is_offsetadd {
         true => (address_operand & 0xFFF) as i32,
@@ -156,29 +156,26 @@ fn decode_ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, opco
 }
 
 /// Decode an instruction in the LDM/STM instruction space.
-fn decode_ldmstm(p: &memory::Pointer<Pointer>, cond: u32, opcode: u32, rn: Aarch32Register, reglist: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    let op = match opcode & 0x01 {
-        0x00 => "STM",
-        0x01 => "LDM",
-        _ => return (None, 0, false, true, vec![])
+fn decode_ldmstm(p: &memory::Pointer<Pointer>, cond: u32, q: u32, u: u32, s: u32, w: u32, load: u32, rn: Aarch32Register, reglist: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    //TODO: This got refactored, ensure these are still valid
+    let op = match load == 1 {
+        false => "STM",
+        true => "LDM"
     };
 
-    let p_string = match opcode & 0x10 {
-        0x00 => "A",
-        0x10 => "B",
-        _ => return (None, 0, false, true, vec![])
+    let p_string = match q == 1 {
+        false => "A",
+        true => "B"
     };
 
-    let u_string = match opcode & 0x08 {
-        0x00 => "D",
-        0x08 => "I",
-        _ => return (None, 0, false, true, vec![])
+    let u_string = match u == 1 {
+        false => "D",
+        true => "I",
     };
 
-    let rn_operand = match opcode & 0x02 {
-        0x00 => ast::Operand::sym(&rn.to_string()),
-        0x02 => ast::Operand::suff(ast::Operand::sym(&rn.to_string()), "!"),
-        _ => return (None, 0, false, true, vec![])
+    let rn_operand = match w == 1 {
+        false => ast::Operand::sym(&rn.to_string()),
+        true => ast::Operand::suff(ast::Operand::sym(&rn.to_string()), "!"),
     };
 
     let mut reglist_operand = Vec::new();
@@ -203,17 +200,17 @@ fn decode_ldmstm(p: &memory::Pointer<Pointer>, cond: u32, opcode: u32, rn: Aarch
 
     let is_nonfinal = is_nonbranching || cond != 14;
 
-    let reglist_operand = match opcode & 0x04 {
-        0x00 => ast::Operand::wrap("{", reglist_operand, "}"),
-        0x40 => ast::Operand::suff(ast::Operand::wrap("{", reglist_operand, "}"), "^"),
+    let reglist_operand = match s == 1 {
+        false => ast::Operand::wrap("{", reglist_operand, "}"),
+        true => ast::Operand::suff(ast::Operand::wrap("{", reglist_operand, "}"), "^"),
         _ => return (None, 0, false, true, vec![])
     };
 
     (Some(Instruction::new(&format!("{}{}{}{}", op, condcode(cond), u_string, p_string), vec![rn_operand, reglist_operand])), 0, is_nonfinal, is_nonbranching, targets)
 }
 
-fn decode_bl(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    let is_link = (offset & 0x01000000) != 0;
+fn decode_bl(pc: &memory::Pointer<Pointer>, l: u32, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    let is_link = l != 0;
     let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
     let target = pc.contextualize(pc.as_pointer().wrapping_add((offset & 0x007FFFFF) | signbit));
 
@@ -311,35 +308,36 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
         let cond = (instr & 0xF0000000) >> 28;
         let opcat = (instr & 0x0E000000) >> 25;
         let opcode = (instr & 0x01F00000) >> 20;
+        let pbit = (instr & 0x01000000) >> 24;
+        let u = (instr & 0x00800000) >> 23;
+        let b = (instr & 0x00400000) >> 22;
+        let w = (instr & 0x00200000) >> 21;
+        let l = (instr & 0x00100000) >> 20;
         let rn = Aarch32Register::from_instr((instr & 0x000F0000) >> 16).expect("What the heck? The register definitely should have parsed");
         let rd = Aarch32Register::from_instr((instr & 0x0000F000) >> 12).expect("What the heck? The register definitely should have parsed");
         let lsimmed = (instr & 0x00000FFF) >> 0; //Load-Store Immediate (12bit)
-        let is_misc = opcode & 0x19 == 0x10; //invalid S bit for opcode
         let is_multiply = lsimmed & 0x90 == 0x90; //invalid shifter operand
         let is_mediabit = lsimmed & 0x10 == 0x10; //also is for indicating a coprocessor register xfr
-        let is_undefine = opcode & 0x1B == 0x10; //invalid S bit and not mov-imm
-        let is_archudef = opcode == 0x1F && lsimmed & 0x0F0 == 0x0F0;
-        let is_swilink_ = opcode & 0x10 == 0x10; //Upper bit of opcode indicates link and SWI
+        let is_archudef = lsimmed & 0xF0 == 0xF0;
 
-        match (cond, opcat) {
-            (0xF, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
-            (_, 0) if is_multiply => decode_mul(p, cond, opcode, rn, rd, lsimmed), //Multiply/LS extension space
-            (_, 0) if is_misc => (None, 0, false, true, vec![]), //Misc extension space
+        match (cond, opcat, pbit, u, b, w, l) {
+            (0xF, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
+            (_, 0, _, _, _, _, _) if is_multiply => decode_mul(p, cond, opcode, rn, rd, lsimmed), //Multiply/LS extension space
+            (_, 0, 1, 0, _, _, 0) => (None, 0, false, true, vec![]), //Misc extension space
             //TODO: Misc is supposed to be opcode 0b10xx, but the ARM ARM instruction encoding also says some bits of the shift operand should be set too.
-            (_, 0) => decode_dpinst(p, cond, 0, opcode, rn, rd, lsimmed), //Data processing with shift
-            (_, 1) if is_misc & is_undefine => (None, 0, false, true, vec![]), //Undefined (as of ARM DDI 0100I)
-            (_, 1) if is_misc => (None, 0, false, true, vec![]), //Move to status register
-            (_, 1) => decode_dpinst(p, cond, 1, opcode, rn, rd, lsimmed), //Data processing with immediate
-            (_, 2) => decode_ldst(p, cond, 0, opcode, rn, rd, lsimmed), //Load/store with immediate offset
-            (_, 3) if is_archudef => (None, 0, false, true, vec![]), //Architecturally undefined space
-            (_, 3) if is_mediabit => (None, 0, false, true, vec![]), //Media extension space
-            (_, 3) => decode_ldst(p, cond, 1, opcode, rn, rd, lsimmed), //Load/store with register offset
-            (_, 4) => decode_ldmstm(p, cond, opcode, rn, instr & 0x0000FFFF), //Load/store multiple
-            (_, 5) => decode_bl(&p, cond, instr), //Branch with or without link
-            (_, 6) => (None, 0, false, true, vec![]), //Coprocessor load/store and doubleword xfrs
-            (_, 7) if is_swilink_ => decode_swi(&p, cond, instr), //Software interrupt
-            (_, 7) if is_mediabit => (None, 0, false, true, vec![]), //Coprocessor register transfer
-            (_, 7) => (None, 0, false, true, vec![]), //Coprocessor data processing
+            (_, 0, _, _, _, _, _) => decode_dpinst(p, cond, 0, opcode, rn, rd, lsimmed), //Data processing with shift
+            (_, 1, 1, 0, _, 0, 0) => (None, 0, false, true, vec![]), //Undefined (as of ARM DDI 0100I)
+            (_, 1, 1, 0, r, 1, 0) => (None, 0, false, true, vec![]), //Move to status register
+            (_, 1, _, _, _, _, _) => decode_dpinst(p, cond, 1, opcode, rn, rd, lsimmed), //Data processing with immediate
+            (_, 2, q, u, b, w, l) => decode_ldst(p, cond, 0, q, u, b, w, l, rn, rd, lsimmed), //Load/store with immediate offset
+            (_, 3, 1, 1, 1, 1, 1) if is_archudef => (None, 0, false, true, vec![]), //Architecturally undefined space
+            (_, 3, _, _, _, _, _) if is_mediabit => (None, 0, false, true, vec![]), //Media extension space
+            (_, 3, q, u, b, w, l) => decode_ldst(p, cond, 1, q, u, b, w, l, rn, rd, lsimmed), //Load/store with register offset
+            (_, 4, q, u, s, w, l) => decode_ldmstm(p, cond, q, u, s, w, l, rn, instr & 0x0000FFFF), //Load/store multiple
+            (_, 5, l, _, _, _, _) => decode_bl(&p, cond, l, instr), //Branch with or without link
+            (_, 6, q, u, n, w, l) => (None, 0, false, true, vec![]), //Coprocessor load/store and doubleword xfrs
+            (_, 7, 1, _, _, _, _) => decode_swi(&p, cond, instr), //Software interrupt
+            (_, 7, 0, _, _, _, l) => (None, 0, false, true, vec![]), //Coprocessor instruction
             _ => (None, 0, false, true, vec![])
         }
     } else {
