@@ -67,6 +67,9 @@ The program name specified must match a valid program name specified in the
    source registered in your project.
  * `backrefs` - List all code that references a particular memory address,
    either as a jump/call target or as a memory location.
+ * `rename` - Rename a given location, giving it a new label. This can be used
+   to either rename a label or assign one to an unlabeled location. You must
+   provide a label string after the `start_pc` argument.
 
 ### Available parameters
 
