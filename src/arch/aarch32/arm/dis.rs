@@ -1,6 +1,7 @@
 //! Static disassembler for AArch32
 
 use crate::{memory, analysis, ast, reg};
+use crate::ast::Operand as op;
 use crate::arch::aarch32::{Aarch32Register, Pointer, Offset, Operand, Instruction, Bus};
 use crate::arch::aarch32::arm::condcode;
 
@@ -202,8 +203,7 @@ fn decode_ldmstm(p: &memory::Pointer<Pointer>, cond: u32, q: u32, u: u32, s: u32
 
     let reglist_operand = match s == 1 {
         false => ast::Operand::wrap("{", reglist_operand, "}"),
-        true => ast::Operand::suff(ast::Operand::wrap("{", reglist_operand, "}"), "^"),
-        _ => return (None, 0, false, true, vec![])
+        true => ast::Operand::suff(ast::Operand::wrap("{", reglist_operand, "}"), "^")
     };
 
     (Some(Instruction::new(&format!("{}{}{}{}", op, condcode(cond), u_string, p_string), vec![rn_operand, reglist_operand])), 0, is_nonfinal, is_nonbranching, targets)
@@ -285,6 +285,35 @@ fn decode_mul(p: &memory::Pointer<Pointer>, cond: u32, opcode: u32, rd: Aarch32R
     }
 }
 
+fn msr(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, r: u32, rn_val: u32, lsimmed: u32, rd: Aarch32Register, rn: Aarch32Register)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    let c = match (rn_val & 0x1) >> 0 != 0 {
+        true => "c",
+        false => ""
+    };
+    let x = match (rn_val & 0x2) >> 1 != 0 {
+        true => "x",
+        false => ""
+    };
+    let s = match (rn_val & 0x4) >> 2 != 0 {
+        true => "s",
+        false => ""
+    };
+    let f = match (rn_val & 0x8) >> 3 != 0 {
+        true => "f",
+        false => ""
+    };
+    let xpsr = match r != 0 {
+        false => "CPSR",
+        true => "SPSR"
+    };
+
+    //TODO: The syntax here is wrong, since msr only takes one register.
+    let mut op_list = shifter_operand(rn, rd, immediate_bit, lsimmed);
+    op_list.insert(0, op::sym(&format!("{}_{}{}{}{}", xpsr, c, x, s, f)));
+    (Some(Instruction::new(&format!("MSR{}", condcode(cond)), op_list)), 4, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -313,8 +342,10 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
         let b = (instr & 0x00400000) >> 22;
         let w = (instr & 0x00200000) >> 21;
         let l = (instr & 0x00100000) >> 20;
-        let rn = Aarch32Register::from_instr((instr & 0x000F0000) >> 16).expect("What the heck? The register definitely should have parsed");
-        let rd = Aarch32Register::from_instr((instr & 0x0000F000) >> 12).expect("What the heck? The register definitely should have parsed");
+        let rn_val = (instr & 0x000F0000) >> 16;
+        let rd_val = (instr & 0x0000F000) >> 12;
+        let rn = Aarch32Register::from_instr(rn_val).expect("What the heck? The register definitely should have parsed");
+        let rd = Aarch32Register::from_instr(rd_val).expect("What the heck? The register definitely should have parsed");
         let lsimmed = (instr & 0x00000FFF) >> 0; //Load-Store Immediate (12bit)
         let is_multiply = lsimmed & 0x90 == 0x90; //invalid shifter operand
         let is_mediabit = lsimmed & 0x10 == 0x10; //also is for indicating a coprocessor register xfr
@@ -327,7 +358,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
             //TODO: Misc is supposed to be opcode 0b10xx, but the ARM ARM instruction encoding also says some bits of the shift operand should be set too.
             (_, 0, _, _, _, _, _) => decode_dpinst(p, cond, 0, opcode, rn, rd, lsimmed), //Data processing with shift
             (_, 1, 1, 0, _, 0, 0) => (None, 0, false, true, vec![]), //Undefined (as of ARM DDI 0100I)
-            (_, 1, 1, 0, r, 1, 0) => (None, 0, false, true, vec![]), //Move to status register
+            (_, 1, 1, 0, r, 1, 0) => msr(p, cond, 1, r, rn_val, lsimmed, rn, rd), //Move to status register
             (_, 1, _, _, _, _, _) => decode_dpinst(p, cond, 1, opcode, rn, rd, lsimmed), //Data processing with immediate
             (_, 2, q, u, b, w, l) => decode_ldst(p, cond, 0, q, u, b, w, l, rn, rd, lsimmed), //Load/store with immediate offset
             (_, 3, 1, 1, 1, 1, 1) if is_archudef => (None, 0, false, true, vec![]), //Architecturally undefined space

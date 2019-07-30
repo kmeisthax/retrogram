@@ -33,7 +33,7 @@ This is what a retrogram project file might look like:
         },
         "data_sources": {
             "mygame_sym": {
-                "format": "rgbds_sym",
+                "format": "rgbds_symbol",
                 "files": ["mygame.sym"],
                 "programs": ["mygame"]
             }
