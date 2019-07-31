@@ -367,27 +367,41 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
         let rn = Aarch32Register::from_instr(rn_val).expect("What the heck? The register definitely should have parsed");
         let rd = Aarch32Register::from_instr(rd_val).expect("What the heck? The register definitely should have parsed");
         let lsimmed = (instr & 0x00000FFF) >> 0; //Load-Store Immediate (12bit)
-        let is_multiply = lsimmed & 0x90 == 0x90; //invalid shifter operand
+        let miscop = (instr & 0x000000F0) >> 4; //Misc operand bits
         let is_mediabit = lsimmed & 0x10 == 0x10; //also is for indicating a coprocessor register xfr
-        let is_archudef = lsimmed & 0xF0 == 0xF0;
 
         match (cond, opcat, pbit, u, b, w, l) {
             (0xF, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
-            (_, 0, _, _, _, _, _) if is_multiply => decode_mul(p, cond, opcode, rn, rd, lsimmed), //Multiply/LS extension space
-            (_, 0, 1, 0, r, 1, 0) => msr(cond, 0, r, rn_val, lsimmed), //Move to status register
-            (_, 0, 1, 0, r, 0, 0) => mrs(cond, r, rd), //Move from status register
-            (_, 0, 1, 0, _, _, 0) => (None, 0, false, true, vec![]), //Misc extension space
-            (_, 0, _, _, _, _, _) => decode_dpinst(p, cond, 0, opcode, rn, rd, lsimmed), //Data processing with shift
+            (_, 0, 1, 0, r, o, 0) => match (r, o, (miscop & 0x8) >> 3, (miscop & 0x7)) {
+                (r, 0, 0, 0) => mrs(cond, r, rd),
+                (r, 1, 0, 0) => msr(cond, 0, r, rn_val, lsimmed),
+                (0, 1, 0, 1) => (None, 0, false, true, vec![]), //BX to Thumb
+                (0, 1, 0, 2) => (None, 0, false, true, vec![]), //BX to Jazelle DBX
+                (1, 1, 0, 1) => (None, 0, false, true, vec![]), //Count Leading Zeroes
+                (0, 1, 0, 3) => (None, 0, false, true, vec![]), //BLX to Thumb
+                (_, _, 0, 5) => (None, 0, false, true, vec![]), //Saturation arithmetic
+                (0, 1, 0, 7) => (None, 0, false, true, vec![]), //Software Breakpoint
+                (_, _, 1, c) if (c & 1) == 0 => (None, 0, false, true, vec![]), //Signed multiply
+                _ => (None, 0, false, true, vec![])
+            },
+            (_, 0, q, u, b, w, l) => match (q, (miscop & 0x08) >> 3, (miscop & 0x06) >> 1, (miscop & 1)) {
+                (0, 1, 0, 1) => decode_mul(p, cond, opcode, rn, rd, lsimmed),
+                (_, 1, op, 1) => (None, 0, false, true, vec![]), //Load/store extension space
+                (_, _, sh, 0) => decode_dpinst(p, cond, 0, opcode, rn, rd, lsimmed),
+                (_, 0, sh, 1) => decode_dpinst(p, cond, 0, opcode, rn, rd, lsimmed),
+                _ => (None, 0, false, true, vec![])
+            },
             (_, 1, 1, 0, _, 0, 0) => (None, 0, false, true, vec![]), //Undefined (as of ARM DDI 0100I)
             (_, 1, 1, 0, r, 1, 0) => msr(cond, 1, r, rn_val, lsimmed), //Move to status register
             (_, 1, _, _, _, _, _) => decode_dpinst(p, cond, 1, opcode, rn, rd, lsimmed), //Data processing with immediate
             (_, 2, q, u, b, w, l) => decode_ldst(p, cond, 0, q, u, b, w, l, rn, rd, lsimmed), //Load/store with immediate offset
-            (_, 3, 1, 1, 1, 1, 1) if is_archudef => (None, 0, false, true, vec![]), //Architecturally undefined space
+            (_, 3, 1, 1, 1, 1, 1) if miscop == 0xF => (None, 0, false, true, vec![]), //Architecturally undefined space
             (_, 3, _, _, _, _, _) if is_mediabit => (None, 0, false, true, vec![]), //Media extension space
             (_, 3, q, u, b, w, l) => decode_ldst(p, cond, 1, q, u, b, w, l, rn, rd, lsimmed), //Load/store with register offset
             (_, 4, q, u, s, w, l) => decode_ldmstm(p, cond, q, u, s, w, l, rn, instr & 0x0000FFFF), //Load/store multiple
             (_, 5, l, _, _, _, _) => decode_bl(&p, cond, l, instr), //Branch with or without link
-            (_, 6, q, u, n, w, l) => (None, 0, false, true, vec![]), //Coprocessor load/store and doubleword xfrs
+            (_, 6, 0, 0, n, 0, l) => (None, 0, false, true, vec![]), //Coprocessor Load/Store
+            (_, 6, q, u, n, w, l) => (None, 0, false, true, vec![]), //Doubleword xfrs
             (_, 7, 1, _, _, _, _) => decode_swi(&p, cond, instr), //Software interrupt
             (_, 7, 0, _, _, _, l) => (None, 0, false, true, vec![]), //Coprocessor instruction
             _ => (None, 0, false, true, vec![])
