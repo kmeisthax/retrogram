@@ -334,6 +334,32 @@ fn mrs(cond: u32, r: u32, rd: Aarch32Register)
     (Some(Instruction::new(&format!("MRS{}", condcode(cond)), op_list)), 4, true, true, vec![])
 }
 
+fn bx(p: &memory::Pointer<Pointer>, cond: u32, lsimmed: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    let rm_val = lsimmed & 0xF;
+    let rm = Aarch32Register::from_instr(rm_val).expect("Expected a valid RM");
+
+    //BX PC is completely valid! And also dumb.
+    let target_pc = p.contextualize(p.as_pointer().clone() + 8);
+    let jumpref = match rm {
+        Aarch32Register::R15 => analysis::Reference::new_static_ref(p.clone(), target_pc, analysis::ReferenceKind::Code),
+        _ => analysis::Reference::new_dyn_ref(p.clone(), analysis::ReferenceKind::Code)
+    };
+
+    (Some(Instruction::new(&format!("BX{}", condcode(cond)), vec![op::sym(&rm.to_string())])), 4, false, false, vec![jumpref])
+}
+
+fn bxj(cond: u32, lsimmed: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    let rm_val = lsimmed & 0xF;
+    let rm = Aarch32Register::from_instr(rm_val).expect("Expected a valid RM");
+
+    //While this instruction is technically a branch, it's designed for an
+    //obsolete ARM hardware extension for directly executing Java bytecode. No
+    //technical details of how Jazelle works have ever been released and
+    //analysis of a Jazelle program would probably require adding a JVM disasm
+    //that I don't want to write.
+    (Some(Instruction::new(&format!("BXJ{}", condcode(cond)), vec![op::sym(&rm.to_string())])), 4, false, false, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -375,8 +401,8 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
             (_, 0, 1, 0, r, o, 0) => match (r, o, (miscop & 0x8) >> 3, (miscop & 0x7)) {
                 (r, 0, 0, 0) => mrs(cond, r, rd),
                 (r, 1, 0, 0) => msr(cond, 0, r, rn_val, lsimmed),
-                (0, 1, 0, 1) => (None, 0, false, true, vec![]), //BX to Thumb
-                (0, 1, 0, 2) => (None, 0, false, true, vec![]), //BX to Jazelle DBX
+                (0, 1, 0, 1) => bx(p, cond, lsimmed), //BX to Thumb
+                (0, 1, 0, 2) => bxj(cond, lsimmed), //BX to Jazelle DBX
                 (1, 1, 0, 1) => (None, 0, false, true, vec![]), //Count Leading Zeroes
                 (0, 1, 0, 3) => (None, 0, false, true, vec![]), //BLX to Thumb
                 (_, _, 0, 5) => (None, 0, false, true, vec![]), //Saturation arithmetic
