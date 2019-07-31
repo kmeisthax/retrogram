@@ -360,6 +360,13 @@ fn bxj(cond: u32, lsimmed: u32) -> (Option<Instruction>, Offset, bool, bool, Vec
     (Some(Instruction::new(&format!("BXJ{}", condcode(cond)), vec![op::sym(&rm.to_string())])), 4, false, false, vec![])
 }
 
+fn clz(cond: u32, rd: Aarch32Register, lsimmed: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    let rm_val = lsimmed & 0xF;
+    let rm = Aarch32Register::from_instr(rm_val).expect("Expected a valid RM");
+
+    (Some(Instruction::new(&format!("CLZ{}", condcode(cond)), vec![op::sym(&rd.to_string()), op::sym(&rm.to_string())])), 4, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -403,7 +410,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
                 (r, 1, 0, 0) => msr(cond, 0, r, rn_val, lsimmed),
                 (0, 1, 0, 1) => bx(p, cond, lsimmed), //BX to Thumb
                 (0, 1, 0, 2) => bxj(cond, lsimmed), //BX to Jazelle DBX
-                (1, 1, 0, 1) => (None, 0, false, true, vec![]), //Count Leading Zeroes
+                (1, 1, 0, 1) => clz(cond, rd, lsimmed), //Count Leading Zeroes
                 (0, 1, 0, 3) => (None, 0, false, true, vec![]), //BLX to Thumb
                 (_, _, 0, 5) => (None, 0, false, true, vec![]), //Saturation arithmetic
                 (0, 1, 0, 7) => (None, 0, false, true, vec![]), //Software Breakpoint
