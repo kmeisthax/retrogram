@@ -285,7 +285,7 @@ fn decode_mul(p: &memory::Pointer<Pointer>, cond: u32, opcode: u32, rd: Aarch32R
     }
 }
 
-fn msr(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, r: u32, rn_val: u32, lsimmed: u32, rd: Aarch32Register, rn: Aarch32Register)
+fn msr(cond: u32, immediate_bit: u32, r: u32, rn_val: u32, shifter_operand: u32)
     -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     let c = match (rn_val & 0x1) >> 0 != 0 {
         true => "c",
@@ -308,10 +308,30 @@ fn msr(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, r: u32, rn_v
         true => "SPSR"
     };
 
-    //TODO: The syntax here is wrong, since msr only takes one register.
-    let mut op_list = shifter_operand(rn, rd, immediate_bit, lsimmed);
-    op_list.insert(0, op::sym(&format!("{}_{}{}{}{}", xpsr, c, x, s, f)));
+    let rotate_imm = (shifter_operand & 0x00000F00) >> 8 * 2; //Rotate immediate. Is shifted for some reason
+    let rm = Aarch32Register::from_instr((shifter_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
+    let immed_8 = (shifter_operand & 0x000000FF) >> 0; //Data Immediate
+    let xpsr = op::sym(&format!("{}_{}{}{}{}", xpsr, c, x, s, f));
+
+    let op_list = match immediate_bit {
+        1 => vec!(xpsr, Operand::int(immed_8 << rotate_imm)),
+        0 => vec!(xpsr, Operand::sym(&rm.to_string())),
+        _ => vec!(Operand::miss())
+    };
+
     (Some(Instruction::new(&format!("MSR{}", condcode(cond)), op_list)), 4, true, true, vec![])
+}
+
+fn mrs(cond: u32, r: u32, rd: Aarch32Register)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    let xpsr = match r != 0 {
+        false => "CPSR",
+        true => "SPSR"
+    };
+    
+    let op_list = vec![Operand::sym(&rd.to_string()), op::sym(xpsr)];
+
+    (Some(Instruction::new(&format!("MRS{}", condcode(cond)), op_list)), 4, true, true, vec![])
 }
 
 /// Disassemble the instruction at `p` in `mem`.
@@ -354,11 +374,12 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
         match (cond, opcat, pbit, u, b, w, l) {
             (0xF, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
             (_, 0, _, _, _, _, _) if is_multiply => decode_mul(p, cond, opcode, rn, rd, lsimmed), //Multiply/LS extension space
+            (_, 0, 1, 0, r, 1, 0) => msr(cond, 0, r, rn_val, lsimmed), //Move to status register
+            (_, 0, 1, 0, r, 0, 0) => mrs(cond, r, rd), //Move from status register
             (_, 0, 1, 0, _, _, 0) => (None, 0, false, true, vec![]), //Misc extension space
-            //TODO: Misc is supposed to be opcode 0b10xx, but the ARM ARM instruction encoding also says some bits of the shift operand should be set too.
             (_, 0, _, _, _, _, _) => decode_dpinst(p, cond, 0, opcode, rn, rd, lsimmed), //Data processing with shift
             (_, 1, 1, 0, _, 0, 0) => (None, 0, false, true, vec![]), //Undefined (as of ARM DDI 0100I)
-            (_, 1, 1, 0, r, 1, 0) => msr(p, cond, 1, r, rn_val, lsimmed, rn, rd), //Move to status register
+            (_, 1, 1, 0, r, 1, 0) => msr(cond, 1, r, rn_val, lsimmed), //Move to status register
             (_, 1, _, _, _, _, _) => decode_dpinst(p, cond, 1, opcode, rn, rd, lsimmed), //Data processing with immediate
             (_, 2, q, u, b, w, l) => decode_ldst(p, cond, 0, q, u, b, w, l, rn, rd, lsimmed), //Load/store with immediate offset
             (_, 3, 1, 1, 1, 1, 1) if is_archudef => (None, 0, false, true, vec![]), //Architecturally undefined space
