@@ -406,6 +406,18 @@ fn clz(cond: u32, rd: Aarch32Register, rm: Aarch32Register)
     (Some(Instruction::new(&format!("CLZ{}", condcode(cond)), vec![op::sym(&rd.to_string()), op::sym(&rm.to_string())])), 4, true, true, vec![])
 }
 
+fn blx(p: &memory::Pointer<Pointer>, cond: u32, rm: Aarch32Register)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    //BX PC is completely valid! And also dumb.
+    let target_pc = p.contextualize(p.as_pointer().clone() + 8);
+    let jumpref = match rm {
+        Aarch32Register::R15 => refr::new_static_ref(p.clone(), target_pc, refkind::Code),
+        _ => refr::new_dyn_ref(p.clone(), refkind::Code)
+    };
+
+    (Some(Instruction::new(&format!("BLX{}", condcode(cond)), vec![op::sym(&rm.to_string())])), 4, true, true, vec![jumpref])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -454,7 +466,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
                 (0, 1, 0, 1) => bx(p, cond, rm), //BX to Thumb
                 (0, 1, 0, 2) => bxj(cond, rm), //BX to Jazelle DBX
                 (1, 1, 0, 1) => clz(cond, rd, rm), //Count Leading Zeroes
-                (0, 1, 0, 3) => (None, 0, false, true, vec![]), //BLX to Thumb
+                (0, 1, 0, 3) => blx(p, cond, rm), //BLX to Thumb
                 (_, _, 0, 5) => (None, 0, false, true, vec![]), //Saturation arithmetic
                 (0, 1, 0, 7) => (None, 0, false, true, vec![]), //Software Breakpoint
                 (_, _, 1, c) if (c & 1) == 0 => (None, 0, false, true, vec![]), //Signed multiply
