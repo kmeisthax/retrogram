@@ -4,7 +4,7 @@ use crate::{memory, analysis, ast, reg};
 use crate::ast::Operand as op;
 use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
-use crate::arch::aarch32::{Aarch32Register, Pointer, Offset, Operand, Instruction, Bus};
+use crate::arch::aarch32::{Aarch32Register, Pointer, Offset, Operand, Instruction, Bus, THUMB_STATE};
 use crate::arch::aarch32::arm::condcode;
 
 fn shift_symbol(shift: u32, shift_imm: u32) -> &'static str {
@@ -246,7 +246,7 @@ fn decode_bl(pc: &memory::Pointer<Pointer>, l: u32, cond: u32, offset: u32)
     
     let is_link = l != 0;
     let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
-    let target = pc.contextualize(pc.as_pointer().wrapping_add((offset & 0x007FFFFF) | signbit));
+    let target = pc.contextualize(pc.as_pointer().wrapping_add(((offset & 0x007FFFFF) | signbit) << 2));
 
     let is_nonbranching = is_link;
     let is_nonfinal = is_nonbranching || cond != 14;
@@ -406,7 +406,7 @@ fn clz(cond: u32, rd: Aarch32Register, rm: Aarch32Register)
     (Some(Instruction::new(&format!("CLZ{}", condcode(cond)), vec![op::sym(&rd.to_string()), op::sym(&rm.to_string())])), 4, true, true, vec![])
 }
 
-fn blx(p: &memory::Pointer<Pointer>, cond: u32, rm: Aarch32Register)
+fn blx_register(p: &memory::Pointer<Pointer>, cond: u32, rm: Aarch32Register)
     -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     //BX PC is completely valid! And also dumb.
     let target_pc = p.contextualize(p.as_pointer().clone() + 8);
@@ -416,6 +416,17 @@ fn blx(p: &memory::Pointer<Pointer>, cond: u32, rm: Aarch32Register)
     };
 
     (Some(Instruction::new(&format!("BLX{}", condcode(cond)), vec![op::sym(&rm.to_string())])), 4, true, true, vec![jumpref])
+}
+
+fn blx_immediate(p: &memory::Pointer<Pointer>, h: u32, offset: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
+    let mut target = p.contextualize(p.as_pointer().wrapping_add(((offset & 0x007FFFFF) | signbit) << 2 | h << 1));
+    target.set_arch_context(THUMB_STATE, reg::Symbolic::from(1));
+    let jumpref = refr::new_static_ref(p.clone(), target.clone(), refkind::Subroutine);
+
+    (Some(Instruction::new("BLX", vec![op::cptr(target)])), 4, false, false, vec![jumpref])
 }
 
 /// Disassemble the instruction at `p` in `mem`.
@@ -459,14 +470,15 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
         let is_mediabit = lsimmed & 0x10 == 0x10; //also is for indicating a coprocessor register xfr
 
         match (cond, opcat, pbit, u, b, w, l) {
-            (0xF, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
+            (16, 5, h, _, _, _, _) => blx_immediate(p, h, instr),
+            (16, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
             (_, 0, 1, 0, r, o, 0) => match (r, o, (miscop & 0x8) >> 3, (miscop & 0x7)) {
                 (r, 0, 0, 0) => mrs(cond, r, rd),
                 (r, 1, 0, 0) => msr(cond, 0, r, rn_val, lsimmed),
                 (0, 1, 0, 1) => bx(p, cond, rm), //BX to Thumb
                 (0, 1, 0, 2) => bxj(cond, rm), //BX to Jazelle DBX
                 (1, 1, 0, 1) => clz(cond, rd, rm), //Count Leading Zeroes
-                (0, 1, 0, 3) => blx(p, cond, rm), //BLX to Thumb
+                (0, 1, 0, 3) => blx_register(p, cond, rm), //BLX to Thumb
                 (_, _, 0, 5) => (None, 0, false, true, vec![]), //Saturation arithmetic
                 (0, 1, 0, 7) => (None, 0, false, true, vec![]), //Software Breakpoint
                 (_, _, 1, c) if (c & 1) == 0 => (None, 0, false, true, vec![]), //Signed multiply
