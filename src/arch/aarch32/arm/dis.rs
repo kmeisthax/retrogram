@@ -334,10 +334,7 @@ fn mrs(cond: u32, r: u32, rd: Aarch32Register)
     (Some(Instruction::new(&format!("MRS{}", condcode(cond)), op_list)), 4, true, true, vec![])
 }
 
-fn bx(p: &memory::Pointer<Pointer>, cond: u32, lsimmed: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    let rm_val = lsimmed & 0xF;
-    let rm = Aarch32Register::from_instr(rm_val).expect("Expected a valid RM");
-
+fn bx(p: &memory::Pointer<Pointer>, cond: u32, rm: Aarch32Register) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     //BX PC is completely valid! And also dumb.
     let target_pc = p.contextualize(p.as_pointer().clone() + 8);
     let jumpref = match rm {
@@ -348,10 +345,7 @@ fn bx(p: &memory::Pointer<Pointer>, cond: u32, lsimmed: u32) -> (Option<Instruct
     (Some(Instruction::new(&format!("BX{}", condcode(cond)), vec![op::sym(&rm.to_string())])), 4, false, false, vec![jumpref])
 }
 
-fn bxj(cond: u32, lsimmed: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    let rm_val = lsimmed & 0xF;
-    let rm = Aarch32Register::from_instr(rm_val).expect("Expected a valid RM");
-
+fn bxj(cond: u32, rm: Aarch32Register) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     //While this instruction is technically a branch, it's designed for an
     //obsolete ARM hardware extension for directly executing Java bytecode. No
     //technical details of how Jazelle works have ever been released and
@@ -360,10 +354,7 @@ fn bxj(cond: u32, lsimmed: u32) -> (Option<Instruction>, Offset, bool, bool, Vec
     (Some(Instruction::new(&format!("BXJ{}", condcode(cond)), vec![op::sym(&rm.to_string())])), 4, false, false, vec![])
 }
 
-fn clz(cond: u32, rd: Aarch32Register, lsimmed: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    let rm_val = lsimmed & 0xF;
-    let rm = Aarch32Register::from_instr(rm_val).expect("Expected a valid RM");
-
+fn clz(cond: u32, rd: Aarch32Register, rm: Aarch32Register) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     (Some(Instruction::new(&format!("CLZ{}", condcode(cond)), vec![op::sym(&rd.to_string()), op::sym(&rm.to_string())])), 4, true, true, vec![])
 }
 
@@ -397,8 +388,10 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
         let l = (instr & 0x00100000) >> 20;
         let rn_val = (instr & 0x000F0000) >> 16;
         let rd_val = (instr & 0x0000F000) >> 12;
+        let rm_val = (instr & 0x0000000F) >> 0;
         let rn = Aarch32Register::from_instr(rn_val).expect("What the heck? The register definitely should have parsed");
         let rd = Aarch32Register::from_instr(rd_val).expect("What the heck? The register definitely should have parsed");
+        let rm = Aarch32Register::from_instr(rm_val).expect("Could not parse RM... somehow?!");
         let lsimmed = (instr & 0x00000FFF) >> 0; //Load-Store Immediate (12bit)
         let miscop = (instr & 0x000000F0) >> 4; //Misc operand bits
         let is_mediabit = lsimmed & 0x10 == 0x10; //also is for indicating a coprocessor register xfr
@@ -408,9 +401,9 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instructi
             (_, 0, 1, 0, r, o, 0) => match (r, o, (miscop & 0x8) >> 3, (miscop & 0x7)) {
                 (r, 0, 0, 0) => mrs(cond, r, rd),
                 (r, 1, 0, 0) => msr(cond, 0, r, rn_val, lsimmed),
-                (0, 1, 0, 1) => bx(p, cond, lsimmed), //BX to Thumb
-                (0, 1, 0, 2) => bxj(cond, lsimmed), //BX to Jazelle DBX
-                (1, 1, 0, 1) => clz(cond, rd, lsimmed), //Count Leading Zeroes
+                (0, 1, 0, 1) => bx(p, cond, rm), //BX to Thumb
+                (0, 1, 0, 2) => bxj(cond, rm), //BX to Jazelle DBX
+                (1, 1, 0, 1) => clz(cond, rd, rm), //Count Leading Zeroes
                 (0, 1, 0, 3) => (None, 0, false, true, vec![]), //BLX to Thumb
                 (_, _, 0, 5) => (None, 0, false, true, vec![]), //Saturation arithmetic
                 (0, 1, 0, 7) => (None, 0, false, true, vec![]), //Software Breakpoint
