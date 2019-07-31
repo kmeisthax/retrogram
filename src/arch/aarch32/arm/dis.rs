@@ -2,6 +2,8 @@
 
 use crate::{memory, analysis, ast, reg};
 use crate::ast::Operand as op;
+use crate::analysis::Reference as refr;
+use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32::{Aarch32Register, Pointer, Offset, Operand, Instruction, Bus};
 use crate::arch::aarch32::arm::condcode;
 
@@ -25,16 +27,24 @@ fn shifter_operand(rn: Aarch32Register, rd: Aarch32Register, immediate_bit: u32,
     let immed_8 = (shifter_operand & 0x000000FF) >> 0; //Data Immediate
 
     match (immediate_bit, shift_imm, is_shift_immed) {
-        (1, _, _) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::int(immed_8 << rotate_imm)),
-        (0, 0, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm))),
-        (0, _, 0) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)),
-        (0, _, 1) => vec!(Operand::sym(&rd.to_string()), Operand::sym(&rn.to_string()), Operand::sym(&rm.to_string()), Operand::sym(shift_symbol(shift, shift_imm)), Operand::sym(&rm.to_string())),
-        _ => vec!(Operand::miss())
+        (1, _, _) => vec!(op::sym(&rd.to_string()), op::sym(&rn.to_string()), op::int(immed_8 << rotate_imm)),
+        (0, 0, 0) => vec!(op::sym(&rd.to_string()), op::sym(&rn.to_string()), op::sym(&rm.to_string()), op::sym(shift_symbol(shift, shift_imm))),
+        (0, _, 0) => vec!(op::sym(&rd.to_string()), op::sym(&rn.to_string()), op::sym(&rm.to_string()), op::sym(shift_symbol(shift, shift_imm)), op::int(shift_imm)),
+        (0, _, 1) => vec!(op::sym(&rd.to_string()), op::sym(&rn.to_string()), op::sym(&rm.to_string()), op::sym(shift_symbol(shift, shift_imm)), op::sym(&rm.to_string())),
+        _ => vec!(op::miss())
     }
 }
 
 /// Decode a 5-bit opcode field as if it was for a data processing instruction
-fn decode_dpinst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, opcode: u32, rn: Aarch32Register, rd: Aarch32Register, address_operand: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn decode_dpinst(p: &memory::Pointer<Pointer>,
+        cond: u32,
+        immediate_bit: u32,
+        opcode: u32,
+        rn: Aarch32Register,
+        rd: Aarch32Register,
+        address_operand: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
     let dp_opcode = match opcode {
         0 => "AND",
         1 => "ANDS",
@@ -74,7 +84,7 @@ fn decode_dpinst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, op
     //Because ARM register 15 is the program counter, writing to it causes a
     //dynamic jump we can't predict statically.
     let target = match rd {
-        Aarch32Register::R15 => vec![analysis::Reference::new_dyn_ref(p.clone(), analysis::ReferenceKind::Code)],
+        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
         _ => vec![]
     };
 
@@ -88,7 +98,19 @@ fn decode_dpinst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, op
     (Some(Instruction::new(&format!("{}{}", dp_opcode, condcode(cond)), shifter_operand(rn, rd, immediate_bit, address_operand))), 4, is_nonfinal, is_nonbranching, target)
 }
 
-fn decode_ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, preindex: u32, offsetadd: u32, byte: u32, wbit: u32, load: u32, rn: Aarch32Register, rd: Aarch32Register, address_operand: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn decode_ldst(p: &memory::Pointer<Pointer>,
+        cond: u32,
+        immediate_bit: u32,
+        preindex: u32,
+        offsetadd: u32,
+        byte: u32,
+        wbit: u32,
+        load: u32,
+        rn: Aarch32Register,
+        rd: Aarch32Register,
+        address_operand: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
     let shift_imm = (address_operand & 0x00000F80) >> 7;
     let shift = (address_operand & 0x00000060) >> 5; //Shift type
     let rm = Aarch32Register::from_instr((address_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
@@ -105,11 +127,11 @@ fn decode_ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, prei
         false => (address_operand & 0xFFF) as i32 * -1
     };
 
-    let rd_operand = ast::Operand::sym(&rd.to_string());
-    let rn_operand = ast::Operand::sym(&rn.to_string());
+    let rd_operand = op::sym(&rd.to_string());
+    let rn_operand = op::sym(&rn.to_string());
     let rm_operand = match is_offsetadd {
-        true => ast::Operand::sym(&rm.to_string()),
-        false => ast::Operand::pref("-", ast::Operand::sym(&rm.to_string()))
+        true => op::sym(&rm.to_string()),
+        false => op::pref("-", op::sym(&rm.to_string()))
     };
 
     let lsw_opcode = match (is_load, is_byte, is_preindex, is_wbit) {
@@ -128,21 +150,21 @@ fn decode_ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, prei
     };
     
     let address_operand = match (immediate_bit, is_preindex, is_wbit, is_shifted) {
-        (0, true, true, false) => vec![rd_operand, ast::Operand::suff(ast::Operand::wrap("[", vec![rn_operand, ast::Operand::sint(offset12)], "]"), "!")],
-        (1, true, true, true) => vec![rd_operand, ast::Operand::suff(ast::Operand::wrap("[", vec![rn_operand, rm_operand, Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)], "]"), "!")],
-        (1, true, true, false) => vec![rd_operand, ast::Operand::suff(ast::Operand::wrap("[", vec![rn_operand, rm_operand], "]"), "!")],
-        (0, true, false, false) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand, ast::Operand::sint(offset12)], "]")],
-        (1, true, false, true) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand, rm_operand, Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)], "]")],
-        (1, true, false, false) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand, rm_operand], "]")],
-        (0, false, _, false) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand], "]"), ast::Operand::sint(offset12)],
-        (1, false, _, true) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand], "]"), rm_operand, Operand::sym(shift_symbol(shift, shift_imm)), Operand::int(shift_imm)],
-        (1, false, _, false) => vec![rd_operand, ast::Operand::wrap("[", vec![rn_operand], "]"), rm_operand],
+        (0, true, true, false) => vec![rd_operand, op::suff(op::wrap("[", vec![rn_operand, op::sint(offset12)], "]"), "!")],
+        (1, true, true, true) => vec![rd_operand, op::suff(op::wrap("[", vec![rn_operand, rm_operand, op::sym(shift_symbol(shift, shift_imm)), op::int(shift_imm)], "]"), "!")],
+        (1, true, true, false) => vec![rd_operand, op::suff(op::wrap("[", vec![rn_operand, rm_operand], "]"), "!")],
+        (0, true, false, false) => vec![rd_operand, op::wrap("[", vec![rn_operand, op::sint(offset12)], "]")],
+        (1, true, false, true) => vec![rd_operand, op::wrap("[", vec![rn_operand, rm_operand, op::sym(shift_symbol(shift, shift_imm)), op::int(shift_imm)], "]")],
+        (1, true, false, false) => vec![rd_operand, op::wrap("[", vec![rn_operand, rm_operand], "]")],
+        (0, false, _, false) => vec![rd_operand, op::wrap("[", vec![rn_operand], "]"), op::sint(offset12)],
+        (1, false, _, true) => vec![rd_operand, op::wrap("[", vec![rn_operand], "]"), rm_operand, op::sym(shift_symbol(shift, shift_imm)), op::int(shift_imm)],
+        (1, false, _, false) => vec![rd_operand, op::wrap("[", vec![rn_operand], "]"), rm_operand],
         _ => panic!("Invalid instruction parsing detected. Please contact your system administrator.")
     };
 
     //Loads into R15 constitute a dynamic jump.
     let targets = match (is_load, rd) {
-        (true, Aarch32Register::R15) => vec![analysis::Reference::new_dyn_ref(p.clone(), analysis::ReferenceKind::Code)],
+        (true, Aarch32Register::R15) => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
         _ => vec![]
     };
 
@@ -157,7 +179,17 @@ fn decode_ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32, prei
 }
 
 /// Decode an instruction in the LDM/STM instruction space.
-fn decode_ldmstm(p: &memory::Pointer<Pointer>, cond: u32, q: u32, u: u32, s: u32, w: u32, load: u32, rn: Aarch32Register, reglist: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn decode_ldmstm(p: &memory::Pointer<Pointer>,
+        cond: u32,
+        q: u32,
+        u: u32,
+        s: u32,
+        w: u32,
+        load: u32,
+        rn: Aarch32Register,
+        reglist: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
     //TODO: This got refactored, ensure these are still valid
     let op = match load == 1 {
         false => "STM",
@@ -175,8 +207,8 @@ fn decode_ldmstm(p: &memory::Pointer<Pointer>, cond: u32, q: u32, u: u32, s: u32
     };
 
     let rn_operand = match w == 1 {
-        false => ast::Operand::sym(&rn.to_string()),
-        true => ast::Operand::suff(ast::Operand::sym(&rn.to_string()), "!"),
+        false => op::sym(&rn.to_string()),
+        true => op::suff(op::sym(&rn.to_string()), "!"),
     };
 
     let mut reglist_operand = Vec::new();
@@ -186,7 +218,7 @@ fn decode_ldmstm(p: &memory::Pointer<Pointer>, cond: u32, q: u32, u: u32, s: u32
 
     for i in 0..15 {
         if reglist & (1 << i) != 0 {
-            reglist_operand.push(ast::Operand::sym(&Aarch32Register::from_instr(i).expect("Counting from 0 to 15 does not result in something from 0 to 15. Check your universe before proceeding.").to_string()));
+            reglist_operand.push(op::sym(&Aarch32Register::from_instr(i).expect("Counting from 0 to 15 does not result in something from 0 to 15. Check your universe before proceeding.").to_string()));
 
             //Thanks to PC being an architecturally mentionable register, we
             //have to account for overwriting PC via LDM. Normally this is the
@@ -194,7 +226,7 @@ fn decode_ldmstm(p: &memory::Pointer<Pointer>, cond: u32, q: u32, u: u32, s: u32
             //dynamic jump...
             if i == 15 && op == "LDM" {
                 is_nonbranching = false;
-                targets.push(analysis::Reference::new_dyn_ref(p.clone(), analysis::ReferenceKind::Code))
+                targets.push(refr::new_dyn_ref(p.clone(), refkind::Code))
             }
         }
     }
@@ -202,14 +234,16 @@ fn decode_ldmstm(p: &memory::Pointer<Pointer>, cond: u32, q: u32, u: u32, s: u32
     let is_nonfinal = is_nonbranching || cond != 14;
 
     let reglist_operand = match s == 1 {
-        false => ast::Operand::wrap("{", reglist_operand, "}"),
-        true => ast::Operand::suff(ast::Operand::wrap("{", reglist_operand, "}"), "^")
+        false => op::wrap("{", reglist_operand, "}"),
+        true => op::suff(op::wrap("{", reglist_operand, "}"), "^")
     };
 
     (Some(Instruction::new(&format!("{}{}{}{}", op, condcode(cond), u_string, p_string), vec![rn_operand, reglist_operand])), 0, is_nonfinal, is_nonbranching, targets)
 }
 
-fn decode_bl(pc: &memory::Pointer<Pointer>, l: u32, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn decode_bl(pc: &memory::Pointer<Pointer>, l: u32, cond: u32, offset: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
     let is_link = l != 0;
     let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
     let target = pc.contextualize(pc.as_pointer().wrapping_add((offset & 0x007FFFFF) | signbit));
@@ -218,18 +252,20 @@ fn decode_bl(pc: &memory::Pointer<Pointer>, l: u32, cond: u32, offset: u32) -> (
     let is_nonfinal = is_nonbranching || cond != 14;
 
     match is_link {
-        true => (Some(ast::Instruction::new(&format!("BL{}", condcode(cond)), vec![ast::Operand::cptr(target.clone())])), 4, is_nonfinal, is_nonbranching, vec![analysis::Reference::new_static_ref(pc.clone(), target.clone(), analysis::ReferenceKind::Subroutine)]),
-        false => (Some(ast::Instruction::new(&format!("B{}", condcode(cond)), vec![ast::Operand::cptr(target.clone())])), 4, is_nonfinal, is_nonbranching, vec![analysis::Reference::new_static_ref(pc.clone(), target, analysis::ReferenceKind::Code)])
+        true => (Some(ast::Instruction::new(&format!("BL{}", condcode(cond)), vec![op::cptr(target.clone())])), 4, is_nonfinal, is_nonbranching, vec![refr::new_static_ref(pc.clone(), target.clone(), refkind::Subroutine)]),
+        false => (Some(ast::Instruction::new(&format!("B{}", condcode(cond)), vec![op::cptr(target.clone())])), 4, is_nonfinal, is_nonbranching, vec![refr::new_static_ref(pc.clone(), target, refkind::Code)])
     }
 }
 
-fn decode_swi(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn decode_swi(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
     let target = offset & 0x00FFFFFF;
     
     //TODO: The jump target can be in high RAM, how do we handle that?
-    (Some(ast::Instruction::new(&format!("SWI{}", condcode(cond)), vec![ast::Operand::int(target)])),
+    (Some(ast::Instruction::new(&format!("SWI{}", condcode(cond)), vec![op::int(target)])),
         4, true, true,
-        vec![analysis::Reference::new_static_ref(pc.clone(), pc.contextualize(0x00000008), analysis::ReferenceKind::Subroutine)])
+        vec![refr::new_static_ref(pc.clone(), pc.contextualize(0x00000008), refkind::Subroutine)])
 }
 
 /// Decode a multiply instruction.
@@ -237,14 +273,21 @@ fn decode_swi(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> (Option<
 /// Please note that the instruction space for multiplies specifies the
 /// registers in a different order from most instructions. Specifically, `rn`
 /// and `rd` are swapped.
-fn decode_mul(p: &memory::Pointer<Pointer>, cond: u32, opcode: u32, rd: Aarch32Register, rn: Aarch32Register, mult_operand: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn decode_mul(p: &memory::Pointer<Pointer>,
+        cond: u32,
+        opcode: u32,
+        rd: Aarch32Register,
+        rn: Aarch32Register,
+        mult_operand: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
     let rs = Aarch32Register::from_instr((mult_operand & 0x00000F00) >> 8).expect("Could not parse RS... somehow?!");
     let rm = Aarch32Register::from_instr((mult_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
 
-    let rd_operand = ast::Operand::sym(&rd.to_string());
-    let rn_operand = ast::Operand::sym(&rn.to_string());
-    let rs_operand = ast::Operand::sym(&rs.to_string());
-    let rm_operand = ast::Operand::sym(&rm.to_string());
+    let rd_operand = op::sym(&rd.to_string());
+    let rn_operand = op::sym(&rn.to_string());
+    let rs_operand = op::sym(&rs.to_string());
+    let rm_operand = op::sym(&rm.to_string());
 
     let is_long = opcode & 0x08 != 0;
     let is_unsigned = opcode & 0x04 != 0;
@@ -254,8 +297,8 @@ fn decode_mul(p: &memory::Pointer<Pointer>, cond: u32, opcode: u32, rd: Aarch32R
     //According to the ARM ARM, setting rn or rd to R15 is, small-caps,
     //UNPREDICTABLE. We'll represent that as a dynamic jump as usual.
     let targets = match (rd, rn) {
-        (_, Aarch32Register::R15) => vec![analysis::Reference::new_dyn_ref(p.clone(), analysis::ReferenceKind::Code)],
-        (Aarch32Register::R15, _) => vec![analysis::Reference::new_dyn_ref(p.clone(), analysis::ReferenceKind::Code)],
+        (_, Aarch32Register::R15) => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
+        (Aarch32Register::R15, _) => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
         _ => vec![]
     };
 
@@ -314,9 +357,9 @@ fn msr(cond: u32, immediate_bit: u32, r: u32, rn_val: u32, shifter_operand: u32)
     let xpsr = op::sym(&format!("{}_{}{}{}{}", xpsr, c, x, s, f));
 
     let op_list = match immediate_bit {
-        1 => vec!(xpsr, Operand::int(immed_8 << rotate_imm)),
-        0 => vec!(xpsr, Operand::sym(&rm.to_string())),
-        _ => vec!(Operand::miss())
+        1 => vec!(xpsr, op::int(immed_8 << rotate_imm)),
+        0 => vec!(xpsr, op::sym(&rm.to_string())),
+        _ => vec!(op::miss())
     };
 
     (Some(Instruction::new(&format!("MSR{}", condcode(cond)), op_list)), 4, true, true, vec![])
@@ -329,23 +372,26 @@ fn mrs(cond: u32, r: u32, rd: Aarch32Register)
         true => "SPSR"
     };
     
-    let op_list = vec![Operand::sym(&rd.to_string()), op::sym(xpsr)];
+    let op_list = vec![op::sym(&rd.to_string()), op::sym(xpsr)];
 
     (Some(Instruction::new(&format!("MRS{}", condcode(cond)), op_list)), 4, true, true, vec![])
 }
 
-fn bx(p: &memory::Pointer<Pointer>, cond: u32, rm: Aarch32Register) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn bx(p: &memory::Pointer<Pointer>, cond: u32, rm: Aarch32Register)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     //BX PC is completely valid! And also dumb.
     let target_pc = p.contextualize(p.as_pointer().clone() + 8);
     let jumpref = match rm {
-        Aarch32Register::R15 => analysis::Reference::new_static_ref(p.clone(), target_pc, analysis::ReferenceKind::Code),
-        _ => analysis::Reference::new_dyn_ref(p.clone(), analysis::ReferenceKind::Code)
+        Aarch32Register::R15 => refr::new_static_ref(p.clone(), target_pc, refkind::Code),
+        _ => refr::new_dyn_ref(p.clone(), refkind::Code)
     };
 
     (Some(Instruction::new(&format!("BX{}", condcode(cond)), vec![op::sym(&rm.to_string())])), 4, false, false, vec![jumpref])
 }
 
-fn bxj(cond: u32, rm: Aarch32Register) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn bxj(cond: u32, rm: Aarch32Register)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
     //While this instruction is technically a branch, it's designed for an
     //obsolete ARM hardware extension for directly executing Java bytecode. No
     //technical details of how Jazelle works have ever been released and
@@ -354,7 +400,9 @@ fn bxj(cond: u32, rm: Aarch32Register) -> (Option<Instruction>, Offset, bool, bo
     (Some(Instruction::new(&format!("BXJ{}", condcode(cond)), vec![op::sym(&rm.to_string())])), 4, false, false, vec![])
 }
 
-fn clz(cond: u32, rd: Aarch32Register, rm: Aarch32Register) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn clz(cond: u32, rd: Aarch32Register, rm: Aarch32Register)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
     (Some(Instruction::new(&format!("CLZ{}", condcode(cond)), vec![op::sym(&rd.to_string()), op::sym(&rm.to_string())])), 4, true, true, vec![])
 }
 
@@ -374,7 +422,9 @@ fn clz(cond: u32, rd: Aarch32Register, rm: Aarch32Register) -> (Option<Instructi
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
     let instr : reg::Symbolic<u32> = mem.read_leword(&p);
 
     if let Some(instr) = instr.into_concrete() {
