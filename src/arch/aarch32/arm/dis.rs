@@ -18,31 +18,39 @@ fn shift_symbol(shift: u32, shift_imm: u32) -> &'static str {
     }
 }
 
-fn shifter_operand(rn: Aarch32Register, rd: Aarch32Register, immediate_bit: u32, shifter_operand: u32) -> Vec<Operand> {
-    let rotate_imm = (shifter_operand & 0x00000F00) >> 8 * 2; //Rotate immediate. Is shifted for some reason
-    let shift_imm = (shifter_operand & 0x00000F80) >> 7;
-    let shift = (shifter_operand & 0x00000060) >> 5; //Shift type
-    let is_shift_immed = (shifter_operand & 0x00000010) >> 4; //Shift is immediate (0) or register (1)
-    let rm = Aarch32Register::from_instr((shifter_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
-    let immed_8 = (shifter_operand & 0x000000FF) >> 0; //Data Immediate
+fn shifter_operand(immediate_bit: u32,
+        rn: Aarch32Register,
+        rd: Aarch32Register,
+        shift_imm: u32,
+        regshift: u32,
+        shift: u32,
+        rm: Aarch32Register,
+        rs: Aarch32Register,
+        immed_8: u32) -> Vec<Operand> {
+    let rotate_imm = shift_imm & 0xFFFFFFFE;
 
-    match (immediate_bit, shift_imm, is_shift_immed) {
+    match (immediate_bit, shift_imm, regshift) {
         (1, _, _) => vec!(op::sym(&rd.to_string()), op::sym(&rn.to_string()), op::int(immed_8 << rotate_imm)),
         (0, 0, 0) => vec!(op::sym(&rd.to_string()), op::sym(&rn.to_string()), op::sym(&rm.to_string()), op::sym(shift_symbol(shift, shift_imm))),
         (0, _, 0) => vec!(op::sym(&rd.to_string()), op::sym(&rn.to_string()), op::sym(&rm.to_string()), op::sym(shift_symbol(shift, shift_imm)), op::int(shift_imm)),
-        (0, _, 1) => vec!(op::sym(&rd.to_string()), op::sym(&rn.to_string()), op::sym(&rm.to_string()), op::sym(shift_symbol(shift, shift_imm)), op::sym(&rm.to_string())),
+        (0, _, 1) => vec!(op::sym(&rd.to_string()), op::sym(&rn.to_string()), op::sym(&rm.to_string()), op::sym(shift_symbol(shift, shift_imm)), op::sym(&rs.to_string())),
         _ => vec!(op::miss())
     }
 }
 
 /// Decode a 5-bit opcode field as if it was for a data processing instruction
-fn decode_dpinst(p: &memory::Pointer<Pointer>,
+fn dpinst(p: &memory::Pointer<Pointer>,
         cond: u32,
         immediate_bit: u32,
         opcode: u32,
         rn: Aarch32Register,
         rd: Aarch32Register,
-        address_operand: u32)
+        shift_imm: u32,
+        regshift: u32,
+        shift: u32,
+        rm: Aarch32Register,
+        rs: Aarch32Register,
+        immed_8: u32)
     -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
     let dp_opcode = match opcode {
@@ -95,10 +103,10 @@ fn decode_dpinst(p: &memory::Pointer<Pointer>,
 
     let is_nonfinal = is_nonbranching || cond != 14;
 
-    (Some(Instruction::new(&format!("{}{}", dp_opcode, condcode(cond)), shifter_operand(rn, rd, immediate_bit, address_operand))), 4, is_nonfinal, is_nonbranching, target)
+    (Some(Instruction::new(&format!("{}{}", dp_opcode, condcode(cond)), shifter_operand(immediate_bit, rn, rd, shift_imm, regshift, shift, rm, rs, immed_8))), 4, is_nonfinal, is_nonbranching, target)
 }
 
-fn decode_ldst(p: &memory::Pointer<Pointer>,
+fn ldst(p: &memory::Pointer<Pointer>,
         cond: u32,
         immediate_bit: u32,
         preindex: u32,
@@ -108,12 +116,12 @@ fn decode_ldst(p: &memory::Pointer<Pointer>,
         load: u32,
         rn: Aarch32Register,
         rd: Aarch32Register,
+        shift_imm: u32,
+        shift: u32,
+        rm: Aarch32Register,
         address_operand: u32)
     -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
-    let shift_imm = (address_operand & 0x00000F80) >> 7;
-    let shift = (address_operand & 0x00000060) >> 5; //Shift type
-    let rm = Aarch32Register::from_instr((address_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
     let is_shifted = shift_imm != 0 || shift != 0;
 
     let is_load = load == 0x01;
@@ -278,11 +286,9 @@ fn decode_mul(p: &memory::Pointer<Pointer>,
         opcode: u32,
         rd: Aarch32Register,
         rn: Aarch32Register,
-        mult_operand: u32)
+        rs: Aarch32Register,
+        rm: Aarch32Register)
     -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rs = Aarch32Register::from_instr((mult_operand & 0x00000F00) >> 8).expect("Could not parse RS... somehow?!");
-    let rm = Aarch32Register::from_instr((mult_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
 
     let rd_operand = op::sym(&rd.to_string());
     let rn_operand = op::sym(&rn.to_string());
@@ -328,7 +334,7 @@ fn decode_mul(p: &memory::Pointer<Pointer>,
     }
 }
 
-fn msr(cond: u32, immediate_bit: u32, r: u32, rn_val: u32, shifter_operand: u32)
+fn msr(cond: u32, immediate_bit: u32, r: u32, rn_val: u32, shift_imm: u32, data_immed: u32, rm: Aarch32Register)
     -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     let c = match (rn_val & 0x1) >> 0 != 0 {
         true => "c",
@@ -351,13 +357,10 @@ fn msr(cond: u32, immediate_bit: u32, r: u32, rn_val: u32, shifter_operand: u32)
         true => "SPSR"
     };
 
-    let rotate_imm = (shifter_operand & 0x00000F00) >> 8 * 2; //Rotate immediate. Is shifted for some reason
-    let rm = Aarch32Register::from_instr((shifter_operand & 0x0000000F) >> 0).expect("Could not parse RM... somehow?!");
-    let immed_8 = (shifter_operand & 0x000000FF) >> 0; //Data Immediate
     let xpsr = op::sym(&format!("{}_{}{}{}{}", xpsr, c, x, s, f));
 
     let op_list = match immediate_bit {
-        1 => vec!(xpsr, op::int(immed_8 << rotate_imm)),
+        1 => vec!(xpsr, op::int(data_immed << (shift_imm & 0xFFFFFFFE))),
         0 => vec!(xpsr, op::sym(&rm.to_string())),
         _ => vec!(op::miss())
     };
@@ -452,7 +455,8 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
 
     if let Some(instr) = instr.into_concrete() {
         let cond = (instr & 0xF0000000) >> 28;
-        let opcat = (instr & 0x0E000000) >> 25;
+        let opcat = (instr & 0x0C000000) >> 26;
+        let immed_mode = (instr & 0x02000000) >> 25;
         let opcode = (instr & 0x01F00000) >> 20;
         let pbit = (instr & 0x01000000) >> 24;
         let u = (instr & 0x00800000) >> 23;
@@ -461,49 +465,47 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
         let l = (instr & 0x00100000) >> 20;
         let rn_val = (instr & 0x000F0000) >> 16;
         let rd_val = (instr & 0x0000F000) >> 12;
+        let rs_val = (instr & 0x00000F00) >> 8;
+        let shift_imm = (instr & 0x00000F80) >> 7;
+        let special = (instr & 0x00000080) >> 7;
+        let shiftop = (instr & 0x00000060) >> 5;
+        let regshift = (instr & 0x00000010) >> 4;
         let rm_val = (instr & 0x0000000F) >> 0;
+        let data_immed = (instr & 0x000000FF) >> 0;
         let rn = Aarch32Register::from_instr(rn_val).expect("What the heck? The register definitely should have parsed");
         let rd = Aarch32Register::from_instr(rd_val).expect("What the heck? The register definitely should have parsed");
+        let rs = Aarch32Register::from_instr(rs_val).expect("Could not parse RS... somehow?!");
         let rm = Aarch32Register::from_instr(rm_val).expect("Could not parse RM... somehow?!");
         let lsimmed = (instr & 0x00000FFF) >> 0; //Load-Store Immediate (12bit)
-        let miscop = (instr & 0x000000F0) >> 4; //Misc operand bits
-        let is_mediabit = lsimmed & 0x10 == 0x10; //also is for indicating a coprocessor register xfr
-
-        match (cond, opcat, pbit, u, b, w, l) {
-            (16, 5, h, _, _, _, _) => blx_immediate(p, h, instr),
-            (16, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
-            (_, 0, 1, 0, r, o, 0) => match (r, o, (miscop & 0x8) >> 3, (miscop & 0x7)) {
-                (r, 0, 0, 0) => mrs(cond, r, rd),
-                (r, 1, 0, 0) => msr(cond, 0, r, rn_val, lsimmed),
-                (0, 1, 0, 1) => bx(p, cond, rm), //BX to Thumb
-                (0, 1, 0, 2) => bxj(cond, rm), //BX to Jazelle DBX
-                (1, 1, 0, 1) => clz(cond, rd, rm), //Count Leading Zeroes
-                (0, 1, 0, 3) => blx_register(p, cond, rm), //BLX to Thumb
-                (_, _, 0, 5) => (None, 0, false, true, vec![]), //Saturation arithmetic
-                (0, 1, 0, 7) => (None, 0, false, true, vec![]), //Software Breakpoint
-                (_, _, 1, c) if (c & 1) == 0 => (None, 0, false, true, vec![]), //Signed multiply
-                _ => (None, 0, false, true, vec![])
-            },
-            (_, 0, q, u, b, w, l) => match (q, (miscop & 0x08) >> 3, (miscop & 0x06) >> 1, (miscop & 1)) {
-                (0, 1, 0, 1) => decode_mul(p, cond, opcode, rn, rd, lsimmed),
-                (_, 1, op, 1) => (None, 0, false, true, vec![]), //Load/store extension space
-                (_, _, sh, 0) => decode_dpinst(p, cond, 0, opcode, rn, rd, lsimmed),
-                (_, 0, sh, 1) => decode_dpinst(p, cond, 0, opcode, rn, rd, lsimmed),
-                _ => (None, 0, false, true, vec![])
-            },
-            (_, 1, 1, 0, _, 0, 0) => (None, 0, false, true, vec![]), //Undefined (as of ARM DDI 0100I)
-            (_, 1, 1, 0, r, 1, 0) => msr(cond, 1, r, rn_val, lsimmed), //Move to status register
-            (_, 1, _, _, _, _, _) => decode_dpinst(p, cond, 1, opcode, rn, rd, lsimmed), //Data processing with immediate
-            (_, 2, q, u, b, w, l) => decode_ldst(p, cond, 0, q, u, b, w, l, rn, rd, lsimmed), //Load/store with immediate offset
-            (_, 3, 1, 1, 1, 1, 1) if miscop == 0xF => (None, 0, false, true, vec![]), //Architecturally undefined space
-            (_, 3, _, _, _, _, _) if is_mediabit => (None, 0, false, true, vec![]), //Media extension space
-            (_, 3, q, u, b, w, l) => decode_ldst(p, cond, 1, q, u, b, w, l, rn, rd, lsimmed), //Load/store with register offset
-            (_, 4, q, u, s, w, l) => decode_ldmstm(p, cond, q, u, s, w, l, rn, instr & 0x0000FFFF), //Load/store multiple
-            (_, 5, l, _, _, _, _) => decode_bl(&p, cond, l, instr), //Branch with or without link
-            (_, 6, 0, 0, n, 0, l) => (None, 0, false, true, vec![]), //Coprocessor Load/Store
-            (_, 6, q, u, n, w, l) => (None, 0, false, true, vec![]), //Doubleword xfrs
-            (_, 7, 1, _, _, _, _) => decode_swi(&p, cond, instr), //Software interrupt
-            (_, 7, 0, _, _, _, l) => (None, 0, false, true, vec![]), //Coprocessor instruction
+        
+        match (cond, opcat, immed_mode, pbit, u, b, w, l, special, shiftop, regshift) {
+            (16, 2, 1, h, _, _, _, _, _, _, _) => blx_immediate(p, h, instr),
+            (16, _, _, _, _, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
+            (_, 0, 0, 1, 0, r, 0, 0, 0, 0, 0) => mrs(cond, r, rd),
+            (_, 0, 0, 1, 0, r, 1, 0, 0, 0, 0) => msr(cond, 0, r, rn_val, rs_val, data_immed, rm),
+            (_, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1) => bx(p, cond, rm), //BX to Thumb
+            (_, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0) => bxj(cond, rm), //BX to Jazelle DBX
+            (_, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1) => clz(cond, rd, rm), //Count Leading Zeroes
+            (_, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1) => blx_register(p, cond, rm), //BLX to Thumb
+            (_, 0, 0, 1, 0, _, _, 0, 0, 2, 1) => (None, 0, false, true, vec![]), //Saturation arithmetic
+            (_, 0, 0, 1, 0, 0, 1, 0, 0, 3, 1) => (None, 0, false, true, vec![]), //Software Breakpoint
+            (_, 0, 0, 1, 0, _, _, 0, 1, _, 0) => (None, 0, false, true, vec![]), //Signed multiply
+            (_, 0, 0, 0, _, _, _, _, 1, 0, 1) => decode_mul(p, cond, opcode, rn, rd, rs, rm),
+            (_, 0, 0, _, u, b, w, l, 1, _, 1) => (None, 0, false, true, vec![]), //Load/store extension space
+            (_, 0, 0, _, _, _, _, _, _, _, 0) => dpinst(p, cond, immed_mode, opcode, rn, rd, shift_imm, regshift, shiftop, rm, rs, data_immed),
+            (_, 0, 0, _, _, _, _, _, 0, _, 1) => dpinst(p, cond, immed_mode, opcode, rn, rd, shift_imm, regshift, shiftop, rm, rs, data_immed),
+            (_, 0, 1, 1, 0, _, 0, 0, _, _, _) => (None, 0, false, true, vec![]), //Undefined (as of ARM DDI 0100I)
+            (_, 0, 1, 1, 0, r, 1, 0, _, _, _) => msr(cond, immed_mode, r, rn_val, shift_imm, data_immed, rm), //Move to status register
+            (_, 0, i, _, _, _, _, _, _, _, _) => dpinst(p, cond, i, opcode, rn, rd, shift_imm, regshift, shiftop, rm, rs, data_immed), //Data processing with immediate
+            (_, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1) => (None, 0, false, true, vec![]), //Architecturally undefined space
+            (_, 1, 1, _, _, _, _, _, _, _, 1) => (None, 0, false, true, vec![]), //Media extension space
+            (_, 1, i, q, u, b, w, l, _, _, _) => ldst(p, cond, i, q, u, b, w, l, rn, rd, shift_imm, shiftop, rm, lsimmed), //Load/store
+            (_, 2, 0, q, u, s, w, l, _, _, _) => decode_ldmstm(p, cond, q, u, s, w, l, rn, instr & 0x0000FFFF), //Load/store multiple
+            (_, 2, 1, l, _, _, _, _, _, _, _) => decode_bl(&p, cond, l, instr), //Branch with or without link
+            (_, 3, 0, 0, 0, n, 0, l, _, _, _) => (None, 0, false, true, vec![]), //Coprocessor Load/Store
+            (_, 3, 0, q, u, n, w, l, _, _, _) => (None, 0, false, true, vec![]), //Doubleword xfrs
+            (_, 3, 1, 1, _, _, _, _, _, _, _) => decode_swi(&p, cond, instr), //Software interrupt
+            (_, 3, 1, 0, _, _, _, l, _, _, _) => (None, 0, false, true, vec![]), //Coprocessor instruction
             _ => (None, 0, false, true, vec![])
         }
     } else {
