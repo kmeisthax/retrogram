@@ -440,6 +440,22 @@ fn bkpt(instr: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::R
     (Some(Instruction::new("BKPT", vec![op::int(immed)])), 4, true, true, vec![])
 }
 
+fn cdp(cond: u32, opcode_1: u32, crn: u32, crd: u32, cp_num: u32, opcode_2: u32, crm: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let crn_sym = op::sym(&format!("CR{}", crn));
+    let crd_sym = op::sym(&format!("CR{}", crd));
+    let crm_sym = op::sym(&format!("CR{}", crm));
+    let cp_sym = op::sym(&format!("p{}", cp_num));
+    
+    let arm_opcode = match cond {
+        16 => "CDP2".to_string(),
+        cond => format!("CDP{}", condcode(cond))
+    };
+
+    (Some(Instruction::new(&arm_opcode, vec![cp_sym, op::int(opcode_1), crd_sym, crn_sym, crm_sym, op::int(opcode_2)])), 4, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -471,12 +487,14 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
         let b = (instr & 0x00400000) >> 22;
         let w = (instr & 0x00200000) >> 21;
         let l = (instr & 0x00100000) >> 20;
+        let copcode1 = (instr & 0x00F00000) >> 20;
         let rn_val = (instr & 0x000F0000) >> 16;
         let rd_val = (instr & 0x0000F000) >> 12;
         let rs_val = (instr & 0x00000F00) >> 8;
         let shift_imm = (instr & 0x00000F80) >> 7;
         let special = (instr & 0x00000080) >> 7;
         let shiftop = (instr & 0x00000060) >> 5;
+        let copcode2 = (instr & 0x000000E0) >> 5;
         let regshift = (instr & 0x00000010) >> 4;
         let rm_val = (instr & 0x0000000F) >> 0;
         let data_immed = (instr & 0x000000FF) >> 0;
@@ -494,16 +512,17 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (16, 2, 1, h, _, _, _, _, _, _, _) => blx_immediate(p, h, instr),
             (16, 3, 0, 0, 0, 1, 0, l, _, _, _) => (None, 0, false, true, vec![]), //Addl. coprocessor doublereg xfr
             (16, 3, 1, 0, _, _, _, l, _, _, 1) => (None, 0, false, true, vec![]), //Addl. coprocessor reg xfr
+            (16, 3, 1, 0, _, _, _, l, _, _, 0) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
             (16, _, _, _, _, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
             (15, 0, 0, 1, 0, 0, 1, 0, 0, 3, 1) => bkpt(instr), //Software Breakpoint
             (_, 0, 0, 0, _, _, _, _, 1, 0, 1) => decode_mul(p, cond, opcode, rn, rd, rs, rm),
+            (_, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1) => bx(p, cond, rm), //BX to Thumb
+            (_, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0) => bxj(cond, rm), //BX to Jazelle DBX
+            (_, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1) => blx_register(p, cond, rm), //BLX to Thumb
+            (_, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1) => clz(cond, rd, rm), //Count Leading Zeroes
             (_, 0, 0, 1, 0, r, 0, 0, 0, 0, 0) => mrs(cond, r, rd),
             (_, 0, 0, 1, 0, b, 0, 0, 1, 0, 1) => (None, 0, false, true, vec![]), //Swap
             (_, 0, 0, 1, 0, r, 1, 0, 0, 0, 0) => msr(cond, 0, r, rn_val, rs_val, data_immed, rm),
-            (_, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1) => bx(p, cond, rm), //BX to Thumb
-            (_, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0) => bxj(cond, rm), //BX to Jazelle DBX
-            (_, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1) => clz(cond, rd, rm), //Count Leading Zeroes
-            (_, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1) => blx_register(p, cond, rm), //BLX to Thumb
             (_, 0, 0, 1, 0, _, _, 0, 0, 2, 1) => (None, 0, false, true, vec![]), //Saturation arithmetic
             (_, 0, 0, 1, 0, _, _, 0, 1, _, 0) => (None, 0, false, true, vec![]), //Signed multiply
             (_, 0, 0, 1, 1, 0, 0, l, 1, 0, 1) => (None, 0, false, true, vec![]), //Load/store register exclusive
@@ -536,7 +555,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (_, 3, 0, 0, 0, n, 0, l, _, _, _) => (None, 0, false, true, vec![]), //Coprocessor Load/Store
             (_, 3, 0, q, u, n, w, l, _, _, _) => (None, 0, false, true, vec![]), //Doubleword xfrs
             (_, 3, 1, 1, _, _, _, _, _, _, _) => decode_swi(&p, cond, instr), //Software interrupt
-            (_, 3, 1, 0, _, _, _, l, _, _, _) => (None, 0, false, true, vec![]), //Coprocessor instruction
+            (_, 3, 1, 0, _, _, _, l, _, _, _) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
             _ => (None, 0, false, true, vec![])
         }
     } else {
