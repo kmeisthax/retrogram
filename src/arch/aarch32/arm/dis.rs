@@ -456,6 +456,48 @@ fn cdp(cond: u32, opcode_1: u32, crn: u32, crd: u32, cp_num: u32, opcode_2: u32,
     (Some(Instruction::new(&arm_opcode, vec![cp_sym, op::int(opcode_1), crd_sym, crn_sym, crm_sym, op::int(opcode_2)])), 4, true, true, vec![])
 }
 
+fn cps(rn_val: u32, lsimmed: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let immod = (rn_val & 0xC) >> 2;
+    //let mmod = (rn_val & 0x2) >> 1;
+    let abit = (lsimmed & 0x100) >> 8;
+    let ibit = (lsimmed & 0x080) >> 7;
+    let fbit = (lsimmed & 0x040) >> 6;
+    let mode = (lsimmed & 0x01F) >> 0;
+
+    let effect = match immod {
+        2 => "IE",
+        3 => "ID",
+        _ => ""
+    };
+
+    let aflag = match abit {
+        1 => "a",
+        _ => ""
+    };
+
+    let iflag = match ibit {
+        1 => "i",
+        _ => ""
+    };
+
+    let fflag = match fbit {
+        1 => "f",
+        _ => ""
+    };
+
+    let iflags = format!("{}{}{}", aflag, iflag, fflag);
+    
+    //TODO: reject bit 16 and bit 5 not being zero, reject invalid immod/mmod
+    match (mode, iflags.as_ref()) {
+        (0, "") => (Some(Instruction::new(&format!("CPS{}", effect), vec![])), 4, true, true, vec![]),
+        (_, "") => (Some(Instruction::new(&format!("CPS{}", effect), vec![op::int(mode)])), 4, true, true, vec![]),
+        (0, _) => (Some(Instruction::new(&format!("CPS{}", effect), vec![op::sym(&iflags)])), 4, true, true, vec![]),
+        (_, _) => (Some(Instruction::new(&format!("CPS{}", effect), vec![op::sym(&iflags), op::int(mode)])), 4, true, true, vec![]),
+    }
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -505,7 +547,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
         let lsimmed = (instr & 0x00000FFF) >> 0; //Load-Store Immediate (12bit)
         
         match (cond, opcat, immed_mode, pbit, u, b, w, l, special, shiftop, regshift) {
-            (16, 0, 0, 1, 0, 0, 0, 0, _, _, _) => (None, 0, false, true, vec![]), //Change Processor State / Set Endianness
+            (16, 0, 0, 1, 0, 0, 0, 0, _, _, _) => cps(rn_val, lsimmed), //Change Processor State / Set Endianness
             (16, 1, x, 1, u, 1, 0, 1, _, _, _) => (None, 0, false, true, vec![]), //Cache Preload
             (16, 2, 0, p, u, 1, w, 0, _, _, _) => (None, 0, false, true, vec![]), //Save Return State
             (16, 2, 0, p, u, 0, w, 1, _, _, _) => (None, 0, false, true, vec![]), //Return from Exception
