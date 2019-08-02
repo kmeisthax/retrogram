@@ -561,7 +561,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (15, 2, 0, p, u, 0, w, 1, _, _, _) => (None, 0, false, true, vec![]), //Return from Exception
             (15, 2, 1, h, _, _, _, _, _, _, _) => blx_immediate(p, h, instr),
             (15, 3, 0, q, u, n, w, l, _, _, _) => ldst_coproc(p, cond, q, u, n, w, l, rn, rd_val, rs_val, data_immed),
-            (15, 3, 1, 0, _, _, _, l, _, _, 0) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
+            (15, 3, 1, 0, _, _, _, _, _, _, 0) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
             (15, _, _, _, _, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
             (14, 0, 0, 1, 0, 0, 1, 0, 0, 3, 1) => bkpt(instr), //Software Breakpoint
             (_, 0, 0, 0, _, _, _, _, 1, 0, 1) => decode_mul(p, cond, opcode, rn, rd, rs, rm),
@@ -603,7 +603,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (_, 2, 1, l, _, _, _, _, _, _, _) => decode_bl(&p, cond, l, instr), //Branch with or without link
             (_, 3, 0, q, u, n, w, l, _, _, _) => ldst_coproc(p, cond, q, u, n, w, l, rn, rd_val, rs_val, data_immed),
             (_, 3, 1, 1, _, _, _, _, _, _, _) => decode_swi(&p, cond, instr), //Software interrupt
-            (_, 3, 1, 0, _, _, _, l, _, _, _) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
+            (_, 3, 1, 0, _, _, _, _, _, _, _) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
             _ => (None, 0, false, true, vec![])
         }
     } else {
