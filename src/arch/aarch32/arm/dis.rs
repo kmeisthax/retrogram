@@ -432,6 +432,14 @@ fn blx_immediate(p: &memory::Pointer<Pointer>, h: u32, offset: u32)
     (Some(Instruction::new("BLX", vec![op::cptr(target)])), 4, false, false, vec![jumpref])
 }
 
+fn bkpt(instr: u32) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    let high_immed = (instr & 0x000FFF00) >> 4;
+    let low_immed = (instr & 0x0000000F) >> 0;
+    let immed = high_immed | low_immed;
+
+    (Some(Instruction::new("BKPT", vec![op::int(immed)])), 4, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -487,6 +495,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (16, 3, 0, 0, 0, 1, 0, l, _, _, _) => (None, 0, false, true, vec![]), //Addl. coprocessor doublereg xfr
             (16, 3, 1, 0, _, _, _, l, _, _, 1) => (None, 0, false, true, vec![]), //Addl. coprocessor reg xfr
             (16, _, _, _, _, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
+            (15, 0, 0, 1, 0, 0, 1, 0, 0, 3, 1) => bkpt(instr), //Software Breakpoint
             (_, 0, 0, 0, _, _, _, _, 1, 0, 1) => decode_mul(p, cond, opcode, rn, rd, rs, rm),
             (_, 0, 0, 1, 0, r, 0, 0, 0, 0, 0) => mrs(cond, r, rd),
             (_, 0, 0, 1, 0, b, 0, 0, 1, 0, 1) => (None, 0, false, true, vec![]), //Swap
@@ -496,7 +505,6 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (_, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1) => clz(cond, rd, rm), //Count Leading Zeroes
             (_, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1) => blx_register(p, cond, rm), //BLX to Thumb
             (_, 0, 0, 1, 0, _, _, 0, 0, 2, 1) => (None, 0, false, true, vec![]), //Saturation arithmetic
-            (_, 0, 0, 1, 0, 0, 1, 0, 0, 3, 1) => (None, 0, false, true, vec![]), //Software Breakpoint
             (_, 0, 0, 1, 0, _, _, 0, 1, _, 0) => (None, 0, false, true, vec![]), //Signed multiply
             (_, 0, 0, 1, 1, 0, 0, l, 1, 0, 1) => (None, 0, false, true, vec![]), //Load/store register exclusive
             (_, 0, 0, q, u, 0, w, 0, 1, h, 1) if h > 1 => (None, 0, false, true, vec![]), //Load/store doubleword register offset
