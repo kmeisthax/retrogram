@@ -447,13 +447,36 @@ fn cdp(cond: u32, opcode_1: u32, crn: u32, crd: u32, cp_num: u32, opcode_2: u32,
     let crd_sym = op::sym(&format!("CR{}", crd));
     let crm_sym = op::sym(&format!("CR{}", crm));
     let cp_sym = op::sym(&format!("p{}", cp_num));
+    let cop1_sym = op::int(opcode_1);
+    let cop2_sym = op::int(opcode_2);
     
     let arm_opcode = match cond {
         16 => "CDP2".to_string(),
         cond => format!("CDP{}", condcode(cond))
     };
 
-    (Some(Instruction::new(&arm_opcode, vec![cp_sym, op::int(opcode_1), crd_sym, crn_sym, crm_sym, op::int(opcode_2)])), 4, true, true, vec![])
+    (Some(Instruction::new(&arm_opcode, vec![cp_sym, cop1_sym, crd_sym, crn_sym, crm_sym, cop2_sym])), 4, true, true, vec![])
+}
+
+fn crt(cond: u32, opcode_1: u32, d: u32, crn: u32, rd: Aarch32Register, cp_num: u32, opcode_2: u32, crm: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let crn_sym = op::sym(&format!("CR{}", crn));
+    let crm_sym = op::sym(&format!("CR{}", crm));
+    let rd_sym = op::sym(&rd.to_string());
+    let cp_sym = op::sym(&format!("p{}", cp_num));
+    let cop1_sym = op::int(opcode_1);
+    let cop2_sym = op::int(opcode_2);
+    
+    let is_toarm = d != 0;
+    let arm_opcode = match (cond, is_toarm) {
+        (16, true) => "MRC2".to_string(),
+        (16, false) => "MCR2".to_string(),
+        (cond, true) => format!("MRC{}", condcode(cond)),
+        (cond, false) => format!("MCR{}", condcode(cond))
+    };
+
+    (Some(Instruction::new(&arm_opcode, vec![cp_sym, cop1_sym, rd_sym, crn_sym, crm_sym, cop2_sym])), 4, true, true, vec![])
 }
 
 fn cps(rn_val: u32, lsimmed: u32)
@@ -684,6 +707,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (15, 2, 1, h, _, _, _, _, _, _, _) => blx_immediate(p, h, instr),
             (15, 3, 0, q, u, n, w, l, _, _, _) => ldst_coproc(p, cond, q, u, n, w, l, rn, rd_val, rs_val, data_immed),
             (15, 3, 1, 0, _, _, _, _, _, _, 0) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
+            (15, 3, 1, 0, _, _, _, d, _, _, 1) => crt(cond, copcode1, d, rn_val, rd, rs_val, copcode2, rm_val),
             (15, _, _, _, _, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
             (14, 0, 0, 1, 0, 0, 1, 0, 0, 3, 1) => bkpt(instr), //Software Breakpoint
             (_, 0, 0, 0, _, _, _, _, 1, 0, 1) => decode_mul(p, cond, opcode, rn, rd, rs, rm),
@@ -720,7 +744,8 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (_, 2, 1, l, _, _, _, _, _, _, _) => decode_bl(&p, cond, l, instr), //Branch with or without link
             (_, 3, 0, q, u, n, w, l, _, _, _) => ldst_coproc(p, cond, q, u, n, w, l, rn, rd_val, rs_val, data_immed),
             (_, 3, 1, 1, _, _, _, _, _, _, _) => decode_swi(&p, cond, instr), //Software interrupt
-            (_, 3, 1, 0, _, _, _, _, _, _, _) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
+            (_, 3, 1, 0, _, _, _, _, _, _, 0) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
+            (_, 3, 1, 0, _, _, _, d, _, _, 1) => crt(cond, copcode1, d, rn_val, rd, rs_val, copcode2, rm_val),
             _ => (None, 0, false, true, vec![])
         }
     } else {
