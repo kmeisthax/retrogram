@@ -560,6 +560,56 @@ fn ldstmisc(cond: u32,
     (Some(Instruction::new(&opname, operands)), 4, true, true, vec![])
 }
 
+fn ldst_coproc(p: &memory::Pointer<Pointer>,
+        cond: u32,
+        preindex: u32,
+        offsetadd: u32,
+        nbit: u32,
+        wbit: u32,
+        load: u32,
+        rn: Aarch32Register,
+        crd: u32,
+        cp_num: u32,
+        uoffset: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let is_load = load != 0;
+    let is_wbit = wbit != 0;
+    let is_nbit = nbit != 0;
+    let is_offsetadd = offsetadd != 0;
+    let is_preindex = preindex != 0;
+
+    let rn_operand = op::sym(&rn.to_string());
+    let offset = uoffset as i32 * match is_offsetadd {
+        true => 1,
+        false => -1
+    };
+
+    let crd_op = op::sym(&format!("CR{}", crd));
+    let cp_op = op::sym(&format!("p{}", cp_num));
+
+    let operands = match (is_preindex, is_wbit) {
+        (false, false) => vec![cp_op, crd_op, op::wrap("[", vec![rn_operand], "]"), op::wrap("{", vec![op::int(uoffset)], "}")],
+        (false, true) => vec![cp_op, crd_op, op::wrap("[", vec![rn_operand], "]"), op::sint(offset * 4)],
+        (true, false) => vec![cp_op, crd_op, op::wrap("[", vec![rn_operand, op::sint(offset * 4)], "]")],
+        (true, true) => vec![cp_op, crd_op, op::suff(op::wrap("[", vec![rn_operand, op::sint(offset * 4)], "]"), "!")],
+    };
+
+    let opcode_str = match (is_load, is_nbit, cond) {
+        (false, false, 15) => format!("STC2"),
+        (false, false, cond) => format!("STC{}", condcode(cond)),
+        (false, true, 15) => format!("STC2L"),
+        (false, true, cond) => format!("STC{}L", condcode(cond)),
+        (true, false, 15) => format!("LDC2"),
+        (true, false, cond) => format!("LDC{}", condcode(cond)),
+        (true, true, 15) => format!("LDC2L"),
+        (true, true, cond) => format!("LDC{}L", condcode(cond))
+    };
+
+    //TODO: PC-rel addresses should generate data refs
+    (Some(Instruction::new(&opcode_str, operands)), 4, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -609,16 +659,15 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
         let lsimmed = (instr & 0x00000FFF) >> 0; //Load-Store Immediate (12bit)
         
         match (cond, opcat, immed_mode, pbit, u, b, w, l, special, shiftop, regshift) {
-            (16, 0, 0, 1, 0, 0, 0, 0, _, _, _) => cps(rn_val, lsimmed), //Change Processor State / Set Endianness
-            (16, 1, x, 1, u, 1, 0, 1, _, _, _) => (None, 0, false, true, vec![]), //Cache Preload
-            (16, 2, 0, p, u, 1, w, 0, _, _, _) => (None, 0, false, true, vec![]), //Save Return State
-            (16, 2, 0, p, u, 0, w, 1, _, _, _) => (None, 0, false, true, vec![]), //Return from Exception
-            (16, 2, 1, h, _, _, _, _, _, _, _) => blx_immediate(p, h, instr),
-            (16, 3, 0, 0, 0, 1, 0, l, _, _, _) => (None, 0, false, true, vec![]), //Addl. coprocessor doublereg xfr
-            (16, 3, 1, 0, _, _, _, l, _, _, 1) => (None, 0, false, true, vec![]), //Addl. coprocessor reg xfr
-            (16, 3, 1, 0, _, _, _, l, _, _, 0) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
-            (16, _, _, _, _, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
-            (15, 0, 0, 1, 0, 0, 1, 0, 0, 3, 1) => bkpt(instr), //Software Breakpoint
+            (15, 0, 0, 1, 0, 0, 0, 0, _, _, _) => cps(rn_val, lsimmed), //Change Processor State / Set Endianness
+            (15, 1, x, 1, u, 1, 0, 1, _, _, _) => (None, 0, false, true, vec![]), //Cache Preload
+            (15, 2, 0, p, u, 1, w, 0, _, _, _) => (None, 0, false, true, vec![]), //Save Return State
+            (15, 2, 0, p, u, 0, w, 1, _, _, _) => (None, 0, false, true, vec![]), //Return from Exception
+            (15, 2, 1, h, _, _, _, _, _, _, _) => blx_immediate(p, h, instr),
+            (15, 3, 0, q, u, n, w, l, _, _, _) => ldst_coproc(p, cond, q, u, n, w, l, rn, rd_val, rs_val, data_immed),
+            (15, 3, 1, 0, _, _, _, _, _, _, 0) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
+            (15, _, _, _, _, _, _, _, _, _, _) => (None, 0, false, true, vec![]), //Unconditionally executed extension space
+            (14, 0, 0, 1, 0, 0, 1, 0, 0, 3, 1) => bkpt(instr), //Software Breakpoint
             (_, 0, 0, 0, _, _, _, _, 1, 0, 1) => decode_mul(p, cond, opcode, rn, rd, rs, rm),
             (_, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1) => bx(p, cond, rm), //BX to Thumb
             (_, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0) => bxj(cond, rm), //BX to Jazelle DBX
@@ -651,10 +700,9 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (_, 1, i, q, u, b, w, l, _, _, _) => ldst(p, cond, i, q, u, b, w, l, rn, rd, shift_imm, shiftop, rm, lsimmed), //Load/store
             (_, 2, 0, q, u, s, w, l, _, _, _) => decode_ldmstm(p, cond, q, u, s, w, l, rn, instr & 0x0000FFFF), //Load/store multiple
             (_, 2, 1, l, _, _, _, _, _, _, _) => decode_bl(&p, cond, l, instr), //Branch with or without link
-            (_, 3, 0, 0, 0, n, 0, l, _, _, _) => (None, 0, false, true, vec![]), //Coprocessor Load/Store
-            (_, 3, 0, q, u, n, w, l, _, _, _) => (None, 0, false, true, vec![]), //Doubleword xfrs
+            (_, 3, 0, q, u, n, w, l, _, _, _) => ldst_coproc(p, cond, q, u, n, w, l, rn, rd_val, rs_val, data_immed),
             (_, 3, 1, 1, _, _, _, _, _, _, _) => decode_swi(&p, cond, instr), //Software interrupt
-            (_, 3, 1, 0, _, _, _, l, _, _, _) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
+            (_, 3, 1, 0, _, _, _, _, _, _, _) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
             _ => (None, 0, false, true, vec![])
         }
     } else {
