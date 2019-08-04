@@ -693,6 +693,33 @@ pub fn pkh(cond: u32, rn: Aarch32Register, rd: Aarch32Register, shift_imm: u32, 
     (Some(Instruction::new(&opname, operands)), 4, true, true, vec![])
 }
 
+pub fn pld(immediate_bit: u32, offsetadd: u32, rn: Aarch32Register, shift_imm: u32, shift: u32, rm: Aarch32Register, address_operand: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let is_shifted = shift_imm != 0 || shift != 0;
+    let is_offsetadd = offsetadd != 0;
+
+    let offset12 = match is_offsetadd {
+        true => (address_operand & 0xFFF) as i32,
+        false => (address_operand & 0xFFF) as i32 * -1
+    };
+
+    let rn_operand = op::sym(&rn.to_string());
+    let rm_operand = match is_offsetadd {
+        true => op::sym(&rm.to_string()),
+        false => op::pref("-", op::sym(&rm.to_string()))
+    };
+    
+    let address_operand = match (immediate_bit, is_shifted) {
+        (0, false) => vec![op::wrap("[", vec![rn_operand, op::sint(offset12)], "]")],
+        (1, true) => vec![op::wrap("[", vec![rn_operand, rm_operand, op::sym(shift_symbol(shift, shift_imm)), op::int(shift_imm)], "]")],
+        (1, false) => vec![op::wrap("[", vec![rn_operand, rm_operand], "]")],
+        _ => panic!("Invalid instruction parsing detected. Please contact your system administrator.")
+    };
+
+    (Some(Instruction::new("PLD", address_operand)), 4, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -743,7 +770,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
         
         match (cond, opcat, immed_mode, pbit, u, b, w, l, special, shiftop, regshift) {
             (15, 0, 0, 1, 0, 0, 0, 0, _, _, _) => cps(rn_val, lsimmed), //Change Processor State / Set Endianness
-            (15, 1, x, 1, u, 1, 0, 1, _, _, _) => (None, 0, false, true, vec![]), //Cache Preload
+            (15, 1, x, 1, u, 1, 0, 1, _, _, _) => pld(x, u, rn, shift_imm, regshift, rm, lsimmed), //Cache Preload
             (15, 2, 0, p, u, 1, w, 0, _, _, _) => (None, 0, false, true, vec![]), //Save Return State
             (15, 2, 0, p, u, 0, w, 1, _, _, _) => (None, 0, false, true, vec![]), //Return from Exception
             (15, 2, 1, h, _, _, _, _, _, _, _) => blx_immediate(p, h, instr),
