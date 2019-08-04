@@ -671,6 +671,28 @@ pub fn ldstrex(cond: u32, l: u32, rn: Aarch32Register, rd: Aarch32Register, rm: 
     (Some(Instruction::new(&opname, operands)), 4, true, true, vec![])
 }
 
+pub fn pkh(cond: u32, rn: Aarch32Register, rd: Aarch32Register, shift_imm: u32, d: u32, rm: Aarch32Register)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let opname = match d {
+        0 => format!("PKHBT{}", condcode(cond)),
+        2 => format!("PKHTB{}", condcode(cond)),
+        _ => panic!("Invalid D bits")
+    };
+
+    let rn_sym = op::sym(&rn.to_string());
+    let rd_sym = op::sym(&rd.to_string());
+    let rm_sym = op::sym(&rm.to_string());
+
+    let operands = match d {
+        0 => vec![rd_sym, rn_sym, rm_sym, op::pref("LSL", op::int(shift_imm))],
+        2 => vec![rd_sym, rn_sym, rm_sym, op::pref("ASR", op::int(shift_imm))],
+        _ => panic!("Invalid D bits")
+    };
+
+    (Some(Instruction::new(&opname, operands)), 4, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -749,7 +771,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (_, 0, i, _, _, _, _, _, _, _, _) => dpinst(p, cond, i, opcode, rn, rd, shift_imm, regshift, shiftop, rm, rs, data_immed), //Data processing with immediate
             (_, 1, 1, 0, 0, _, _, _, _, _, 1) => (None, 0, false, true, vec![]), //Parallel add-sub
             (_, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1) => (None, 0, false, true, vec![]), //Select bytes
-            (_, 1, 1, 0, 1, 0, 0, 0, _, _, 1) => (None, 0, false, true, vec![]), //Halfword pack
+            (_, 1, 1, 0, 1, 0, 0, 0, _, d, 1) if d & 1 == 0 => pkh(cond, rn, rd, shift_imm, d, rm), //Halfword pack
             (_, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1) => (None, 0, false, true, vec![]), //Byte reverse word
             (_, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1) => (None, 0, false, true, vec![]), //Byte reverse packed halfword
             (_, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1) => (None, 0, false, true, vec![]), //Byte reverse signed halfword
