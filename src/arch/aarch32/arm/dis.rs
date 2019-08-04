@@ -124,11 +124,11 @@ fn ldst(p: &memory::Pointer<Pointer>,
     
     let is_shifted = shift_imm != 0 || shift != 0;
 
-    let is_load = load == 0x01;
-    let is_wbit = wbit == 0x02;
-    let is_byte = byte == 0x04;
-    let is_offsetadd = offsetadd == 0x08;
-    let is_preindex = preindex == 0x10;
+    let is_load = load != 0;
+    let is_wbit = wbit != 0;
+    let is_byte = byte != 0;
+    let is_offsetadd = offsetadd != 0;
+    let is_preindex = preindex != 0;
 
     let offset12 = match is_offsetadd {
         true => (address_operand & 0xFFF) as i32,
@@ -498,6 +498,68 @@ fn cps(rn_val: u32, lsimmed: u32)
     }
 }
 
+fn ldstmisc(cond: u32,
+    pbit: u32,
+    ubit: u32,
+    ibit: u32,
+    wbit: u32,
+    lbit: u32,
+    rn: Aarch32Register,
+    rd: Aarch32Register,
+    rs_val: u32,
+    shiftop: u32,
+    rm: Aarch32Register)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+
+    let sbit = (shiftop & 0x2) >> 1;
+    let hbit = (shiftop & 0x1) >> 0;
+    
+    let is_preindex = pbit != 0;
+    let is_offsetadd = ubit != 0;
+    let is_immedoffset = ibit != 0;
+    let is_writeback = wbit != 0;
+    let is_load = lbit != 0; //not always
+    let is_signed = sbit != 0;
+    let is_half = hbit != 0;
+
+    let opname = match (is_load, is_signed, is_half) {
+        (false, false, true) => format!("STR{}H", condcode(cond)),
+        (false, true, false) => format!("LDR{}D", condcode(cond)),
+        (false, true, true) => format!("STR{}D", condcode(cond)),
+        (true, false, true) => format!("LDR{}H", condcode(cond)),
+        (true, true, false) => format!("LDR{}SB", condcode(cond)),
+        (true, true, true) => format!("LDR{}SH", condcode(cond)),
+        _ => panic!("LDR/STR misc forme instructions cannot contain L, S, and H bits all zero.")
+    };
+
+    let immedoffset = (rs_val << 4) | rm.into_instr();
+
+    //TODO: Reject misaligned registers on doublewords as invalid instructions
+    //(Yes, I did say misaligned *registers*.)
+
+    let operands = match (is_preindex, is_offsetadd, is_writeback, is_immedoffset) {
+        (false, false, false, false) => vec![op::sym(&rd.to_string()), op::wrap("[", vec![op::sym(&rn.to_string())], "]"), op::pref("-", op::sym(&rm.to_string()))],
+        (false, true, false, false) => vec![op::sym(&rd.to_string()), op::wrap("[", vec![op::sym(&rn.to_string())], "]"), op::sym(&rm.to_string())],
+        (false, false, false, true) => vec![op::sym(&rd.to_string()), op::wrap("[", vec![op::sym(&rn.to_string())], "]"), op::sint(immedoffset as i32 * -1)],
+        (false, true, false, true) => vec![op::sym(&rd.to_string()), op::wrap("[", vec![op::sym(&rn.to_string())], "]"), op::sint(immedoffset as i32)],
+        (true, false, false, false) => vec![op::sym(&rd.to_string()), op::wrap("[", vec![op::sym(&rn.to_string()), op::pref("-", op::sym(&rm.to_string()))], "]")],
+        (true, true, false, false) => vec![op::sym(&rd.to_string()), op::wrap("[", vec![op::sym(&rn.to_string()), op::sym(&rm.to_string())], "]")],
+        (true, false, false, true) => vec![op::sym(&rd.to_string()), op::wrap("[", vec![op::sym(&rn.to_string()), op::sint(immedoffset as i32 * -1)], "]")],
+        (true, true, false, true) => vec![op::sym(&rd.to_string()), op::wrap("[", vec![op::sym(&rn.to_string()), op::sint(immedoffset as i32)], "]")],
+        (true, false, true, false) => vec![op::sym(&rd.to_string()), op::suff(op::wrap("[", vec![op::sym(&rn.to_string()), op::pref("-", op::sym(&rm.to_string()))], "]"), "!")],
+        (true, true, true, false) => vec![op::sym(&rd.to_string()), op::suff(op::wrap("[", vec![op::sym(&rn.to_string()), op::sym(&rm.to_string())], "]"), "!")],
+        (true, false, true, true) => vec![op::sym(&rd.to_string()), op::suff(op::wrap("[", vec![op::sym(&rn.to_string()), op::sint(immedoffset as i32 * -1)], "]"), "!")],
+        (true, true, true, true) => vec![op::sym(&rd.to_string()), op::suff(op::wrap("[", vec![op::sym(&rn.to_string()), op::sint(immedoffset as i32)], "]"), "!")],
+        _ => return (None, 0, false, false, vec![])
+    };
+
+    //TODO: Generate data references for PC-relative instructions
+    //TODO: HALT DISASSEMBLY and generate dynamic refs for PC-relative loads
+    //(even though that'd be stupid and useless)
+
+    (Some(Instruction::new(&opname, operands)), 4, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -568,12 +630,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (_, 0, 0, 1, 0, _, _, 0, 0, 2, 1) => (None, 0, false, true, vec![]), //Saturation arithmetic
             (_, 0, 0, 1, 0, _, _, 0, 1, _, 0) => (None, 0, false, true, vec![]), //Signed multiply
             (_, 0, 0, 1, 1, 0, 0, l, 1, 0, 1) => (None, 0, false, true, vec![]), //Load/store register exclusive
-            (_, 0, 0, q, u, 0, w, 0, 1, h, 1) if h > 1 => (None, 0, false, true, vec![]), //Load/store doubleword register offset
-            (_, 0, 0, q, u, 0, w, 1, 1, h, 1) if h > 1 => (None, 0, false, true, vec![]), //Load signed halfword/byte register offset
-            (_, 0, 0, q, u, 0, w, l, 1, 1, 1) => (None, 0, false, true, vec![]), //Load/store halfword register offset
-            (_, 0, 0, q, u, 1, w, 0, 1, h, 1) if h > 1 => (None, 0, false, true, vec![]), //Load/store doubleword immediate offset
-            (_, 0, 0, q, u, 1, w, 1, 1, h, 1) if h > 1 => (None, 0, false, true, vec![]), //Load signed halfword/byte immediate offset
-            (_, 0, 0, q, u, 1, w, l, 1, 1, 1) => (None, 0, false, true, vec![]), //Load/store halfword immediate offset
+            (_, 0, 0, q, u, i, w, l, 1, h, 1) if h != 0 => ldstmisc(cond, q, u, i, w, l, rn, rd, rs_val, h, rm),
             (_, 0, 0, _, _, _, _, _, _, _, 0) => dpinst(p, cond, immed_mode, opcode, rn, rd, shift_imm, regshift, shiftop, rm, rs, data_immed),
             (_, 0, 0, _, _, _, _, _, 0, _, 1) => dpinst(p, cond, immed_mode, opcode, rn, rd, shift_imm, regshift, shiftop, rm, rs, data_immed),
             (_, 0, 1, 1, 0, _, 0, 0, _, _, _) => (None, 0, false, true, vec![]), //Undefined (as of ARM DDI 0100I)
