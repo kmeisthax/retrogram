@@ -479,6 +479,26 @@ fn crt(cond: u32, opcode_1: u32, d: u32, crn: u32, rd: Aarch32Register, cp_num: 
     (Some(Instruction::new(&arm_opcode, vec![cp_sym, cop1_sym, rd_sym, crn_sym, crm_sym, cop2_sym])), 4, true, true, vec![])
 }
 
+fn crt_double(cond: u32, d: u32, rn: Aarch32Register, rd: Aarch32Register, cp_num: u32, opcode: u32, crm: u32)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let rn_sym = op::sym(&rn.to_string());
+    let crm_sym = op::sym(&format!("CR{}", crm));
+    let rd_sym = op::sym(&rd.to_string());
+    let cp_sym = op::sym(&format!("p{}", cp_num));
+    let cop_sym = op::int(opcode);
+    
+    let is_toarm = d != 0;
+    let arm_opcode = match (cond, is_toarm) {
+        (16, true) => "MRRC2".to_string(),
+        (16, false) => "MCRR2".to_string(),
+        (cond, true) => format!("MRRC{}", condcode(cond)),
+        (cond, false) => format!("MCRR{}", condcode(cond))
+    };
+
+    (Some(Instruction::new(&arm_opcode, vec![cp_sym, cop_sym, rd_sym, rn_sym, crm_sym])), 4, true, true, vec![])
+}
+
 fn cps(rn_val: u32, lsimmed: u32)
     -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
     
@@ -742,6 +762,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (_, 1, i, q, u, b, w, l, _, _, _) => ldst(p, cond, i, q, u, b, w, l, rn, rd, shift_imm, shiftop, rm, lsimmed), //Load/store
             (_, 2, 0, q, u, s, w, l, _, _, _) => decode_ldmstm(p, cond, q, u, s, w, l, rn, instr & 0x0000FFFF), //Load/store multiple
             (_, 2, 1, l, _, _, _, _, _, _, _) => decode_bl(&p, cond, l, instr), //Branch with or without link
+            (_, 3, 0, 0, 0, 1, 0, d, _, _, _) => crt_double(cond, d, rn, rd, rs_val, copcode2, rm_val),
             (_, 3, 0, q, u, n, w, l, _, _, _) => ldst_coproc(p, cond, q, u, n, w, l, rn, rd_val, rs_val, data_immed),
             (_, 3, 1, 1, _, _, _, _, _, _, _) => decode_swi(&p, cond, instr), //Software interrupt
             (_, 3, 1, 0, _, _, _, _, _, _, 0) => cdp(cond, copcode1, rn_val, rd_val, rs_val, copcode2, rm_val),
