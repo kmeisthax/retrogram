@@ -5,6 +5,7 @@ mod traits;
 mod reference;
 mod block;
 mod trace;
+mod flow;
 
 pub use traits::*;
 pub use passes::disassemble_block;
@@ -14,3 +15,4 @@ pub use reference::ReferenceKind;
 pub use reference::Reference;
 pub use block::Block;
 pub use trace::Trace;
+pub use flow::Flow;
