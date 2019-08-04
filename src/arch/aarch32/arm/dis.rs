@@ -610,6 +610,24 @@ fn ldst_coproc(p: &memory::Pointer<Pointer>,
     (Some(Instruction::new(&opcode_str, operands)), 4, true, true, vec![])
 }
 
+pub fn ldstrex(cond: u32, l: u32, rn: Aarch32Register, rd: Aarch32Register, rm: Aarch32Register)
+    -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+    
+    let is_load = l != 0;
+    let opname = match is_load {
+        true => format!("LDREX{}", condcode(cond)),
+        false => format!("STREX{}", condcode(cond)),
+    };
+    
+    let operands = match is_load {
+        true => vec![op::sym(&rd.to_string()), op::wrap("[", vec![op::sym(&rn.to_string())], "]")],
+        false => vec![op::sym(&rd.to_string()), op::sym(&rm.to_string()), op::wrap("[", vec![op::sym(&rn.to_string())], "]")]
+    };
+
+    //TODO: Data references
+    (Some(Instruction::new(&opname, operands)), 4, true, true, vec![])
+}
+
 /// Disassemble the instruction at `p` in `mem`.
 /// 
 /// This function returns:
@@ -678,7 +696,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus)
             (_, 0, 0, 1, 0, r, 1, 0, 0, 0, 0) => msr(cond, 0, r, rn_val, rs_val, data_immed, rm),
             (_, 0, 0, 1, 0, _, _, 0, 0, 2, 1) => (None, 0, false, true, vec![]), //Saturation arithmetic
             (_, 0, 0, 1, 0, _, _, 0, 1, _, 0) => (None, 0, false, true, vec![]), //Signed multiply
-            (_, 0, 0, 1, 1, 0, 0, l, 1, 0, 1) => (None, 0, false, true, vec![]), //Load/store register exclusive
+            (_, 0, 0, 1, 1, 0, 0, l, 1, 0, 1) => ldstrex(cond, l, rn, rd, rm), //Load/store register exclusive
             (_, 0, 0, q, u, i, w, l, 1, h, 1) if h != 0 => ldstmisc(cond, q, u, i, w, l, rn, rd, rs_val, h, rm),
             (_, 0, 0, _, _, _, _, _, _, _, 0) => dpinst(p, cond, immed_mode, opcode, rn, rd, shift_imm, regshift, shiftop, rm, rs, data_immed),
             (_, 0, 0, _, _, _, _, _, 0, _, 1) => dpinst(p, cond, immed_mode, opcode, rn, rd, shift_imm, regshift, shiftop, rm, rs, data_immed),
