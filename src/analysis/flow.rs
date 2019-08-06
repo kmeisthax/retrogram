@@ -36,23 +36,23 @@ pub enum Flow {
 }
 
 impl Flow {
-    pub fn is_nonfinal(self) -> bool {
+    pub fn is_final(self) -> bool {
         use Flow::*;
 
         match self {
-            Normal => true,
-            Branching(with_next) => with_next,
-            Returning => false
+            Normal => false,
+            Branching(with_next) => !with_next,
+            Returning => true
         }
     }
 
-    pub fn is_nonbranching(self) -> bool {
+    pub fn is_branching(self) -> bool {
         use Flow::*;
 
         match self {
-            Normal => true,
-            Branching(_) => false,
-            Returning => true
+            Normal => false,
+            Branching(_) => true,
+            Returning => false
         }
     }
 }

@@ -56,13 +56,13 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
                     targets.insert(target.clone());
                 }
 
-                if !disasm.flow().is_nonbranching() {
+                if disasm.flow().is_branching() {
                     blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
                     cur_block_pc = pc.clone();
                     cur_blk_size = S::zero();
                 }
 
-                if !disasm.flow().is_nonfinal() {
+                if disasm.flow().is_final() {
                     if cur_blk_size > S::zero() {
                         blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
                     }
