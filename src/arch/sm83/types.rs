@@ -1,7 +1,7 @@
 //! Types used in modeling the SM83
 
 use std::str;
-use crate::{memory, ast, reg};
+use crate::{memory, ast, reg, analysis};
 
 /// Enumeration of all architectural GBZ80 registers.
 /// 
@@ -73,3 +73,7 @@ pub type Section = ast::Section<Offset, SignedValue, f32, Pointer, Data, Offset>
 /// The register state type which represents the execution state of a given
 /// SM83 program.
 pub type State = reg::State<Register, Value, memory::Pointer<Pointer>, Value>;
+
+/// The disasm type which represents a successful disassembly of a single
+/// instruction.
+pub type Disasm = analysis::Disasm<Offset, SignedValue, f32, Pointer, Offset>;

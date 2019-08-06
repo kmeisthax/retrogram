@@ -34,4 +34,28 @@ impl<I, SI, F, P, S> Disasm<I, SI, F, P, S> where P: analysis::Mappable {
             targets: targets
         }
     }
+
+    pub fn as_instr(&self) -> &ast::Instruction<I, SI, F, P> {
+        &self.instr
+    }
+
+    pub fn iter_targets(&self) -> impl Iterator<Item = &analysis::Reference<P>> {
+        self.targets.iter()
+    }
+
+    pub fn flow(&self) -> analysis::Flow {
+        self.flow
+    }
+}
+
+impl<I, SI, F, P, S> Disasm<I, SI, F, P, S> where P: analysis::Mappable, S: Clone {
+    pub fn next_offset(&self) -> S {
+        self.next_offset.clone()
+    }
+}
+
+impl<I, SI, F, P, S> Disasm<I, SI, F, P, S> where P: analysis::Mappable, ast::Instruction<I, SI, F, P>: Clone {
+    pub fn directive<MV>(&self) -> ast::Directive<I, SI, F, P, MV, S> {
+        ast::Directive::EmitInstr(self.instr.clone())
+    }
 }

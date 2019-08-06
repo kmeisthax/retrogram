@@ -3,14 +3,13 @@
 use crate::{memory, analysis, reg};
 use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
-use crate::arch::aarch32::{Aarch32Register, Pointer, Offset, Bus, Instruction};
+use crate::arch::aarch32::{Pointer, Bus, Instruction, Disasm};
+use crate::arch::aarch32::Aarch32Register as A32Reg;
 use crate::arch::aarch32::Operand as op;
 use crate::arch::aarch32::arm::condcode;
 use crate::arch::aarch32::thumb::THUMB_STATE;
 
-fn cond_branch(p: &memory::Pointer<Pointer>, cond: u16, offset: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
+fn cond_branch(p: &memory::Pointer<Pointer>, cond: u16, offset: u16) -> analysis::Result<Disasm> {
     // signed_offset = (target - base + 4) / 2
     // therefore target = signed_offset * 2 - 4 + base
     let signed_offset = (((offset as u8) as i8) as i32) << 1;
@@ -21,19 +20,17 @@ fn cond_branch(p: &memory::Pointer<Pointer>, cond: u16, offset: u16) ->
     
     match cond {
         //Unconditional conditional branches are undefined and are thus treated as illegal
-        15 => (None, 0, false, false, vec![]),
+        15 => Err(analysis::Error::InvalidInstruction),
 
         //TODO: The jump target can be in high RAM, how do we handle that?
-        16 => (Some(Instruction::new("SWI", vec![op::int(offset as u32)])), 2, true, true,
-                vec![refr::new_static_ref(p.clone(), swi_target, refkind::Subroutine)]),
-        _ => (Some(Instruction::new(&format!("B{}", condcode(cond as u32)), vec![op::cptr(target.clone())])),
-            2, true, false, vec![refr::new_static_ref(p.clone(), target, refkind::Code)])
+        16 => Ok(Disasm::new(Instruction::new("SWI", vec![op::int(offset as u32)]), 2, analysis::Flow::Normal,
+                vec![refr::new_static_ref(p.clone(), swi_target, refkind::Subroutine)])),
+        _ => Ok(Disasm::new(Instruction::new(&format!("B{}", condcode(cond as u32)), vec![op::cptr(target.clone())]),
+            2, analysis::Flow::Branching(cond != 15), vec![refr::new_static_ref(p.clone(), target, refkind::Code)]))
     }
 }
 
-fn uncond_branch(p: &memory::Pointer<Pointer>, offset: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
+fn uncond_branch(p: &memory::Pointer<Pointer>, offset: u16) -> analysis::Result<Disasm> {
     // signed_offset = (target - base + 4) / 2
     // therefore target = signed_offset * 2 - 4 + base
     let sign_extend = match offset & 0x0400 != 0 {
@@ -43,13 +40,11 @@ fn uncond_branch(p: &memory::Pointer<Pointer>, offset: u16) ->
     let signed_offset = (((offset | sign_extend) as i16) as i32) << 1;
     let target = p.contextualize((signed_offset - 4 + p.as_pointer().clone() as i32) as Pointer);
     
-    (Some(Instruction::new("B", vec![op::cptr(target.clone())])), 2, false, false,
-        vec![refr::new_static_ref(p.clone(), target, refkind::Code)])
+    Ok(Disasm::new(Instruction::new("B", vec![op::cptr(target.clone())]), 2, analysis::Flow::Branching(false),
+        vec![refr::new_static_ref(p.clone(), target, refkind::Code)]))
 }
 
-fn special_data(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_rd: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
+fn special_data(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_rd: u16) -> analysis::Result<Disasm> {
     let opcode = (dp_opcode & 0xC) >> 2;
     let h1 = (dp_opcode & 0x2) << 2;
     let h2 = (dp_opcode & 0x1) << 3;
@@ -57,93 +52,88 @@ fn special_data(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_r
     let rm = h2 | low_rm;
     let rd = h1 | low_rd;
 
-    let rd_reg = Aarch32Register::from_instr(rd as u32).expect("Invalid register");
-    let rm_reg = Aarch32Register::from_instr(rm as u32).expect("Invalid register");
+    let rd_reg = A32Reg::from_instr(rd as u32).expect("Invalid register");
+    let rm_reg = A32Reg::from_instr(rm as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rm_operand = op::sym(&rm_reg.to_string());
     let branch_target = match rd_reg {
-        Aarch32Register::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
+        A32Reg::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
         _ => vec![]
     };
-    let is_nonbranching = rd_reg != Aarch32Register::R15;
+    let flow = match rd_reg == A32Reg::R15 {
+        true => analysis::Flow::Branching(false),
+        false => analysis::Flow::Normal
+    };
 
     match (opcode, l) {
-        (0, _) => (Some(Instruction::new("ADD", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        (1, _) => (Some(Instruction::new("CMP", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        (2, _) => (Some(Instruction::new("MOV", vec![rd_operand, rm_operand])), 2, is_nonbranching, is_nonbranching, branch_target),
-        (3, false) => (Some(Instruction::new("BX", vec![rm_operand])), 2, false, false, vec![refr::new_dyn_ref(p.clone(), refkind::Code)]),
-        (3, true) => (Some(Instruction::new("BLX", vec![rm_operand])), 2, true, true, vec![refr::new_dyn_ref(p.clone(), refkind::Subroutine)]),
+        (0, _) => Ok(Disasm::new(Instruction::new("ADD", vec![rd_operand, rm_operand]), 2, flow, branch_target)),
+        (1, _) => Ok(Disasm::new(Instruction::new("CMP", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        (2, _) => Ok(Disasm::new(Instruction::new("MOV", vec![rd_operand, rm_operand]), 2, flow, branch_target)),
+        (3, false) => Ok(Disasm::new(Instruction::new("BX", vec![rm_operand]), 2, analysis::Flow::Branching(false), vec![refr::new_dyn_ref(p.clone(), refkind::Code)])),
+        (3, true) => Ok(Disasm::new(Instruction::new("BLX", vec![rm_operand]), 2, analysis::Flow::Normal, vec![refr::new_dyn_ref(p.clone(), refkind::Subroutine)])),
         _ => panic!("Invalid opcode or L flag")
     }
 }
 
-fn data_processing(dp_opcode: u16, low_rm: u16, low_rd: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
-    let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
+fn data_processing(dp_opcode: u16, low_rm: u16, low_rd: u16) -> analysis::Result<Disasm> {
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
+    let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rm_operand = op::sym(&rm_reg.to_string());
 
     match dp_opcode {
-        0 => (Some(Instruction::new("AND", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        1 => (Some(Instruction::new("EOR", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        2 => (Some(Instruction::new("LSL", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        3 => (Some(Instruction::new("LSR", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        4 => (Some(Instruction::new("ASR", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        5 => (Some(Instruction::new("ADC", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        7 => (Some(Instruction::new("ROR", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        6 => (Some(Instruction::new("SBC", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        8 => (Some(Instruction::new("TST", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        9 => (Some(Instruction::new("NEG", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        0xA => (Some(Instruction::new("CMP", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        0xB => (Some(Instruction::new("CMM", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        0xC => (Some(Instruction::new("ORR", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        0xD => (Some(Instruction::new("MUL", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        0xE => (Some(Instruction::new("BIC", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        0xF => (Some(Instruction::new("MVN", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        0 => Ok(Disasm::new(Instruction::new("AND", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        1 => Ok(Disasm::new(Instruction::new("EOR", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        2 => Ok(Disasm::new(Instruction::new("LSL", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        3 => Ok(Disasm::new(Instruction::new("LSR", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        4 => Ok(Disasm::new(Instruction::new("ASR", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        5 => Ok(Disasm::new(Instruction::new("ADC", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        7 => Ok(Disasm::new(Instruction::new("ROR", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        6 => Ok(Disasm::new(Instruction::new("SBC", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        8 => Ok(Disasm::new(Instruction::new("TST", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        9 => Ok(Disasm::new(Instruction::new("NEG", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        0xA => Ok(Disasm::new(Instruction::new("CMP", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        0xB => Ok(Disasm::new(Instruction::new("CMM", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        0xC => Ok(Disasm::new(Instruction::new("ORR", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        0xD => Ok(Disasm::new(Instruction::new("MUL", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        0xE => Ok(Disasm::new(Instruction::new("BIC", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        0xF => Ok(Disasm::new(Instruction::new("MVN", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
         _ => panic!("Not a valid THUMB data processing instruction")
     }
 }
 
-fn add_sub_register(add_sub_bit: u16, low_rm: u16, low_rn: u16, low_rd: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
-    let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
-    let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
+fn add_sub_register(add_sub_bit: u16, low_rm: u16, low_rn: u16, low_rd: u16) -> analysis::Result<Disasm> {
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
+    let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
+    let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rn_operand = op::sym(&rn_reg.to_string());
     let rm_operand = op::sym(&rm_reg.to_string());
 
     match add_sub_bit {
-        0 => (Some(Instruction::new("ADD", vec![rd_operand, rn_operand, rm_operand])), 2, true, true, vec![]),
-        1 => (Some(Instruction::new("SUB", vec![rd_operand, rn_operand, rm_operand])), 2, true, true, vec![]),
+        0 => Ok(Disasm::new(Instruction::new("ADD", vec![rd_operand, rn_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        1 => Ok(Disasm::new(Instruction::new("SUB", vec![rd_operand, rn_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
         _ => panic!("Neither an add nor sub")
     }
 }
 
-fn add_sub_immed(add_sub_bit: u16, immed: u16, low_rn: u16, low_rd: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
-    let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
+fn add_sub_immed(add_sub_bit: u16, immed: u16, low_rn: u16, low_rd: u16) -> analysis::Result<Disasm> {
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
+    let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rn_operand = op::sym(&rn_reg.to_string());
     let immed_operand = op::int(immed);
 
     match add_sub_bit {
-        0 => (Some(Instruction::new("ADD", vec![rd_operand, rn_operand, immed_operand])), 2, true, true, vec![]),
-        1 => (Some(Instruction::new("SUB", vec![rd_operand, rn_operand, immed_operand])), 2, true, true, vec![]),
+        0 => Ok(Disasm::new(Instruction::new("ADD", vec![rd_operand, rn_operand, immed_operand]), 2, analysis::Flow::Normal, vec![])),
+        1 => Ok(Disasm::new(Instruction::new("SUB", vec![rd_operand, rn_operand, immed_operand]), 2, analysis::Flow::Normal, vec![])),
         _ => panic!("Neither an add nor sub")
     }
 }
 
-fn shifter_immed(shift_opcode: u16, immed: u16, low_rm: u16, low_rd: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
-    let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
+fn shifter_immed(shift_opcode: u16, immed: u16, low_rm: u16, low_rd: u16) -> analysis::Result<Disasm> {
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
+    let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rm_operand = op::sym(&rm_reg.to_string());
     let nz_immed = match immed {
@@ -152,47 +142,41 @@ fn shifter_immed(shift_opcode: u16, immed: u16, low_rm: u16, low_rd: u16) ->
     };
 
     match shift_opcode {
-        0 => (Some(Instruction::new("LSL", vec![rd_operand, rm_operand, op::int(immed)])), 2, true, true, vec![]),
-        1 => (Some(Instruction::new("LSR", vec![rd_operand, rm_operand, op::int(nz_immed)])), 2, true, true, vec![]),
-        2 => (Some(Instruction::new("ASR", vec![rd_operand, rm_operand, op::int(nz_immed)])), 2, true, true, vec![]),
+        0 => Ok(Disasm::new(Instruction::new("LSL", vec![rd_operand, rm_operand, op::int(immed)]), 2, analysis::Flow::Normal, vec![])),
+        1 => Ok(Disasm::new(Instruction::new("LSR", vec![rd_operand, rm_operand, op::int(nz_immed)]), 2, analysis::Flow::Normal, vec![])),
+        2 => Ok(Disasm::new(Instruction::new("ASR", vec![rd_operand, rm_operand, op::int(nz_immed)]), 2, analysis::Flow::Normal, vec![])),
         _ => panic!("Invalid opcode for shifter immediate format")
     }
 }
 
-fn math_immed(math_opcode: u16, low_rd: u16, immed: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+fn math_immed(math_opcode: u16, low_rd: u16, immed: u16) -> analysis::Result<Disasm> {
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let immed_operand = op::int(immed);
 
     match math_opcode {
-        0 => (Some(Instruction::new("MOV", vec![rd_operand, immed_operand])), 2, true, true, vec![]),
-        1 => (Some(Instruction::new("CMP", vec![rd_operand, immed_operand])), 2, true, true, vec![]),
-        2 => (Some(Instruction::new("ADD", vec![rd_operand, immed_operand])), 2, true, true, vec![]),
-        3 => (Some(Instruction::new("SUB", vec![rd_operand, immed_operand])), 2, true, true, vec![]),
+        0 => Ok(Disasm::new(Instruction::new("MOV", vec![rd_operand, immed_operand]), 2, analysis::Flow::Normal, vec![])),
+        1 => Ok(Disasm::new(Instruction::new("CMP", vec![rd_operand, immed_operand]), 2, analysis::Flow::Normal, vec![])),
+        2 => Ok(Disasm::new(Instruction::new("ADD", vec![rd_operand, immed_operand]), 2, analysis::Flow::Normal, vec![])),
+        3 => Ok(Disasm::new(Instruction::new("SUB", vec![rd_operand, immed_operand]), 2, analysis::Flow::Normal, vec![])),
         _ => panic!("Invalid math opcode")
     }
 }
 
-fn load_pool_constant(p: &memory::Pointer<Pointer>, low_rd: u16, immed: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+fn load_pool_constant(p: &memory::Pointer<Pointer>, low_rd: u16, immed: u16) -> analysis::Result<Disasm> {
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let target_ptr = p.contextualize((p.as_pointer().clone() & 0xFFFFFFFC) + 4 + (immed as u32 * 4));
     let immed_operand = op::int(immed as u32 * 4);
     let ast = Instruction::new("LDR", vec![rd_operand, op::indir(op::wrap("", vec![op::sym("PC"), immed_operand], ""))]); 
 
-    (Some(ast), 2, true, true, vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Data)])
+    Ok(Disasm::new(ast, 2, analysis::Flow::Normal, vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Data)]))
 }
 
-fn load_store_register_offset(opcode: u16, low_rm: u16, low_rn: u16, low_rd: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
-    let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
-    let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
+fn load_store_register_offset(opcode: u16, low_rm: u16, low_rn: u16, low_rd: u16) -> analysis::Result<Disasm> {
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
+    let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
+    let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rn_operand = op::sym(&rn_reg.to_string());
     let rm_operand = op::sym(&rm_reg.to_string());
@@ -207,15 +191,14 @@ fn load_store_register_offset(opcode: u16, low_rm: u16, low_rn: u16, low_rd: u16
         7 => "LDRSH",
         _ => panic!("Invalid opcode")
     };
+    let operands = vec![rd_operand, op::wrap("[", vec![rn_operand, rm_operand], "]")];
 
-    (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![rn_operand, rm_operand], "]")])), 2, true, true, vec![])
+    Ok(Disasm::new(Instruction::new(opcode_name, operands), 2, analysis::Flow::Normal, vec![]))
 }
 
-fn load_store_immed_offset_word(b: u16, l: u16, offset: u16, low_rn: u16, low_rd: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
-    let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
+fn load_store_immed_offset_word(b: u16, l: u16, offset: u16, low_rn: u16, low_rd: u16) -> analysis::Result<Disasm> {
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
+    let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rn_operand = op::sym(&rn_reg.to_string());
     let size = match b {
@@ -232,15 +215,14 @@ fn load_store_immed_offset_word(b: u16, l: u16, offset: u16, low_rn: u16, low_rd
         (1, 1) => "LDRB",
         _ => panic!("Invalid size/direction bits!")
     };
+    let operands = vec![rd_operand, op::wrap("[", vec![rn_operand, offset_operand], "]")];
 
-    (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![rn_operand, offset_operand], "]")])), 2, true, true, vec![])
+    Ok(Disasm::new(Instruction::new(opcode_name, operands), 2, analysis::Flow::Normal, vec![]))
 }
 
-fn load_store_immed_offset_halfword(l: u16, offset: u16, low_rn: u16, low_rd: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
-    let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
+fn load_store_immed_offset_halfword(l: u16, offset: u16, low_rn: u16, low_rd: u16) -> analysis::Result<Disasm> {
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
+    let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rn_operand = op::sym(&rn_reg.to_string());
     let offset_operand = op::int(offset * 2);
@@ -250,14 +232,13 @@ fn load_store_immed_offset_halfword(l: u16, offset: u16, low_rn: u16, low_rd: u1
         1 => "LDRH",
         _ => panic!("Invalid direction bit!")
     };
+    let operands = vec![rd_operand, op::wrap("[", vec![rn_operand, offset_operand], "]")];
 
-    (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![rn_operand, offset_operand], "]")])), 2, true, true, vec![])
+    Ok(Disasm::new(Instruction::new(opcode_name, operands), 2, analysis::Flow::Normal, vec![]))
 }
 
-fn load_store_stack_offset(l: u16, low_rd: u16, offset: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+fn load_store_stack_offset(l: u16, low_rd: u16, offset: u16) -> analysis::Result<Disasm> {
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let offset_operand = op::int(offset * 4);
 
@@ -266,14 +247,13 @@ fn load_store_stack_offset(l: u16, low_rd: u16, offset: u16) ->
         1 => "LDRH",
         _ => panic!("Invalid direction bit!")
     };
+    let operands = vec![rd_operand, op::wrap("[", vec![op::sym("SP"), offset_operand], "]")];
 
-    (Some(Instruction::new(opcode_name, vec![rd_operand, op::wrap("[", vec![op::sym("SP"), offset_operand], "]")])), 2, true, true, vec![])
+    Ok(Disasm::new(Instruction::new(opcode_name, operands), 2, analysis::Flow::Normal, vec![]))
 }
 
-fn compute_rel_addr(s: u16, low_rd: u16, offset: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
+fn compute_rel_addr(s: u16, low_rd: u16, offset: u16) -> analysis::Result<Disasm> {
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let offset_operand = op::int(offset * 4);
 
@@ -283,13 +263,11 @@ fn compute_rel_addr(s: u16, low_rd: u16, offset: u16) ->
         _ => panic!("Invalid direction bit!")
     });
 
-    (Some(Instruction::new("ADD", vec![rd_operand, s_operand, offset_operand])), 2, true, true, vec![])
+    Ok(Disasm::new(Instruction::new("ADD", vec![rd_operand, s_operand, offset_operand]), 2, analysis::Flow::Normal, vec![]))
 }
 
-fn load_store_multiple(l: u16, low_rn: u16, register_list: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
-    let rn_reg = Aarch32Register::from_instr(low_rn as u32).expect("Invalid register");
+fn load_store_multiple(l: u16, low_rn: u16, register_list: u16) -> analysis::Result<Disasm> {
+    let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
     let rn_operand = op::sym(&rn_reg.to_string());
     let instr = match l {
         0 => "STMIA",
@@ -300,18 +278,18 @@ fn load_store_multiple(l: u16, low_rn: u16, register_list: u16) ->
 
     for i in 0..7 {
         if register_list & (1 << i) != 0 {
-            let reg = Aarch32Register::from_instr(i).expect("This should be valid");
+            let reg = A32Reg::from_instr(i).expect("This should be valid");
             let reg_operand = op::sym(&reg.to_string());
             register_list_operand.push(reg_operand);
         }
     }
 
-    (Some(Instruction::new(instr, vec![op::suff(rn_operand, "!"), op::wrap("{", register_list_operand, "}")])), 2, true, true, vec![])
+    let operands = vec![op::suff(rn_operand, "!"), op::wrap("{", register_list_operand, "}")];
+
+    Ok(Disasm::new(Instruction::new(instr, operands), 2, analysis::Flow::Normal, vec![]))
 }
 
-fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
+fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16) -> analysis::Result<Disasm> {
     match mem.read_leword::<u16>(&(p.clone() + 2)).into_concrete() {
         Some(low_instr) if low_instr & 0xE000 == 0xE000 => {
             let h = (low_instr & 0x1800) >> 11;
@@ -327,64 +305,64 @@ fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16)
             arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
 
             match h {
-                1 if low_offset & 1 == 0 => (Some(Instruction::new("BLX", vec![op::cptr(arm_target.clone())])), 4, true, true, vec![refr::new_static_ref(p.clone(), arm_target, refkind::Subroutine)]),
-                3 => (Some(Instruction::new("BL", vec![op::cptr(target.clone())])), 4, true, true, vec![refr::new_static_ref(p.clone(), target, refkind::Subroutine)]),
-                _ => (None, 0, false, false, vec![])
+                1 if low_offset & 1 == 0 => Ok(Disasm::new(Instruction::new("BLX", vec![op::cptr(arm_target.clone())]), 4, analysis::Flow::Normal, vec![refr::new_static_ref(p.clone(), arm_target, refkind::Subroutine)])),
+                3 => Ok(Disasm::new(Instruction::new("BL", vec![op::cptr(target.clone())]), 4, analysis::Flow::Branching(false), vec![refr::new_static_ref(p.clone(), target, refkind::Subroutine)])),
+                _ => Err(analysis::Error::InvalidInstruction)
             }
         },
-        _ => (None, 0, false, false, vec![])
+        _ => Err(analysis::Error::UnconstrainedMemory)
     }
 }
 
-fn sp_adjust(immed: u16) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn sp_adjust(immed: u16) -> analysis::Result<Disasm> {
     let opbit = (immed & 0x80) >> 7;
     let target = (immed & 0x7F) << 2;
     
     match opbit {
-        0 => (Some(Instruction::new("ADD", vec![op::sym("SP"), op::int(target)])), 2, true, true, vec![]),
-        1 => (Some(Instruction::new("SUB", vec![op::sym("SP"), op::int(target)])), 2, true, true, vec![]),
+        0 => Ok(Disasm::new(Instruction::new("ADD", vec![op::sym("SP"), op::int(target)]), 2, analysis::Flow::Normal, vec![])),
+        1 => Ok(Disasm::new(Instruction::new("SUB", vec![op::sym("SP"), op::int(target)]), 2, analysis::Flow::Normal, vec![])),
         _ => panic!("Invalid opbit")
     }
 }
 
-fn sign_zero_extend(immed: u16, low_rm: u16, low_rd: u16) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn sign_zero_extend(immed: u16, low_rm: u16, low_rd: u16) -> analysis::Result<Disasm> {
     let opcode = (immed & 0xC0) >> 6;
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
-    let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
+    let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rm_operand = op::sym(&rm_reg.to_string());
 
     match opcode {
-        0 => (Some(Instruction::new("SXTH", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        1 => (Some(Instruction::new("SXTB", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        2 => (Some(Instruction::new("UXTH", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        3 => (Some(Instruction::new("UXTB", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        0 => Ok(Disasm::new(Instruction::new("SXTH", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        1 => Ok(Disasm::new(Instruction::new("SXTB", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        2 => Ok(Disasm::new(Instruction::new("UXTH", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        3 => Ok(Disasm::new(Instruction::new("UXTB", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
         _ => panic!("Invalid opcode")
     }
 }
 
-fn endian_reverse(immed: u16, low_rm: u16, low_rd: u16) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn endian_reverse(immed: u16, low_rm: u16, low_rd: u16) -> analysis::Result<Disasm> {
     let opcode = (immed & 0xC0) >> 6;
-    let rd_reg = Aarch32Register::from_instr(low_rd as u32).expect("Invalid register");
-    let rm_reg = Aarch32Register::from_instr(low_rm as u32).expect("Invalid register");
+    let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
+    let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rm_operand = op::sym(&rm_reg.to_string());
 
     match opcode {
-        0 => (Some(Instruction::new("REV", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        1 => (Some(Instruction::new("REV16", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
-        2 => (None, 0, false, false, vec![]),
-        3 => (Some(Instruction::new("REVSH", vec![rd_operand, rm_operand])), 2, true, true, vec![]),
+        0 => Ok(Disasm::new(Instruction::new("REV", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        1 => Ok(Disasm::new(Instruction::new("REV16", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
+        2 => Err(analysis::Error::InvalidInstruction),
+        3 => Ok(Disasm::new(Instruction::new("REVSH", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
         _ => panic!("Invalid opcode")
     }
 }
 
-fn push_pop(l: u16, r: u16, register_list: u16) -> (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
+fn push_pop(l: u16, r: u16, register_list: u16) -> analysis::Result<Disasm> {
     let mut register_list_operand = vec![];
 
     for i in 0..7 {
         if register_list & (1 << i) != 0 {
-            let reg = Aarch32Register::from_instr(i).expect("This should be valid");
+            let reg = A32Reg::from_instr(i).expect("This should be valid");
             let reg_operand = op::sym(&reg.to_string());
             register_list_operand.push(reg_operand);
         }
@@ -400,21 +378,25 @@ fn push_pop(l: u16, r: u16, register_list: u16) -> (Option<Instruction>, Offset,
         }
     }
 
+    let flow = match is_callret {
+        true => analysis::Flow::Returning,
+        false => analysis::Flow::Normal
+    };
+
     match l {
-        0 => (Some(Instruction::new("PUSH", vec![op::wrap("{", register_list_operand, "}")])), 2, true, true, vec![]),
-        1 => (Some(Instruction::new("POP", vec![op::wrap("{", register_list_operand, "}")])), 2, !is_callret, !is_callret, vec![]),
+        0 => Ok(Disasm::new(Instruction::new("PUSH", vec![op::wrap("{", register_list_operand, "}")]), 2, analysis::Flow::Normal, vec![])),
+        1 => Ok(Disasm::new(Instruction::new("POP", vec![op::wrap("{", register_list_operand, "}")]), 2, flow, vec![])),
         _ => panic!("Invalid L bit")
     }
 }
 
-fn breakpoint(p: &memory::Pointer<Pointer>, immed: u16) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<analysis::Reference<Pointer>>) {
-    
+fn breakpoint(p: &memory::Pointer<Pointer>, immed: u16) -> analysis::Result<Disasm> {
     let mut bkpt_target = p.contextualize(0x0000000C);
-    
     bkpt_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
+
+    let targets = vec![refr::new_static_ref(p.clone(), bkpt_target, refkind::Subroutine)];
     
-    (Some(Instruction::new("BKPT", vec![op::int(immed as u32)])), 2, true, true, vec![refr::new_static_ref(p.clone(), bkpt_target, refkind::Subroutine)])
+    Ok(Disasm::new(Instruction::new("BKPT", vec![op::int(immed as u32)]), 2, analysis::Flow::Normal, targets))
 }
 
 /// Disassemble the instruction at `p` in `mem`.
@@ -433,9 +415,7 @@ fn breakpoint(p: &memory::Pointer<Pointer>, immed: u16) ->
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
-    (Option<Instruction>, Offset, bool, bool, Vec<refr<Pointer>>) {
-    
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<Disasm> {
     match mem.read_leword::<u16>(p).into_concrete() {
         Some(instr) => {
             let rd = instr & 0x0007; //sometimes also sbz
@@ -470,17 +450,17 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) ->
                     (1, 0, 1, 0) => endian_reverse(immed, rn, rd),
                     (l, 1, 0, r) => push_pop(l, r, immed),
                     (1, 1, 1, 0) => breakpoint(p, immed),
-                    _ => (None, 0, false, false, vec![]) //undefined
+                    _ => Err(analysis::Error::InvalidInstruction) //undefined
                 },
                 (6, 0, l, _) => load_store_multiple(l, math_rd_rn, immed),
                 (6, 1, _, _) => cond_branch(p, cond, immed),
                 (7, 0, 0, _) => uncond_branch(p, large_offset),
-                (7, 0, 1, _) => (None, 0, false, false, vec![]), //BLX suffix or undefined
+                (7, 0, 1, _) => Err(analysis::Error::InvalidInstruction), //BLX suffix or undefined
                 (7, 1, 0, _) => uncond_branch_link(p, mem, large_offset),
-                (7, 1, 1, _) => (None, 0, false, false, vec![]), //BL suffix
-                _ => (None, 0, false, false, vec![])
+                (7, 1, 1, _) => Err(analysis::Error::InvalidInstruction), //BL suffix
+                _ => Err(analysis::Error::InvalidInstruction)
             }
         },
-        None => (None, 0, false, false, vec![])
+        None => Err(analysis::Error::UnconstrainedMemory)
     }
 }

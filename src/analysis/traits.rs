@@ -14,5 +14,14 @@ impl<T> Mappable for T where T: Clone + Eq + Hash + Ord + Display + FromStr {
 
 }
 
-pub type Disassembler<I, SI, F, P, MV, S, IO> = Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) ->
-            analysis::Result<analysis::Disasm<I, SI, F, P, S>>;
+pub trait Disassembler<I, SI, F, P, MV, S, IO> : Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) ->
+    analysis::Result<analysis::Disasm<I, SI, F, P, S>> where P: analysis::Mappable {
+    
+}
+
+impl<T, I, SI, F, P, MV, S, IO> Disassembler<I, SI, F, P, MV, S, IO> for T
+    where P: analysis::Mappable,
+        T: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) ->
+            analysis::Result<analysis::Disasm<I, SI, F, P, S>> {
+    
+}

@@ -7,6 +7,7 @@
 /// pointer constructed from the given instruction offset, and one or more
 /// possible alternative instructions. Execution within subroutines, as well as
 /// interrupts, are not considered for control flow analysis.
+#[derive(Copy, Clone)]
 pub enum Flow {
     /// Normal control flow.
     /// 
@@ -23,14 +24,14 @@ pub enum Flow {
     /// offset to the next instruction provided by the disassembly result is
     /// included as one of the possible branches.
     /// 
-    /// Equivalent to (false, true) or (true, false)
+    /// Equivalent to (true, false) or (false, false)
     Branching(bool),
 
     /// Returning control flow.
     /// 
     /// Instruction control flow for this subroutine ends.
     /// 
-    /// Equivalent to (false, false)
+    /// Equivalent to (false, true)
     Returning,
 }
 

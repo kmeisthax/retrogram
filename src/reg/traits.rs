@@ -1,6 +1,6 @@
 //! Traits used by reg types
 
-use std::ops::{Not, BitAnd, BitOr, BitXor, Shl};
+use std::ops::{Not, BitAnd, BitOr, BitXor};
 use num::traits::{Zero, CheckedShl};
 use crate::reg;
 use crate::maths::BoundWidth;

@@ -12,8 +12,8 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
         bus: &memory::Memory<P, MV, S, IO>) -> io::Result<()>
     where P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
         S: memory::Offset<P> + cli::Nameable + Zero,
-        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool,
-            bool, Vec<analysis::Reference<P>>) {
+        ast::Instruction<I, SI, F, P>: Clone,
+        DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO> {
     let (orig_asm, xrefs, pc_offset, blocks, is_improperly_ended) = analysis::disassemble_block(start_pc.clone(), bus, disassembler)?;
 
     if is_improperly_ended {
@@ -77,7 +77,8 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, s
     where for <'dw> P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw> +
             serde::Serialize + maths::FromStrRadix,
         for <'dw> S: memory::Offset<P> + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
-        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>),
+        ast::Instruction<I, SI, F, P>: Clone,
+        DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO>,
         APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()> {
 
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {

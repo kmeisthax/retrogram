@@ -8,6 +8,7 @@ pub enum Error {
     IOError(io::Error),
     UnconstrainedMemory,
     InvalidInstruction,
+    NotYetImplemented
 }
 
 impl fmt::Display for Error {
@@ -17,7 +18,8 @@ impl fmt::Display for Error {
         match self {
             IOError(e) => write!(f, "I/O error: {}", e),
             UnconstrainedMemory => write!(f, "Attempted to disassemble an invalid location (e.g. in uninitialized memory)"),
-            InvalidInstruction => write!(f, "Attempted to disassemble invalid instruction")
+            InvalidInstruction => write!(f, "Attempted to disassemble invalid instruction"),
+            NotYetImplemented => write!(f, "Attempted to disassemble an instruction that hasn't had a disassembler implemented yet")
         }
     }
 }

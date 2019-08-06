@@ -35,8 +35,8 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
         io::Result<(ast::Section<I, SI, F, P, MV, S>, HashSet<analysis::Reference<P>>, Option<S>, Vec<analysis::Block<P, S>>, bool)>
     where P: memory::PtrNum<S> + analysis::Mappable + fmt::Display + fmt::UpperHex,
         S: memory::Offset<P> + fmt::Display,
-        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) ->
-            (Option<ast::Instruction<I, SI, F, P>>, S, bool, bool, Vec<analysis::Reference<P>>) {
+        DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO>,
+        ast::Instruction<I, SI, F, P>: Clone {
     
     let mut pc = start_pc.clone();
     let mut asm = ast::Section::new(&format!("Untitled Section at {}", pc.as_pointer()));
@@ -47,22 +47,22 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
 
     loop {
         match disassemble(&pc, &plat) {
-            (Some(instr), size, is_nonfinal, is_nonbranching, instr_targets) => {
-                asm.append_directive(ast::Directive::EmitInstr(instr), pc.clone());
-                pc = pc.contextualize(P::from(pc.as_pointer().clone() + size.clone()));
-                cur_blk_size = S::try_from(cur_blk_size + size).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Could not increase size of block by instruction offset"))?;
+            Ok(disasm) => {
+                asm.append_directive(disasm.directive(), pc.clone());
+                pc = pc.contextualize(P::from(pc.as_pointer().clone() + disasm.next_offset()));
+                cur_blk_size = S::try_from(cur_blk_size + disasm.next_offset()).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Could not increase size of block by instruction offset"))?;
 
-                for target in instr_targets {
-                    targets.insert(target);
+                for target in disasm.iter_targets() {
+                    targets.insert(target.clone());
                 }
 
-                if !is_nonbranching {
+                if !disasm.flow().is_nonbranching() {
                     blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
                     cur_block_pc = pc.clone();
                     cur_blk_size = S::zero();
                 }
 
-                if !is_nonfinal {
+                if !disasm.flow().is_nonfinal() {
                     if cur_blk_size > S::zero() {
                         blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
                     }
@@ -70,7 +70,8 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
                     return Ok((asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks, false));
                 }
             },
-            (None, _, _, _, _) => {
+            Err(_) => {
+                //TODO: Find a way to propagate the error and partial results
                 if cur_blk_size > S::zero() {
                     blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
                 }

@@ -1,6 +1,6 @@
 //! Types used by aarch32
 
-use crate::{memory, ast};
+use crate::{memory, ast, analysis};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Aarch32Register {
@@ -107,3 +107,6 @@ pub type Instruction = ast::Instruction<Offset, Value, f32, Pointer>;
 
 /// The AST type which represents disassembled code.
 pub type Section = ast::Section<Offset, Value, f32, Pointer, Data, Offset>;
+
+/// The type which represents a single disassembled instruction.
+pub type Disasm = analysis::Disasm<Offset, Value, f32, Pointer, Offset>;

@@ -15,8 +15,7 @@ fn backref_inner<I, SI, F, P, MV, S, IO, DIS, FMT, APARSE>
             serde::Serialize + maths::FromStrRadix,
         for <'dw> S: memory::Offset<P> + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize + One,
         for <'dw> MV: serde::Deserialize<'dw>,
-        DIS: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) -> (Option<ast::Instruction<I, SI, F, P>>, S, bool,
-            bool, Vec<analysis::Reference<P>>),
+        DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO>,
         FMT: Fn(&ast::Instruction<I, SI, F, P>) -> String,
         APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()> {
     
@@ -28,22 +27,28 @@ fn backref_inner<I, SI, F, P, MV, S, IO, DIS, FMT, APARSE>
 
     for xref_id in db.find_xrefs_to(&start_pc, S::one()) {
         if let Some(xref) = db.xref(xref_id) {
-            let (instr_asm, _, _, _, _) = dis(xref.as_source(), bus);
+            //let (instr_asm, _, _, _, _) = dis(xref.as_source(), bus);
 
-            if let Some(instr_asm) = instr_asm {
-                println!("{:X}: {} ({})", xref.as_source(), fmt(&instr_asm), match xref.kind() {
-                    analysis::ReferenceKind::Unknown => "Unknown",
-                    analysis::ReferenceKind::Data => "Data",
-                    analysis::ReferenceKind::Code => "Code, branch",
-                    analysis::ReferenceKind::Subroutine => "Code, call"
-                });
-            } else {
-                println!("{:X}: ??? ({})", xref.as_source(), match xref.kind() {
-                    analysis::ReferenceKind::Unknown => "Unknown",
-                    analysis::ReferenceKind::Data => "Data",
-                    analysis::ReferenceKind::Code => "Code, branch",
-                    analysis::ReferenceKind::Subroutine => "Code, call"
-                });
+
+            match dis(xref.as_source(), bus) {
+                Ok(disasm) => {
+                    let instr_asm = disasm.as_instr();
+
+                    println!("{:X}: {} ({})", xref.as_source(), fmt(instr_asm), match xref.kind() {
+                        analysis::ReferenceKind::Unknown => "Unknown",
+                        analysis::ReferenceKind::Data => "Data",
+                        analysis::ReferenceKind::Code => "Code, branch",
+                        analysis::ReferenceKind::Subroutine => "Code, call"
+                    });
+                },
+                Err(_) => {
+                    println!("{:X}: ??? ({})", xref.as_source(), match xref.kind() {
+                        analysis::ReferenceKind::Unknown => "Unknown",
+                        analysis::ReferenceKind::Data => "Data",
+                        analysis::ReferenceKind::Code => "Code, branch",
+                        analysis::ReferenceKind::Subroutine => "Code, call"
+                    });
+                }
             }
         }
     }
