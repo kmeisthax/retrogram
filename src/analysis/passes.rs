@@ -70,11 +70,16 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
                     return Ok((asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks, false));
                 }
             },
-            Err(_) => {
+            Err(e) => {
                 //TODO: Find a way to propagate the error and partial results
                 if cur_blk_size > S::zero() {
                     blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
                 }
+
+                match e {
+                    analysis::Error::Misinterpretation(l, is_bigendian) => eprintln!("Misinterpretation at {}", pc.clone()),
+                    _ => {}
+                };
 
                 return Ok((asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks, true));
             }

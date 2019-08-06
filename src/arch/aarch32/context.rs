@@ -10,6 +10,11 @@ fn recognize_context<P>(ctxt_str: &str, ptr: &mut memory::Pointer<P>) -> Option<
 
             Some(())
         },
+        "A" => {
+            ptr.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
+
+            Some(())
+        },
         _ => None
     }
 }

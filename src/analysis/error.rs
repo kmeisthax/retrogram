@@ -4,27 +4,29 @@ use std::{io, error, fmt, result};
 
 /// Error type for analysis.
 #[derive(Debug)]
-pub enum Error {
+pub enum Error<S> {
     IOError(io::Error),
     UnconstrainedMemory,
     InvalidInstruction,
-    NotYetImplemented
+    NotYetImplemented,
+    Misinterpretation(S, bool)
 }
 
-impl fmt::Display for Error {
+impl<S> fmt::Display for Error<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Error::*;
 
         match self {
             IOError(e) => write!(f, "I/O error: {}", e),
-            UnconstrainedMemory => write!(f, "Attempted to disassemble an invalid location (e.g. in uninitialized memory)"),
-            InvalidInstruction => write!(f, "Attempted to disassemble invalid instruction"),
-            NotYetImplemented => write!(f, "Attempted to disassemble an instruction that hasn't had a disassembler implemented yet")
+            UnconstrainedMemory => write!(f, "Invalid location (e.g. in uninitialized memory)"),
+            InvalidInstruction => write!(f, "Invalid instruction"),
+            NotYetImplemented => write!(f, "Disassembly not yet implemented"),
+            Error::Misinterpretation(_, _) => write!(f, "Ostensibly valid instruction failed to disassemble")
         }
     }
 }
 
-impl error::Error for Error {
+impl<S> error::Error for Error<S> where S: fmt::Debug {
     fn source(&self) -> Option<&(error::Error + 'static)> {
         use Error::*;
 
@@ -35,4 +37,4 @@ impl error::Error for Error {
     }
 }
 
-pub type Result<T> = result::Result<T, Error>;
+pub type Result<T, S> = result::Result<T, Error<S>>;

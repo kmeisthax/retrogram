@@ -1,7 +1,7 @@
 use crate::{analysis, memory};
 use crate::ast::Operand as op;
 use crate::ast::Instruction as inst;
-use crate::arch::sm83::{Pointer, Bus, Operand, Disasm};
+use crate::arch::sm83::{Pointer, Offset, Bus, Operand, Disasm};
 
 fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
@@ -114,7 +114,7 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<Disasm> {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<Disasm, Offset> {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
             match mem.read_unit(&(p.clone()+1)).into_concrete() {
