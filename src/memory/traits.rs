@@ -12,14 +12,14 @@ use crate::maths::{BoundWidth, CheckedAdd, CheckedSub};
 /// Ordering has the semantics that the greater pointer "comes after" the former
 /// in a memory layout. It must be possible to subtract two pointers to obtain
 /// the offset type, and whatever you get by adding a pointer and an offset must
-/// be convertable into a pointer.
-pub trait PtrNum<S> : Clone + PartialOrd + Add<S> + Sub + CheckedSub + From<<Self as Add<S>>::Output>
+/// yield another pointer.
+pub trait PtrNum<S> : Clone + PartialOrd + CheckedAdd<S, Output=Self> + Sub + CheckedSub
     where S: Offset<Self> {
 
 }
 
 impl <T, S> PtrNum<S> for T
-    where T: Clone + PartialOrd + Add<S> + Sub + CheckedSub + From<<T as Add<S>>::Output>,
+    where T: Clone + PartialOrd + CheckedAdd<S, Output=Self> + Sub + CheckedSub,
         S: Offset<Self> {
 
 }

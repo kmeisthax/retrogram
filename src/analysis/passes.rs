@@ -1,15 +1,12 @@
 //! Analysis passes responsible for transforming AST output from the
 //! disassemblers.
 
-use std::{fmt, io};
+use std::fmt;
 use std::collections::HashSet;
-use std::fmt::{Debug, UpperHex};
-use std::convert::TryFrom;
-use std::ops::Add;
+use std::fmt::UpperHex;
 use crate::{ast, memory, analysis};
 use crate::analysis::ReferenceKind;
 use crate::database::Database;
-use crate::maths::CheckedAdd;
 
 /// Given memory and a pointer, disassemble a basic block of instructions and
 /// return them.
@@ -53,7 +50,17 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
         match disassemble(&pc, &plat) {
             Ok(disasm) => {
                 asm.append_directive(disasm.directive(), pc.clone());
-                pc = pc.contextualize(P::from(pc.as_pointer().clone() + disasm.next_offset()));
+                let new_pcval = match pc.as_pointer().clone().checked_add(disasm.next_offset()) {
+                    Some(new_pcval) => new_pcval,
+                    None => {
+                        if cur_blk_size > S::zero() {
+                            blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
+                        }
+
+                        return (asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks, Some(analysis::Error::BlockSizeOverflow));
+                    }
+                };
+                pc = pc.contextualize(new_pcval);
                 cur_blk_size = match cur_blk_size.clone().checked_add(disasm.next_offset()) {
                     Some(cur_blk_size) => cur_blk_size,
                     None => {
