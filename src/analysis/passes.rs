@@ -45,6 +45,7 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
     let mut blocks = Vec::new();
     let mut cur_block_pc = start_pc.clone();
     let mut cur_blk_size = S::zero();
+    let mut error = None;
 
     loop {
         match disassemble(&pc, &plat) {
@@ -53,22 +54,16 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
                 let new_pcval = match pc.as_pointer().clone().checked_add(disasm.next_offset()) {
                     Some(new_pcval) => new_pcval,
                     None => {
-                        if cur_blk_size > S::zero() {
-                            blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
-                        }
-
-                        return (asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks, Some(analysis::Error::BlockSizeOverflow));
+                        error = Some(analysis::Error::BlockSizeOverflow);
+                        break;
                     }
                 };
                 pc = pc.contextualize(new_pcval);
                 cur_blk_size = match cur_blk_size.clone().checked_add(disasm.next_offset()) {
                     Some(cur_blk_size) => cur_blk_size,
                     None => {
-                        if cur_blk_size > S::zero() {
-                            blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
-                        }
-
-                        return (asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks, Some(analysis::Error::BlockSizeOverflow));
+                        error = Some(analysis::Error::BlockSizeOverflow);
+                        break;
                     }
                 };
 
@@ -83,22 +78,21 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
                 }
 
                 if disasm.flow().is_final() {
-                    if cur_blk_size > S::zero() {
-                        blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
-                    }
-
-                    return (asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks, None);
+                    break;
                 }
             },
             Err(e) => {
-                if cur_blk_size > S::zero() {
-                    blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
-                }
-
-                return (asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks, Some(e));
+                error = Some(e);
+                break;
             }
         }
     }
+
+    if cur_blk_size > S::zero() {
+        blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
+    }
+
+    return (asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks, error);
 }
 
 /// Given an operand, replace all Pointer literals with Label operands obtained
