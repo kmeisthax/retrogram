@@ -4,7 +4,7 @@ use std::ops::{Add, Sub, Not, BitOr, BitAnd, Shl};
 use std::convert::TryFrom;
 use num::traits::{Bounded, Zero, One};
 use crate::reg;
-use crate::maths::{BoundWidth, CheckedSub};
+use crate::maths::{BoundWidth, CheckedAdd, CheckedSub};
 
 /// Trait which represents all operations expected of a pointer value.
 /// 
@@ -42,13 +42,13 @@ impl <T, S> PtrNum<S> for T
 /// encompass multiple disjoint address spaces; such as memory and I/O space, or
 /// program and data space. `TryFrom` allows the type system to signal that the
 /// difference of two pointers is undefined.
-pub trait Offset<P> : Clone + PartialOrd + Add + Sub + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize> + TryFrom<<Self as Add>::Output> + TryFrom<<Self as Sub>::Output>
+pub trait Offset<P> : Clone + PartialOrd + CheckedAdd<Output=Self> + CheckedSub<Output=Self> + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize>
     where P: Sub {
 
 }
 
 impl <T, P> Offset<P> for T
-    where T: Clone + PartialOrd + Add + Sub + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize> + TryFrom<<Self as Add>::Output> + TryFrom<<Self as Sub>::Output>,
+    where T: Clone + PartialOrd + CheckedAdd<Output=Self> + CheckedSub<Output=Self> + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize>,
         P: Sub {
 
 }

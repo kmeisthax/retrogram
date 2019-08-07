@@ -8,7 +8,7 @@ use std::str::FromStr;
 use std::convert::{TryFrom, TryInto};
 use std::num::ParseIntError;
 use num_traits::{Zero, One, Bounded, CheckedShl};
-use crate::maths::{CheckedSub, WrappingMul, FromStrRadix};
+use crate::maths::{CheckedAdd, CheckedSub, WrappingMul, FromStrRadix};
 
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -75,6 +75,14 @@ impl Bounded for u24 {
         u24 {
             v: 0xFFFFFF
         }
+    }
+}
+
+impl CheckedAdd for u24 {
+    fn checked_add(self, rhs: Self) -> Option<<Self as Add>::Output> {
+        Some(u24 {
+            v: self.v.checked_add(rhs.v)? & 0xFFFFFF
+        })
     }
 }
 

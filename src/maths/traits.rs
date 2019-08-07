@@ -1,6 +1,6 @@
 //! My number traits
 
-use std::ops::{Shl, Sub, Mul};
+use std::ops::{Shl, Add, Sub, Mul};
 use std::num::ParseIntError;
 
 /// A trait which indicates the number of left shifts of the given type's
@@ -172,6 +172,29 @@ wrap_existing_impl!(CheckedSub, checked_sub, i32, i32, Option<i32>);
 wrap_existing_impl!(CheckedSub, checked_sub, i64, i64, Option<i64>);
 wrap_existing_impl!(CheckedSub, checked_sub, i128, i128, Option<i128>);
 wrap_existing_impl!(CheckedSub, checked_sub, isize, isize, Option<isize>);
+
+/// Reimplementation of the num_traits `CheckedAdd` trait, except with the
+/// ability to specify a different RHS and Output type.
+/// 
+/// num_traits doesn't support this behavior because Rust itself doesn't define
+/// checked maths with different types of operands and output parameters.
+pub trait CheckedAdd<RHS = Self>: Sized + Add<RHS> {
+    fn checked_add(self, v: RHS) -> Option<<Self as Add<RHS>>::Output>;
+}
+
+wrap_existing_impl!(CheckedAdd, checked_add, u8, u8, Option<u8>);
+wrap_existing_impl!(CheckedAdd, checked_add, u16, u16, Option<u16>);
+wrap_existing_impl!(CheckedAdd, checked_add, u32, u32, Option<u32>);
+wrap_existing_impl!(CheckedAdd, checked_add, u64, u64, Option<u64>);
+wrap_existing_impl!(CheckedAdd, checked_add, u128, u128, Option<u128>);
+wrap_existing_impl!(CheckedAdd, checked_add, usize, usize, Option<usize>);
+
+wrap_existing_impl!(CheckedAdd, checked_add, i8, i8, Option<i8>);
+wrap_existing_impl!(CheckedAdd, checked_add, i16, i16, Option<i16>);
+wrap_existing_impl!(CheckedAdd, checked_add, i32, i32, Option<i32>);
+wrap_existing_impl!(CheckedAdd, checked_add, i64, i64, Option<i64>);
+wrap_existing_impl!(CheckedAdd, checked_add, i128, i128, Option<i128>);
+wrap_existing_impl!(CheckedAdd, checked_add, isize, isize, Option<isize>);
 
 pub trait WrappingMul<RHS = Self>: Mul<RHS> {
     fn wrapping_mul(self, v: RHS) -> <Self as Mul<RHS>>::Output;
