@@ -76,7 +76,7 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(prog: &project::Program,
     }
 
     for block in disassembly_blocks {
-        let (orig_asm, _xrefs, pc_offset, _blocks, is_improperly_ended) = analysis::disassemble_block(block.as_start().clone(), bus, &disassemble)?;
+        let (orig_asm, _xrefs, pc_offset, _blocks, terminating_error) = analysis::disassemble_block(block.as_start().clone(), bus, &disassemble);
         if let Some(pc_offset) = pc_offset {
             if pc_offset > block.as_length().clone() {
                 if let Ok(too_big) = MS::try_from(pc_offset - block.as_length().clone()) {
@@ -89,7 +89,7 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(prog: &project::Program,
             }
         }
 
-        if is_improperly_ended {
+        if let Some(e) = terminating_error {
             eprintln!("WARN: Block at {} terminates at an invalid instruction", block.as_start());
         }
 

@@ -14,9 +14,9 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
         S: memory::Offset<P> + cli::Nameable + Zero,
         ast::Instruction<I, SI, F, P>: Clone,
         DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO> {
-    let (orig_asm, xrefs, pc_offset, blocks, is_improperly_ended) = analysis::disassemble_block(start_pc.clone(), bus, disassembler)?;
+    let (orig_asm, xrefs, pc_offset, blocks, terminating_error) = analysis::disassemble_block(start_pc.clone(), bus, disassembler);
 
-    if is_improperly_ended {
+    if let Some(err) = terminating_error {
         if pc_offset == Some(S::zero()) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, format!("There is no valid code at {:X}", start_pc)));
         } else if pc_offset == None {
