@@ -6,9 +6,10 @@ use std::collections::HashSet;
 use std::fmt::{Debug, UpperHex};
 use std::convert::TryFrom;
 use std::ops::Add;
+use crate::{ast, memory, analysis};
 use crate::analysis::ReferenceKind;
 use crate::database::Database;
-use crate::{ast, memory, analysis};
+use crate::maths::CheckedAdd;
 
 /// Given memory and a pointer, disassemble a basic block of instructions and
 /// return them.
@@ -53,10 +54,15 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
             Ok(disasm) => {
                 asm.append_directive(disasm.directive(), pc.clone());
                 pc = pc.contextualize(P::from(pc.as_pointer().clone() + disasm.next_offset()));
-                //TODO: Change Offset to allow checked add with self offset type
-                cur_blk_size = match S::try_from(cur_blk_size + disasm.next_offset()) {
-                    Ok(cur_blk_size) => cur_blk_size,
-                    Err(e) => panic!("Excessively large block size")
+                cur_blk_size = match cur_blk_size.clone().checked_add(disasm.next_offset()) {
+                    Some(cur_blk_size) => cur_blk_size,
+                    None => {
+                        if cur_blk_size > S::zero() {
+                            blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
+                        }
+
+                        return (asm, targets, S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(), blocks, Some(analysis::Error::BlockSizeOverflow));
+                    }
                 };
 
                 for target in disasm.iter_targets() {
@@ -78,7 +84,6 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
                 }
             },
             Err(e) => {
-                //TODO: Find a way to propagate the error and partial results
                 if cur_blk_size > S::zero() {
                     blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
                 }

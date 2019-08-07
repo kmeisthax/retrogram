@@ -9,6 +9,7 @@ pub enum Error<S> {
     UnconstrainedMemory,
     InvalidInstruction,
     NotYetImplemented,
+    BlockSizeOverflow,
     Misinterpretation(S, bool)
 }
 
@@ -21,6 +22,7 @@ impl<S> fmt::Display for Error<S> {
             UnconstrainedMemory => write!(f, "Invalid location (e.g. in uninitialized memory)"),
             InvalidInstruction => write!(f, "Invalid instruction"),
             NotYetImplemented => write!(f, "Disassembly not yet implemented"),
+            BlockSizeOverflow => write!(f, "Block size is too large"),
             Error::Misinterpretation(_, _) => write!(f, "Ostensibly valid instruction failed to disassemble")
         }
     }
