@@ -1,9 +1,9 @@
 //! CLI command: scan
 
-use std::{io, fs};
+use std::{io, fs, fmt};
 use std::collections::HashSet;
-use num_traits::Zero;
-use crate::{project, platform, arch, ast, input, analysis, database, memory, cli, maths};
+use num_traits::{Zero, One};
+use crate::{project, platform, arch, ast, input, analysis, database, memory, cli, maths, reg};
 
 /// Scan a specific starting PC and add the results of the analysis to the
 /// database.
@@ -11,19 +11,59 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
         disassembler: &DIS,
         bus: &memory::Memory<P, MV, S, IO>) -> io::Result<()>
     where P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
-        S: memory::Offset<P> + cli::Nameable + Zero,
+        S: memory::Offset<P> + cli::Nameable + Zero + One,
+        IO: One,
+        MV: reg::Bitwise + fmt::UpperHex,
+        reg::Symbolic<MV>: Default,
         ast::Instruction<I, SI, F, P>: Clone,
         DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO> {
     let (orig_asm, xrefs, pc_offset, blocks, terminating_error) = analysis::disassemble_block(start_pc.clone(), bus, disassembler);
 
     if let Some(err) = terminating_error {
-        if pc_offset == Some(S::zero()) {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, format!("There is no valid code at {:X}", start_pc)));
-        } else if pc_offset == None {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("Disassembly size cannot be expressed in current type system, caused by analysis of {:X}", start_pc)));
-        } else {
-            eprintln!("Improperly terminated block discovered in {:X}", start_pc);
-        }
+        match (pc_offset, err) {
+            (Some(pc_offset), analysis::Error::Misinterpretation(size, true)) => {
+                let mut values = String::new();
+                let mut iv_offset = start_pc.clone() + pc_offset.clone();
+                let end_offset = iv_offset.clone() + size.clone();
+
+                while iv_offset < end_offset {
+                    //TODO: This generates incorrect results if MV::bound_width is not divisible by four
+                    if let Some(nval) = bus.read_unit(&iv_offset).into_concrete() {
+                        values = format!("{}{:X}", &values, nval);
+                    } else {
+                        //TODO: This assumes MV is always u8.
+                        values = format!("{}??", &values);
+                    }
+
+                    iv_offset = iv_offset + S::one();
+                }
+
+                return Err(io::Error::new(io::ErrorKind::Other, format!("Decoding error at {:X} on value {}", start_pc, values)));
+            },
+            (Some(pc_offset), analysis::Error::Misinterpretation(size, false)) => {
+                let mut values = String::new();
+                let mut iv_offset = pc_offset.clone() + (size.clone() - S::one());
+
+                while pc_offset <= iv_offset {
+                    let mut iv_pointer = start_pc.clone() + iv_offset.clone();
+
+                    //TODO: This generates incorrect results if MV::bound_width is not divisible by four
+                    if let Some(nval) = bus.read_unit(&iv_pointer).into_concrete() {
+                        values = format!("{}{:X}", &values, nval);
+                    } else {
+                        //TODO: This assumes MV is always u8.
+                        values = format!("{}??", &values);
+                    }
+
+                    iv_offset = iv_offset.clone() - S::one();
+                }
+
+                return Err(io::Error::new(io::ErrorKind::Other, format!("Decoding error at {:X} on value {}", start_pc, values)));
+            },
+            (Some(ref s), _) if *s == S::zero() => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("There is no valid code at {:X}", start_pc))),
+            (None, _) => return Err(io::Error::new(io::ErrorKind::Other, format!("Disassembly size cannot be expressed in current type system, caused by analysis of {:X}", start_pc))),
+            _ => eprintln!("Improperly terminated block discovered in {:X}", start_pc)
+        };
     }
     
     for block in blocks {
@@ -76,7 +116,10 @@ fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(prog: &project::Program, s
     bus: &memory::Memory<P, MV, S, IO>, architectural_ctxt_parse: APARSE) -> io::Result<()>
     where for <'dw> P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + serde::Deserialize<'dw> +
             serde::Serialize + maths::FromStrRadix,
-        for <'dw> S: memory::Offset<P> + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
+        for <'dw> S: memory::Offset<P> + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize + One,
+        IO: One,
+        MV: reg::Bitwise + fmt::UpperHex,
+        reg::Symbolic<MV>: Default,
         ast::Instruction<I, SI, F, P>: Clone,
         DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO>,
         APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()> {
