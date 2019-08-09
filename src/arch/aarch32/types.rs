@@ -79,7 +79,7 @@ impl ToString for Aarch32Register {
             R12 => "R12".to_string(),
             R13 => "R13".to_string(),
             R14 => "R14".to_string(),
-            R15 => "R15".to_string()
+            R15 => "PC".to_string()
         }
     }
 }

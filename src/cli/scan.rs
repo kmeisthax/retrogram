@@ -23,6 +23,7 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
         match (pc_offset, err) {
             (Some(pc_offset), analysis::Error::Misinterpretation(size, true)) => {
                 let mut values = String::new();
+                let bad_pc = start_pc.clone() + pc_offset.clone();
                 let mut iv_offset = start_pc.clone() + pc_offset.clone();
                 let end_offset = iv_offset.clone() + size.clone();
 
@@ -38,27 +39,27 @@ fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(db: &mut database::Database<P, 
                     iv_offset = iv_offset + S::one();
                 }
 
-                return Err(io::Error::new(io::ErrorKind::Other, format!("Decoding error at {:X} on value {}", start_pc, values)));
+                return Err(io::Error::new(io::ErrorKind::Other, format!("Decoding error at {:X} (from {:X}) on value {}", bad_pc, start_pc, values)));
             },
-            (Some(pc_offset), analysis::Error::Misinterpretation(size, false)) => {
+            (Some(pc_offset), analysis::Error::Misinterpretation(size, false)) => { //Little-endian
                 let mut values = String::new();
-                let mut iv_offset = pc_offset.clone() + (size.clone() - S::one());
+                let bad_pc = start_pc.clone() + pc_offset.clone();
+                let mut iv_offset = start_pc.clone() + pc_offset.clone();
+                let end_offset = iv_offset.clone() + size.clone();
 
-                while pc_offset <= iv_offset {
-                    let mut iv_pointer = start_pc.clone() + iv_offset.clone();
-
+                while iv_offset < end_offset {
                     //TODO: This generates incorrect results if MV::bound_width is not divisible by four
-                    if let Some(nval) = bus.read_unit(&iv_pointer).into_concrete() {
-                        values = format!("{}{:X}", &values, nval);
+                    if let Some(nval) = bus.read_unit(&iv_offset).into_concrete() {
+                        values = format!("{:X}{}", nval, &values);
                     } else {
                         //TODO: This assumes MV is always u8.
-                        values = format!("{}??", &values);
+                        values = format!("??{}", &values);
                     }
 
-                    iv_offset = iv_offset.clone() - S::one();
+                    iv_offset = iv_offset + S::one();
                 }
 
-                return Err(io::Error::new(io::ErrorKind::Other, format!("Decoding error at {:X} on value {}", start_pc, values)));
+                return Err(io::Error::new(io::ErrorKind::Other, format!("Decoding error at {:X} (from {:X}) on value {}", bad_pc, start_pc, values)));
             },
             (Some(ref s), _) if *s == S::zero() => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("There is no valid code at {:X}", start_pc))),
             (None, _) => return Err(io::Error::new(io::ErrorKind::Other, format!("Disassembly size cannot be expressed in current type system, caused by analysis of {:X}", start_pc))),

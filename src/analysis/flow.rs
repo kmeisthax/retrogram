@@ -7,7 +7,7 @@
 /// pointer constructed from the given instruction offset, and one or more
 /// possible alternative instructions. Execution within subroutines, as well as
 /// interrupts, are not considered for control flow analysis.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Flow {
     /// Normal control flow.
     /// 

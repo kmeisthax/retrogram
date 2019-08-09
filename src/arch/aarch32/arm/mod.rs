@@ -20,7 +20,7 @@ pub fn condcode(instr: u32) -> &'static str {
         11 => "LT",
         12 => "GT",
         13 => "LE",
-        14 => "AL",
+        14 => "",
         15 => panic!("Condition code not valid for conditional instruction"),
         _ => panic!("Not a valid condition code")
     }

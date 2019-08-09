@@ -50,7 +50,6 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
     loop {
         match disassemble(&pc, &plat) {
             Ok(disasm) => {
-                asm.append_directive(disasm.directive(), pc.clone());
                 let new_pcval = match pc.as_pointer().clone().checked_add(disasm.next_offset()) {
                     Some(new_pcval) => new_pcval,
                     None => {
@@ -58,14 +57,18 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
                         break;
                     }
                 };
-                pc = pc.contextualize(new_pcval);
-                cur_blk_size = match cur_blk_size.clone().checked_add(disasm.next_offset()) {
+                let new_blk_size = match cur_blk_size.clone().checked_add(disasm.next_offset()) {
                     Some(cur_blk_size) => cur_blk_size,
                     None => {
                         error = Some(analysis::Error::BlockSizeOverflow);
                         break;
                     }
                 };
+
+                pc = pc.contextualize(new_pcval);
+                cur_blk_size = new_blk_size;
+
+                asm.append_directive(disasm.directive(), pc.clone());
 
                 for target in disasm.iter_targets() {
                     targets.insert(target.clone());

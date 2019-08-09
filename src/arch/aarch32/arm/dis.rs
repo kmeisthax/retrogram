@@ -132,13 +132,13 @@ fn ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32,
     };
     
     let address_operand = match (immediate_bit, is_preindex, is_wbit, is_shifted) {
-        (0, true, true, false) => vec![rd_operand, op::suff(op::wrap("[", vec![rn_operand, op::sint(offset12)], "]"), "!")],
+        (0, true, true, _) => vec![rd_operand, op::suff(op::wrap("[", vec![rn_operand, op::sint(offset12)], "]"), "!")],
         (1, true, true, true) => vec![rd_operand, op::suff(op::wrap("[", vec![rn_operand, rm_operand, op::sym(shift_symbol(shift, shift_imm)?), op::int(shift_imm)], "]"), "!")],
         (1, true, true, false) => vec![rd_operand, op::suff(op::wrap("[", vec![rn_operand, rm_operand], "]"), "!")],
-        (0, true, false, false) => vec![rd_operand, op::wrap("[", vec![rn_operand, op::sint(offset12)], "]")],
+        (0, true, false, _) => vec![rd_operand, op::wrap("[", vec![rn_operand, op::sint(offset12)], "]")],
         (1, true, false, true) => vec![rd_operand, op::wrap("[", vec![rn_operand, rm_operand, op::sym(shift_symbol(shift, shift_imm)?), op::int(shift_imm)], "]")],
         (1, true, false, false) => vec![rd_operand, op::wrap("[", vec![rn_operand, rm_operand], "]")],
-        (0, false, _, false) => vec![rd_operand, op::wrap("[", vec![rn_operand], "]"), op::sint(offset12)],
+        (0, false, _, _) => vec![rd_operand, op::wrap("[", vec![rn_operand], "]"), op::sint(offset12)],
         (1, false, _, true) => vec![rd_operand, op::wrap("[", vec![rn_operand], "]"), rm_operand, op::sym(shift_symbol(shift, shift_imm)?), op::int(shift_imm)],
         (1, false, _, false) => vec![rd_operand, op::wrap("[", vec![rn_operand], "]"), rm_operand],
         _ => return Err(analysis::Error::Misinterpretation(4, false))
@@ -216,11 +216,10 @@ fn ldmstm(p: &memory::Pointer<Pointer>, cond: u32, q: u32, u: u32, s: u32,
     Ok(Disasm::new(Instruction::new(&format!("{}{}{}{}", op, condcode(cond), u_string, p_string), vec![rn_operand, reglist_operand]), 4, flow, targets))
 }
 
-fn bl(pc: &memory::Pointer<Pointer>, l: u32, cond: u32, offset: u32) -> analysis::Result<Disasm, Offset> {
+fn bl(pc: &memory::Pointer<Pointer>, cond: u32, l: u32, offset: u32) -> analysis::Result<Disasm, Offset> {
     let is_link = l != 0;
     let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
     let target = pc.contextualize(pc.as_pointer().wrapping_add(((offset & 0x007FFFFF) | signbit) << 2));
-    
     let flow = match is_link {
         true => analysis::Flow::Normal,
         false => analysis::Flow::Branching(cond != 14)
@@ -346,7 +345,7 @@ fn bx(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis::Result<D
         _ => refr::new_dyn_ref(p.clone(), refkind::Code)
     };
 
-    Ok(Disasm::new(Instruction::new(&format!("BX{}", condcode(cond)), vec![op::sym(&rm.to_string())]), 4, analysis::Flow::Branching(cond != 15), vec![jumpref]))
+    Ok(Disasm::new(Instruction::new(&format!("BX{}", condcode(cond)), vec![op::sym(&rm.to_string())]), 4, analysis::Flow::Branching(cond != 14), vec![jumpref]))
 }
 
 fn bxj(cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Offset> {
