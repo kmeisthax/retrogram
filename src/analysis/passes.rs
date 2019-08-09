@@ -139,7 +139,7 @@ pub fn replace_labels<I, S, F, P, AMV, AS, AIO>
 
     for (directive, loc) in src_assembly.iter_directives() {
         match directive {
-            ast::Directive::EmitInstr(instr) => {
+            ast::Directive::EmitInstr(instr, offset) => {
                 let mut new_operands = Vec::new();
 
                 for operand in instr.iter_operands() {
@@ -147,7 +147,7 @@ pub fn replace_labels<I, S, F, P, AMV, AS, AIO>
                 }
 
                 let new_instr = ast::Instruction::new(instr.opcode(), new_operands);
-                dst_assembly.append_directive(ast::Directive::EmitInstr(new_instr), loc.clone());
+                dst_assembly.append_directive(ast::Directive::EmitInstr(new_instr, offset.clone()), loc.clone());
             },
             _ => dst_assembly.append_directive(directive.clone(), loc.clone())
         }
@@ -187,6 +187,45 @@ pub fn inject_labels<I, SI, F, P, MV, S>
         }
 
         dst_assembly.append_directive(directive.clone(), loc.clone());
+    }
+
+    dst_assembly
+}
+
+/// Inject organization directives into a block.
+/// 
+/// An organization directive is necessary any time there is a discontinuity
+/// between the end location of one instruction in the directive stream, and the
+/// start location of the next one.
+pub fn inject_orgs<I, S, F, P, AMV, AS, AIO>
+    (src_assembly: ast::Section<I, S, F, P, AMV, AS>,
+        db: &mut Database<P, AS>,
+        memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Section<I, S, F, P, AMV, AS>
+    where P: memory::PtrNum<AS> + analysis::Mappable + Clone + UpperHex,
+        AS: memory::Offset<P> + Clone,
+        ast::Directive<I, S, F, P, AMV, AS>: Clone, ast::Operand<I, S, F, P>: Clone {
+    
+    let mut dst_assembly = ast::Section::new(src_assembly.section_name());
+    let mut expected_next_pc = None;
+
+    for (dir, pc) in src_assembly.iter_directives() {
+        let discontinuity_accounted_for = match dir {
+            ast::Directive::DeclareOrg(org_pc) => expected_next_pc == Some(org_pc.clone()),
+            _ => false
+        };
+
+        if expected_next_pc != Some(pc.clone()) && !discontinuity_accounted_for {
+            dst_assembly.append_directive(ast::Directive::DeclareOrg(pc.clone()), pc.clone());
+        }
+
+        match dir {
+            ast::Directive::EmitInstr(_, offset) => {
+                expected_next_pc = Some(pc.clone() + offset.clone());
+            },
+            _ => {}
+        };
+
+        dst_assembly.append_directive(dir.clone(), pc.clone());
     }
 
     dst_assembly

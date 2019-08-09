@@ -14,7 +14,11 @@ use crate::memory::Pointer;
 #[derive(Clone, Debug)]
 pub enum Directive<I, SI, F, P, MV, S> {
     /// Generate an instruction in the resulting instruction stream.
-    EmitInstr(Instruction<I, SI, F, P>),
+    /// 
+    /// The offset parameter is the expected offset to the next instruction. If
+    /// the expected offset does not match the PC of the next directive in the
+    /// stream, then a `DeclareOrg` directive must be inserted in disassemblies.
+    EmitInstr(Instruction<I, SI, F, P>, S),
 
     /// Generate raw data in the resulting instruction stream.
     EmitData(Vec<MV>),

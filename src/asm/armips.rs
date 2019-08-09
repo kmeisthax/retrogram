@@ -163,7 +163,7 @@ impl<'a, I, SI, F, P, MV, S> fmt::Display for SectionFmtWrap<'a, I, SI, F, P, MV
                         write!(f, "\n")?;
                     }
                 },
-                ast::Directive::EmitInstr(instr) => write!(f, "    {}\n", InstrFmtWrap::wrap(instr))?,
+                ast::Directive::EmitInstr(instr, _) => write!(f, "    {}\n", InstrFmtWrap::wrap(instr))?,
                 ast::Directive::EmitSpace(offset) => write!(f, ".skip {}\n", offset)?
             }
         }

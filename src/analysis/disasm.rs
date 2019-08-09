@@ -54,8 +54,8 @@ impl<I, SI, F, P, S> Disasm<I, SI, F, P, S> where P: analysis::Mappable, S: Clon
     }
 }
 
-impl<I, SI, F, P, S> Disasm<I, SI, F, P, S> where P: analysis::Mappable, ast::Instruction<I, SI, F, P>: Clone {
+impl<I, SI, F, P, S> Disasm<I, SI, F, P, S> where P: analysis::Mappable, ast::Instruction<I, SI, F, P>: Clone, S: Clone {
     pub fn directive<MV>(&self) -> ast::Directive<I, SI, F, P, MV, S> {
-        ast::Directive::EmitInstr(self.instr.clone())
+        ast::Directive::EmitInstr(self.instr.clone(), self.next_offset.clone())
     }
 }
