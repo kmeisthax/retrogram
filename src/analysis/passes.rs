@@ -4,6 +4,7 @@
 use std::fmt;
 use std::collections::HashSet;
 use std::fmt::UpperHex;
+use std::convert::TryFrom;
 use crate::{ast, memory, analysis};
 use crate::analysis::ReferenceKind;
 use crate::database::Database;
@@ -177,7 +178,7 @@ pub fn inject_labels<I, SI, F, P, MV, S>
     for (directive, loc) in src_assembly.iter_directives() {
         //TODO: If two symbols exist at the same location only one gets injected
         if let Some(sym_id) = db.pointer_symbol(&loc) {
-            if labeled_locations_set.contains(loc) {
+            if !labeled_locations_set.contains(loc) {
                 labeled_locations_set.insert(loc);
 
                 let sym = db.symbol(sym_id).expect("Database gave an invalid symbol ID instead of None!!!");
@@ -200,7 +201,7 @@ pub fn inject_labels<I, SI, F, P, MV, S>
 pub fn inject_orgs<I, S, F, P, AMV, AS>
     (src_assembly: ast::Section<I, S, F, P, AMV, AS>) -> ast::Section<I, S, F, P, AMV, AS>
     where P: memory::PtrNum<AS> + analysis::Mappable + Clone,
-        AS: memory::Offset<P> + Clone,
+        AS: memory::Offset<P> + Clone + TryFrom<usize>,
         ast::Directive<I, S, F, P, AMV, AS>: Clone {
     
     let mut dst_assembly = ast::Section::new(src_assembly.section_name());
@@ -214,13 +215,20 @@ pub fn inject_orgs<I, S, F, P, AMV, AS>
 
         if expected_next_pc != Some(pc.clone()) && !discontinuity_accounted_for {
             dst_assembly.append_directive(ast::Directive::DeclareOrg(pc.clone()), pc.clone());
+            expected_next_pc = Some(pc.clone());
         }
 
-        match dir {
-            ast::Directive::EmitInstr(_, offset) => {
-                expected_next_pc = Some(pc.clone() + offset.clone());
+        expected_next_pc = match dir {
+            ast::Directive::EmitInstr(_, offset) => Some(pc.clone() + offset.clone()),
+            ast::Directive::EmitData(d) => {
+                if let Ok(d_len) = AS::try_from(d.len()) {
+                    Some(pc.clone() + d_len)
+                } else {
+                    expected_next_pc
+                }
             },
-            _ => {}
+            ast::Directive::EmitSpace(offset) => Some(pc.clone() + offset.clone()),
+            _ => expected_next_pc
         };
 
         dst_assembly.append_directive(dir.clone(), pc.clone());
