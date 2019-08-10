@@ -13,6 +13,7 @@ pub use traits::*;
 pub use passes::disassemble_block;
 pub use passes::replace_labels;
 pub use passes::inject_labels;
+pub use passes::inject_orgs;
 pub use reference::ReferenceKind;
 pub use reference::Reference;
 pub use block::Block;

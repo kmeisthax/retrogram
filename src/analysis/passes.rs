@@ -197,13 +197,11 @@ pub fn inject_labels<I, SI, F, P, MV, S>
 /// An organization directive is necessary any time there is a discontinuity
 /// between the end location of one instruction in the directive stream, and the
 /// start location of the next one.
-pub fn inject_orgs<I, S, F, P, AMV, AS, AIO>
-    (src_assembly: ast::Section<I, S, F, P, AMV, AS>,
-        db: &mut Database<P, AS>,
-        memory: &memory::Memory<P, AMV, AS, AIO>) -> ast::Section<I, S, F, P, AMV, AS>
-    where P: memory::PtrNum<AS> + analysis::Mappable + Clone + UpperHex,
+pub fn inject_orgs<I, S, F, P, AMV, AS>
+    (src_assembly: ast::Section<I, S, F, P, AMV, AS>) -> ast::Section<I, S, F, P, AMV, AS>
+    where P: memory::PtrNum<AS> + analysis::Mappable + Clone,
         AS: memory::Offset<P> + Clone,
-        ast::Directive<I, S, F, P, AMV, AS>: Clone, ast::Operand<I, S, F, P>: Clone {
+        ast::Directive<I, S, F, P, AMV, AS>: Clone {
     
     let mut dst_assembly = ast::Section::new(src_assembly.section_name());
     let mut expected_next_pc = None;

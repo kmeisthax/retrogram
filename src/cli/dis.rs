@@ -95,7 +95,8 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(prog: &project::Program,
 
         let labeled_asm = analysis::replace_labels(orig_asm, db, bus);
         let injected_asm = analysis::inject_labels(labeled_asm, db);
-        format_and_print(&injected_asm);
+        let orgd_asm = analysis::inject_orgs(injected_asm);
+        format_and_print(&orgd_asm);
     }
 
     Ok(())
