@@ -114,7 +114,7 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<Disasm, Offset> {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<Disasm, Pointer, Offset> {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
             match mem.read_unit(&(p.clone()+1)).into_concrete() {
@@ -130,7 +130,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<
                         _ => Err(analysis::Error::InvalidInstruction)
                     }
                 },
-                _ => Err(analysis::Error::UnconstrainedMemory)
+                _ => Err(analysis::Error::UnconstrainedMemory(p.clone() + 1))
             }
         }
 
@@ -207,6 +207,6 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<
                 _ => Err(analysis::Error::InvalidInstruction)
             }
         },
-        _ => Err(analysis::Error::UnconstrainedMemory)
+        _ => Err(analysis::Error::UnconstrainedMemory(p.clone()))
     }
 }

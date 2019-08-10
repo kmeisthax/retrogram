@@ -8,7 +8,7 @@ use crate::arch::aarch32::{Pointer, Operand, Offset, Instruction, Bus, Disasm, T
 use crate::arch::aarch32::Aarch32Register as A32Reg;
 use crate::arch::aarch32::arm::condcode;
 
-fn shift_symbol(shift: u32, shift_imm: u32) -> analysis::Result<&'static str, Offset> {
+fn shift_symbol(shift: u32, shift_imm: u32) -> analysis::Result<&'static str, Pointer, Offset> {
     match (shift, shift_imm) {
         (0, _) => Ok("LSL"),
         (1, _) => Ok("LSR"),
@@ -20,7 +20,7 @@ fn shift_symbol(shift: u32, shift_imm: u32) -> analysis::Result<&'static str, Of
 }
 
 fn shifter_operand(immediate_bit: u32, rn: A32Reg, rd: A32Reg, shift_imm: u32,
-    regshift: u32, shift: u32, rm: A32Reg, rs: A32Reg, immed_8: u32) -> analysis::Result<Vec<Operand>, Offset> {
+    regshift: u32, shift: u32, rm: A32Reg, rs: A32Reg, immed_8: u32) -> analysis::Result<Vec<Operand>, Pointer, Offset> {
     
     let rotate_imm = shift_imm & 0xFFFFFFFE;
 
@@ -36,7 +36,7 @@ fn shifter_operand(immediate_bit: u32, rn: A32Reg, rd: A32Reg, shift_imm: u32,
 /// Decode a 5-bit opcode field as if it was for a data processing instruction
 fn dpinst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32,
     opcode: u32, rn: A32Reg, rd: A32Reg, shift_imm: u32, regshift: u32,
-    shift: u32, rm: A32Reg, rs: A32Reg, immed_8: u32) -> analysis::Result<Disasm, Offset> {
+    shift: u32, rm: A32Reg, rs: A32Reg, immed_8: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     
     let dp_opcode = match opcode {
         0 => "AND",
@@ -94,7 +94,7 @@ fn dpinst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32,
 fn ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32,
     preindex: u32, offsetadd: u32, byte: u32, wbit: u32, load: u32, rn: A32Reg,
     rd: A32Reg, shift_imm: u32, shift: u32, rm: A32Reg, address_operand: u32)
-        -> analysis::Result<Disasm, Offset> {
+        -> analysis::Result<Disasm, Pointer, Offset> {
     
     let is_shifted = shift_imm != 0 || shift != 0;
 
@@ -160,7 +160,7 @@ fn ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32,
 
 /// Decode an instruction in the LDM/STM instruction space.
 fn ldmstm(p: &memory::Pointer<Pointer>, cond: u32, q: u32, u: u32, s: u32,
-    w: u32, load: u32, rn: A32Reg, reglist: u32) -> analysis::Result<Disasm, Offset> {
+    w: u32, load: u32, rn: A32Reg, reglist: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     
     //TODO: This got refactored, ensure these are still valid
     let op = match load == 1 {
@@ -216,7 +216,7 @@ fn ldmstm(p: &memory::Pointer<Pointer>, cond: u32, q: u32, u: u32, s: u32,
     Ok(Disasm::new(Instruction::new(&format!("{}{}{}{}", op, condcode(cond), u_string, p_string), vec![rn_operand, reglist_operand]), 4, flow, targets))
 }
 
-fn bl(pc: &memory::Pointer<Pointer>, cond: u32, l: u32, offset: u32) -> analysis::Result<Disasm, Offset> {
+fn bl(pc: &memory::Pointer<Pointer>, cond: u32, l: u32, offset: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     let is_link = l != 0;
     let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
     let target = pc.contextualize(pc.as_pointer().wrapping_add(((offset & 0x007FFFFF) | signbit) << 2));
@@ -231,7 +231,7 @@ fn bl(pc: &memory::Pointer<Pointer>, cond: u32, l: u32, offset: u32) -> analysis
     }
 }
 
-fn swi(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> analysis::Result<Disasm, Offset> {
+fn swi(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     let target = offset & 0x00FFFFFF;
     
     //TODO: The jump target can be in high RAM, how do we handle that?
@@ -246,7 +246,7 @@ fn swi(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> analysis::Resul
 /// registers in a different order from most instructions. Specifically, `rn`
 /// and `rd` are swapped.
 fn mul(p: &memory::Pointer<Pointer>, cond: u32, opcode: u32, rd: A32Reg,
-    rn: A32Reg, rs: A32Reg, rm: A32Reg) -> analysis::Result<Disasm, Offset> {
+    rn: A32Reg, rs: A32Reg, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
 
     let rd_operand = op::sym(&rd.to_string());
     let rn_operand = op::sym(&rn.to_string());
@@ -292,7 +292,7 @@ fn mul(p: &memory::Pointer<Pointer>, cond: u32, opcode: u32, rd: A32Reg,
 }
 
 fn msr(cond: u32, immediate_bit: u32, r: u32, rn_val: u32, shift_imm: u32,
-    data_immed: u32, rm: A32Reg) -> analysis::Result<Disasm, Offset> {
+    data_immed: u32, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
     
     let c = match (rn_val & 0x1) >> 0 != 0 {
         true => "c",
@@ -326,7 +326,7 @@ fn msr(cond: u32, immediate_bit: u32, r: u32, rn_val: u32, shift_imm: u32,
     Ok(Disasm::new(Instruction::new(&format!("MSR{}", condcode(cond)), op_list), 4, analysis::Flow::Normal, vec![]))
 }
 
-fn mrs(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm, Offset> {
+fn mrs(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
     let xpsr = match r != 0 {
         false => "CPSR",
         true => "SPSR"
@@ -337,7 +337,7 @@ fn mrs(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm, Offset> {
     Ok(Disasm::new(Instruction::new(&format!("MRS{}", condcode(cond)), op_list), 4, analysis::Flow::Normal, vec![]))
 }
 
-fn bx(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Offset> {
+fn bx(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
     //BX PC is completely valid! And also dumb.
     let target_pc = p.contextualize(p.as_pointer().clone() + 8);
     let jumpref = match rm {
@@ -348,7 +348,7 @@ fn bx(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis::Result<D
     Ok(Disasm::new(Instruction::new(&format!("BX{}", condcode(cond)), vec![op::sym(&rm.to_string())]), 4, analysis::Flow::Branching(cond != 14), vec![jumpref]))
 }
 
-fn bxj(cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Offset> {
+fn bxj(cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
     //TODO: Find a better status than "Returning"
     let flow = match cond {
         15 => analysis::Flow::Returning,
@@ -363,11 +363,11 @@ fn bxj(cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Offset> {
     Ok(Disasm::new(Instruction::new(&format!("BXJ{}", condcode(cond)), vec![op::sym(&rm.to_string())]), 4, flow, vec![]))
 }
 
-fn clz(cond: u32, rd: A32Reg, rm: A32Reg) -> analysis::Result<Disasm, Offset> {
+fn clz(cond: u32, rd: A32Reg, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
     Ok(Disasm::new(Instruction::new(&format!("CLZ{}", condcode(cond)), vec![op::sym(&rd.to_string()), op::sym(&rm.to_string())]), 4, analysis::Flow::Normal, vec![]))
 }
 
-fn blx_register(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Offset> {
+fn blx_register(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
     //BX PC is completely valid! And also dumb.
     let target_pc = p.contextualize(p.as_pointer().clone() + 8);
     let jumpref = match rm {
@@ -378,7 +378,7 @@ fn blx_register(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis
     Ok(Disasm::new(Instruction::new(&format!("BLX{}", condcode(cond)), vec![op::sym(&rm.to_string())]), 4, analysis::Flow::Normal, vec![jumpref]))
 }
 
-fn blx_immediate(p: &memory::Pointer<Pointer>, h: u32, offset: u32) -> analysis::Result<Disasm, Offset> {
+fn blx_immediate(p: &memory::Pointer<Pointer>, h: u32, offset: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
     let mut target = p.contextualize(p.as_pointer().wrapping_add(((offset & 0x007FFFFF) | signbit) << 2 | h << 1));
     target.set_arch_context(THUMB_STATE, reg::Symbolic::from(1));
@@ -387,7 +387,7 @@ fn blx_immediate(p: &memory::Pointer<Pointer>, h: u32, offset: u32) -> analysis:
     Ok(Disasm::new(Instruction::new("BLX", vec![op::cptr(target)]), 4, analysis::Flow::Normal, vec![jumpref]))
 }
 
-fn bkpt(instr: u32) -> analysis::Result<Disasm, Offset> {
+fn bkpt(instr: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     let high_immed = (instr & 0x000FFF00) >> 4;
     let low_immed = (instr & 0x0000000F) >> 0;
     let immed = high_immed | low_immed;
@@ -395,7 +395,7 @@ fn bkpt(instr: u32) -> analysis::Result<Disasm, Offset> {
     Ok(Disasm::new(Instruction::new("BKPT", vec![op::int(immed)]), 4, analysis::Flow::Normal, vec![]))
 }
 
-fn cdp(cond: u32, opcode_1: u32, crn: u32, crd: u32, cp_num: u32, opcode_2: u32, crm: u32) -> analysis::Result<Disasm, Offset> {
+fn cdp(cond: u32, opcode_1: u32, crn: u32, crd: u32, cp_num: u32, opcode_2: u32, crm: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     let crn_sym = op::sym(&format!("CR{}", crn));
     let crd_sym = op::sym(&format!("CR{}", crd));
     let crm_sym = op::sym(&format!("CR{}", crm));
@@ -412,7 +412,7 @@ fn cdp(cond: u32, opcode_1: u32, crn: u32, crd: u32, cp_num: u32, opcode_2: u32,
 }
 
 fn crt(cond: u32, opcode_1: u32, d: u32, crn: u32, rd: A32Reg, cp_num: u32,
-    opcode_2: u32, crm: u32) -> analysis::Result<Disasm, Offset> {
+    opcode_2: u32, crm: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     
     let crn_sym = op::sym(&format!("CR{}", crn));
     let crm_sym = op::sym(&format!("CR{}", crm));
@@ -433,7 +433,7 @@ fn crt(cond: u32, opcode_1: u32, d: u32, crn: u32, rd: A32Reg, cp_num: u32,
 }
 
 fn crt_double(cond: u32, d: u32, rn: A32Reg, rd: A32Reg, cp_num: u32,
-    opcode: u32, crm: u32) -> analysis::Result<Disasm, Offset> {
+    opcode: u32, crm: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     
     let rn_sym = op::sym(&rn.to_string());
     let crm_sym = op::sym(&format!("CR{}", crm));
@@ -452,7 +452,7 @@ fn crt_double(cond: u32, d: u32, rn: A32Reg, rd: A32Reg, cp_num: u32,
     Ok(Disasm::new(Instruction::new(&arm_opcode, vec![cp_sym, cop_sym, rd_sym, rn_sym, crm_sym]), 4, analysis::Flow::Normal, vec![]))
 }
 
-fn cps(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm, Offset> {
+fn cps(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     let immod = (rn_val & 0xC) >> 2;
     //let mmod = (rn_val & 0x2) >> 1;
     let abit = (lsimmed & 0x100) >> 8;
@@ -494,7 +494,7 @@ fn cps(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm, Offset> {
 
 fn ldstmisc(cond: u32, pbit: u32, ubit: u32, ibit: u32, wbit: u32, lbit: u32,
     rn: A32Reg, rd: A32Reg, rs_val: u32, shiftop: u32, rm: A32Reg)
-        -> analysis::Result<Disasm, Offset> {
+        -> analysis::Result<Disasm, Pointer, Offset> {
 
     let sbit = (shiftop & 0x2) >> 1;
     let hbit = (shiftop & 0x1) >> 0;
@@ -547,7 +547,7 @@ fn ldstmisc(cond: u32, pbit: u32, ubit: u32, ibit: u32, wbit: u32, lbit: u32,
 
 fn ldst_coproc(_p: &memory::Pointer<Pointer>, cond: u32, preindex: u32,
     offsetadd: u32, nbit: u32, wbit: u32, load: u32, rn: A32Reg, crd: u32,
-    cp_num: u32, uoffset: u32) -> analysis::Result<Disasm, Offset> {
+    cp_num: u32, uoffset: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     
     let is_load = load != 0;
     let is_wbit = wbit != 0;
@@ -587,7 +587,7 @@ fn ldst_coproc(_p: &memory::Pointer<Pointer>, cond: u32, preindex: u32,
 }
 
 pub fn ldstrex(cond: u32, l: u32, rn: A32Reg, rd: A32Reg,
-    rm: A32Reg) -> analysis::Result<Disasm, Offset> {
+    rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
     
     let is_load = l != 0;
     let opname = match is_load {
@@ -605,7 +605,7 @@ pub fn ldstrex(cond: u32, l: u32, rn: A32Reg, rd: A32Reg,
 }
 
 pub fn pkh(cond: u32, rn: A32Reg, rd: A32Reg, shift_imm: u32, d: u32,
-    rm: A32Reg) -> analysis::Result<Disasm, Offset> {
+    rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
     
     let opname = match d {
         0 => format!("PKHBT{}", condcode(cond)),
@@ -627,7 +627,7 @@ pub fn pkh(cond: u32, rn: A32Reg, rd: A32Reg, shift_imm: u32, d: u32,
 }
 
 pub fn pld(immediate_bit: u32, offsetadd: u32, rn: A32Reg, shift_imm: u32,
-    shift: u32, rm: A32Reg, address_operand: u32) -> analysis::Result<Disasm, Offset> {
+    shift: u32, rm: A32Reg, address_operand: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     
     let is_shifted = shift_imm != 0 || shift != 0;
     let is_offsetadd = offsetadd != 0;
@@ -669,7 +669,7 @@ pub fn pld(immediate_bit: u32, offsetadd: u32, rn: A32Reg, shift_imm: u32,
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<Disasm, Offset> {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<Disasm, Pointer, Offset> {
     let instr : reg::Symbolic<u32> = mem.read_leword(&p);
 
     if let Some(instr) = instr.into_concrete() {
@@ -750,6 +750,6 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<
             _ => Err(analysis::Error::InvalidInstruction)
         }
     } else {
-        Err(analysis::Error::UnconstrainedMemory)
+        Err(analysis::Error::UnconstrainedMemory(p.clone()))
     }
 }

@@ -1,10 +1,11 @@
 //! Error type for analysis
 
 use std::{io, error, fmt, result};
+use crate::memory;
 
 /// Error type for analysis.
 #[derive(Debug)]
-pub enum Error<S> {
+pub enum Error<P, S> {
     /// Underlying cause of error is I/O related
     IOError(io::Error),
 
@@ -14,7 +15,7 @@ pub enum Error<S> {
     /// more than one possible value. This can happen if the memory being read
     /// from is rewritable, and no valid memory image has been loaded for that
     /// area.
-    UnconstrainedMemory,
+    UnconstrainedMemory(memory::Pointer<P>),
 
     /// Instruction decoding failed because the value read from the program
     /// image is not valid code.
@@ -40,13 +41,13 @@ pub enum Error<S> {
     Misinterpretation(S, bool)
 }
 
-impl<S> fmt::Display for Error<S> {
+impl<P, S> fmt::Display for Error<P, S> where P: fmt::UpperHex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Error::*;
 
         match self {
             IOError(e) => write!(f, "I/O error: {}", e),
-            UnconstrainedMemory => write!(f, "Invalid location (e.g. in uninitialized memory)"),
+            Error::UnconstrainedMemory(p) => write!(f, "Location {:X} is not valid", p),
             InvalidInstruction => write!(f, "Invalid instruction"),
             NotYetImplemented => write!(f, "Disassembly not yet implemented"),
             BlockSizeOverflow => write!(f, "Block size is too large"),
@@ -55,7 +56,7 @@ impl<S> fmt::Display for Error<S> {
     }
 }
 
-impl<S> error::Error for Error<S> where S: fmt::Debug {
+impl<P, S> error::Error for Error<P, S> where S: fmt::Debug, P: fmt::Debug + fmt::UpperHex {
     fn source(&self) -> Option<&(error::Error + 'static)> {
         use Error::*;
 
@@ -66,4 +67,4 @@ impl<S> error::Error for Error<S> where S: fmt::Debug {
     }
 }
 
-pub type Result<T, S> = result::Result<T, Error<S>>;
+pub type Result<T, P, S> = result::Result<T, Error<P, S>>;
