@@ -65,14 +65,14 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(start_pc: memory::Pointer<
                     }
                 };
 
-                pc = pc.contextualize(new_pcval);
-                cur_blk_size = new_blk_size;
-
                 asm.append_directive(disasm.directive(), pc.clone());
 
                 for target in disasm.iter_targets() {
                     targets.insert(target.clone());
                 }
+
+                pc = pc.contextualize(new_pcval);
+                cur_blk_size = new_blk_size;
 
                 if disasm.flow().is_branching() {
                     blocks.push(analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size));
