@@ -1,9 +1,9 @@
 //! Helper traits for defining where clauses without getting an RSI
 
-use std::ops::{Add, Sub, Not, BitOr, BitAnd, Shl};
+use std::ops::{Sub, Shl};
 use std::convert::TryFrom;
 use num::traits::{Bounded, Zero, One};
-use crate::reg;
+use crate::{reg, memory};
 use crate::maths::{BoundWidth, CheckedAdd, CheckedSub};
 
 /// Trait which represents all operations expected of a pointer value.
@@ -42,13 +42,13 @@ impl <T, S> PtrNum<S> for T
 /// encompass multiple disjoint address spaces; such as memory and I/O space, or
 /// program and data space. `TryFrom` allows the type system to signal that the
 /// difference of two pointers is undefined.
-pub trait Offset<P> : Clone + PartialOrd + CheckedAdd<Output=Self> + CheckedSub<Output=Self> + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize>
+pub trait Offset<P> : Clone + PartialOrd + CheckedAdd<Output=Self> + CheckedSub<Output=Self> + Zero + One + TryFrom<<P as Sub>::Output> + TryFrom<usize>
     where P: Sub {
 
 }
 
 impl <T, P> Offset<P> for T
-    where T: Clone + PartialOrd + CheckedAdd<Output=Self> + CheckedSub<Output=Self> + Zero + TryFrom<<P as Sub>::Output> + TryFrom<usize>,
+    where T: Clone + PartialOrd + CheckedAdd<Output=Self> + CheckedSub<Output=Self> + Zero + One + TryFrom<<P as Sub>::Output> + TryFrom<usize>,
         P: Sub {
 
 }
@@ -76,21 +76,46 @@ impl <T, P> Offset<P> for T
 /// the given type. However, Rust doesn't recognize these bounds, so you must
 /// copy and update them in any code that uses `Desegmentable` until I figure
 /// out how to fix that.
-pub trait Desegmentable<U> : Clone + Bounded + From<U> + BoundWidth<u32> + Shl<u32> + BitOr + BitAnd + Zero + One
-    + reg::Bitwise + From<<Self as Shl<u32>>::Output> + From<<Self as BitOr>::Output>
-    + From<<Self as BitAnd>::Output>
+pub trait Desegmentable<U> : Clone + Bounded + From<U> + BoundWidth<u32> + Shl<u32> + reg::Bitwise +
+    From<<Self as Shl<u32>>::Output>
     where U: BoundWidth<u32>,
-        reg::Symbolic<Self>: Shl<u32>,
-        reg::Symbolic<<Self as Shl<u32>>::Output> : From<<reg::Symbolic<Self> as Shl<u32>>::Output> {
+        reg::Symbolic<Self>: Shl<u32, Output = reg::Symbolic<<Self as Shl<u32>>::Output>> {
+    
+    /// Given a slice of memory units, attempt to join them into the target
+    /// type.
+    /// 
+    /// The conversion may fail if the data slice is too short.
+    fn from_segments(data: &[U], endianness: memory::Endianness) -> Option<Self>;
 
+    /// Indicates how many units must be passed into `from_segments`in order to
+    /// successfully join them into the target type.
+    fn units_reqd() -> usize;
 }
 
 impl<T, U> Desegmentable<U> for T
-    where T: Clone + Bounded + From<U> + BoundWidth<u32> + Shl<u32> + BitOr + BitAnd + Zero + One + Not + reg::Bitwise
-        + From<<T as Not>::Output> + From<<T as Shl<u32>>::Output> + From<<T as BitOr>::Output>
-        + From<<T as BitAnd>::Output>,
-        U: BoundWidth<u32>,
-        reg::Symbolic<T>: Shl<u32>,
-        reg::Symbolic<<T as Shl<u32>>::Output> : From<<reg::Symbolic<T> as Shl<u32>>::Output> {
+    where T: Clone + Bounded + From<U> + BoundWidth<u32> + Shl<u32> + reg::Bitwise + From<<T as Shl<u32>>::Output>,
+        U: Clone + BoundWidth<u32>,
+        reg::Symbolic<Self>: Shl<u32, Output = reg::Symbolic<<Self as Shl<u32>>::Output>> {
 
+    fn units_reqd() -> usize {
+        let self_units = <Self as BoundWidth<u32>>::bound_width();
+        let from_units = <U as BoundWidth<u32>>::bound_width();
+        (self_units as f32 / from_units as f32).round() as usize
+    }
+    
+    fn from_segments(data: &[U], endianness: memory::Endianness) -> Option<Self> {
+        let units_reqd = <Self as Desegmentable<U>>::units_reqd() as u32;
+        let mut sum = Self::zero();
+        let i_iter : Vec<u32> = match endianness {
+            memory::Endianness::BigEndian => (0..units_reqd).rev().collect(),
+            memory::Endianness::LittleEndian => (0..units_reqd).collect()
+        };
+
+        for i in i_iter {
+            let unit = T::from(data.get(i as usize)?.clone());
+            sum = sum | unit << (i * <U as BoundWidth<u32>>::bound_width());
+        }
+
+        Some(sum)
+    }
 }

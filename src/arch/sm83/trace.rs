@@ -1,7 +1,7 @@
 //! Facilities for tracing SM83 code
 
 use crate::{memory, reg};
-use crate::reg::{Convertable, TryConvertable};
+use crate::reg::{New, Convertable, TryConvertable};
 use crate::arch::sm83::{Register, Pointer, Bus, State, Value};
 
 /// Given a targetreg operand, produce a symbolic value of what that target reg
@@ -57,10 +57,10 @@ fn write_value_to_targetreg(p: &memory::Pointer<Pointer>, mem: &Bus, state: &mut
 /// format of Z000. You may OR in additional bits as necessary.
 fn zero_flag(val: reg::Symbolic<Value>) -> reg::Symbolic<Value> {
     match (val.into_concrete(), val.is_valid(0)) {
-        (Some(0), _) => reg::Symbolic::from(0x80 as Value),
-        (Some(_), _) => reg::Symbolic::from(0 as Value),
+        (Some(0), _) => reg::Symbolic::new(0x80 as Value),
+        (Some(_), _) => reg::Symbolic::new(0 as Value),
         (None, true) => reg::Symbolic::from_cares(0 as Value, 0x7F as Value),
-        (None, false) => reg::Symbolic::from(0 as Value),
+        (None, false) => reg::Symbolic::new(0 as Value),
     }
 }
 
@@ -68,19 +68,19 @@ fn zero_flag(val: reg::Symbolic<Value>) -> reg::Symbolic<Value> {
 /// or SRL).
 fn trace_bitop(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, bitop: u8, targetreg: u8) -> State {
     let flags = state.get_register(Register::F);
-    let carry = flags & reg::Symbolic::from(0x10);
+    let carry = flags & reg::Symbolic::new(0x10);
     let val = read_value_from_targetreg(p, mem, &state, targetreg);
 
     let (newval, newcarry) = match bitop {
         0 => (val << 1 | val >> 7, carry), //RLC
         1 => (val << 1 | val >> 7, carry), //RRC
         2 => (val << 1 | carry >> 4, val >> 7), //RL
-        3 => (val >> 1 | carry << 3, val & reg::Symbolic::from(0x01)), //RR
+        3 => (val >> 1 | carry << 3, val & reg::Symbolic::new(0x01)), //RR
         4 => (val << 1, val >> 7), //SLA
         //This is a manual sign extension since we defined Value as unsigned
-        5 => (val >> 1 | val & reg::Symbolic::from(0x80), val & reg::Symbolic::from(0x01)), //SRA
-        6 => (val >> 4 | val << 4, reg::Symbolic::from(0)), //SWAP
-        7 => (val >> 1, val & reg::Symbolic::from(0x01)), //SRL
+        5 => (val >> 1 | val & reg::Symbolic::new(0x80), val & reg::Symbolic::new(0x01)), //SRA
+        6 => (val >> 4 | val << 4, reg::Symbolic::new(0)), //SWAP
+        7 => (val >> 1, val & reg::Symbolic::new(0x01)), //SRL
         _ => panic!("Invalid bit operation!")
     };
     
@@ -93,16 +93,16 @@ fn trace_bitop(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, bitop:
 /// Trace a CB-prefix bit test instruction (e.g. BIT n, reg).
 fn trace_bittest(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetbit: u8, targetreg: u8) -> State {
     let flags = state.get_register(Register::F);
-    let val = read_value_from_targetreg(p, mem, &state, targetreg) >> targetbit & reg::Symbolic::from(0x01);
+    let val = read_value_from_targetreg(p, mem, &state, targetreg) >> targetbit & reg::Symbolic::new(0x01);
 
-    state.set_register(Register::F, flags & reg::Symbolic::from(0x10) | reg::Symbolic::from(0x20) | zero_flag(val));
+    state.set_register(Register::F, flags & reg::Symbolic::new(0x10) | reg::Symbolic::new(0x20) | zero_flag(val));
 
     state
 }
 
 /// Trace a CB-prefix bit reset instruction (e.g. RES n, reg).
 fn trace_bitreset(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetbit: u8, targetreg: u8) -> State {
-    let mask = reg::Symbolic::from(!(1 << targetbit));
+    let mask = reg::Symbolic::new(!(1 << targetbit));
     let val = read_value_from_targetreg(p, mem, &state, targetreg);
 
     write_value_to_targetreg(p, mem, &mut state, targetreg, val & mask);
@@ -112,7 +112,7 @@ fn trace_bitreset(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, tar
 
 /// Trace a CB-prefix bit set instruction (e.g. SET n, reg).
 fn trace_bitset(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetbit: u8, targetreg: u8) -> State {
-    let bit = reg::Symbolic::from(1 << targetbit);
+    let bit = reg::Symbolic::new(1 << targetbit);
     let val = read_value_from_targetreg(p, mem, &state, targetreg);
 
     write_value_to_targetreg(p, mem, &mut state, targetreg, val | bit);
@@ -154,13 +154,13 @@ fn trace_call(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> Op
             let sp = (s as u16) << 8 | p as u16;
             let ret_pc = ptr.as_pointer().clone() + 3;
 
-            state.set_memory(ptr.contextualize(sp), reg::Symbolic::from(ret_pc as u8));
-            state.set_memory(ptr.contextualize(sp + 1), reg::Symbolic::from((ret_pc >> 8) as u8));
+            state.set_memory(ptr.contextualize(sp), reg::Symbolic::new(ret_pc as u8));
+            state.set_memory(ptr.contextualize(sp + 1), reg::Symbolic::new((ret_pc >> 8) as u8));
 
             let next_sp = sp - 2;
 
-            state.set_register(Register::S, reg::Symbolic::from((next_sp >> 8) as u8));
-            state.set_register(Register::P, reg::Symbolic::from((next_sp & 0xFF) as u8));
+            state.set_register(Register::S, reg::Symbolic::new((next_sp >> 8) as u8));
+            state.set_register(Register::P, reg::Symbolic::new((next_sp & 0xFF) as u8));
         },
         _ => return None
     };
@@ -178,8 +178,8 @@ fn trace_return(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> 
                 (Some(lo), Some(hi)) => {
                     let next_sp = sp + 2;
 
-                    state.set_register(Register::S, reg::Symbolic::from((next_sp >> 8) as u8));
-                    state.set_register(Register::P, reg::Symbolic::from((next_sp & 0xFF) as u8));
+                    state.set_register(Register::S, reg::Symbolic::new((next_sp >> 8) as u8));
+                    state.set_register(Register::P, reg::Symbolic::new((next_sp & 0xFF) as u8));
 
                     let next_pc = (hi as u16) << 8 | (lo as u16);
 
@@ -231,7 +231,7 @@ fn trace_sp_adjust(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) ->
     let new_sp = (hi_sp << 8 | lo_sp) + adjust;
 
     let hi_new_sp : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(new_sp >> 8 as u8).ok().expect("Edit:");
-    let lo_new_sp : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(new_sp & reg::Symbolic::from(0xFF as u16)).ok().expect("Downvotes, really?");
+    let lo_new_sp : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(new_sp & reg::Symbolic::new(0xFF as u16)).ok().expect("Downvotes, really?");
 
     state.set_register(Register::S, hi_new_sp);
     state.set_register(Register::P, lo_new_sp);

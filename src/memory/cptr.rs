@@ -11,6 +11,7 @@ use num::traits::Bounded;
 use serde::{Serialize, Deserialize, Deserializer};
 use serde::de;
 use crate::reg;
+use crate::reg::New;
 
 /// A pointer bundled with the context necessary to resolve it to a concrete
 /// value.
@@ -371,7 +372,7 @@ pub enum PointerParseError<P, CV> where P: str::FromStr, CV: str::FromStr {
     MissingPointer
 }
 
-impl<P, CV> str::FromStr for Pointer<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + From<CV> {
+impl<P, CV> str::FromStr for Pointer<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + reg::New<CV> {
     type Err = PointerParseError<P, CV>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -384,7 +385,7 @@ impl<P, CV> str::FromStr for Pointer<P, CV> where P: str::FromStr, CV: str::From
 
             match (k, v) {
                 (Some(key), Some("?")) => contexts.insert(key.to_string(), reg::Symbolic::default()),
-                (Some(key), Some(value)) => contexts.insert(key.to_string(), reg::Symbolic::from(CV::from_str(value).map_err(|e| PointerParseError::ContextWontParse(e) )?)),
+                (Some(key), Some(value)) => contexts.insert(key.to_string(), reg::Symbolic::new(CV::from_str(value).map_err(|e| PointerParseError::ContextWontParse(e) )?)),
                 (Some(ptr), None) => return Ok(Pointer{
                     pointer: P::from_str(ptr).map_err(|e| PointerParseError::PointerWontParse(e))?,
                     context: contexts
@@ -450,14 +451,14 @@ impl<P, CV> fmt::LowerHex for Pointer<P, CV> where P: fmt::LowerHex, CV: fmt::Lo
 //EXPECT Rust to have inner type syntax at all. However serde works it's black
 //magic, it does so by twisting Rust's otherwise workmanlike syntax into an
 //amalgamated monstrosity.
-impl<'de, P, CV> Deserialize<'de> for Pointer<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + From<CV>  {
+impl<'de, P, CV> Deserialize<'de> for Pointer<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + reg::New<CV>  {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
-        struct V<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + From<CV> {
+        struct V<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + reg::New<CV> {
             p: std::marker::PhantomData<P>,
             cv: std::marker::PhantomData<CV>
         }
 
-        impl<'de, P, CV> de::Visitor<'de> for V<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + From<CV> {
+        impl<'de, P, CV> de::Visitor<'de> for V<P, CV> where P: str::FromStr, CV: str::FromStr, reg::Symbolic<CV>: Default + reg::New<CV> {
             type Value = Pointer<P, CV>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

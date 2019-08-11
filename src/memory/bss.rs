@@ -6,6 +6,7 @@ use std::convert::TryInto;
 use crate::maths::CheckedSub;
 use crate::memory::{Image, Pointer};
 use crate::reg;
+use crate::reg::New;
 
 /// Models a range of memory whose contents are unknown.
 /// 
@@ -96,7 +97,7 @@ impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO> where P: Clone + Checked
     fn insert_user_context(&self, mut ptr: Pointer<Self::Pointer>, ctxts: &[&str]) -> Pointer<Self::Pointer> {
         match ctxts.get(0) {
             Some(ctxt) => match u64::from_str_radix(ctxt, 16) {
-                Ok(cval) => ptr.set_platform_context(self.banking_ctxt, reg::Symbolic::from(cval)),
+                Ok(cval) => ptr.set_platform_context(self.banking_ctxt, reg::Symbolic::new(cval)),
                 _ => {}
             },
             _ => {}

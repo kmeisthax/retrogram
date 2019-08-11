@@ -1,6 +1,7 @@
 //! THUMB instruction set disassembly
 
 use crate::{memory, analysis, reg};
+use crate::reg::New;
 use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32::{Pointer, Offset, Bus, Instruction, Disasm};
@@ -16,7 +17,7 @@ fn cond_branch(p: &memory::Pointer<Pointer>, cond: u16, offset: u16) -> analysis
     let target = p.contextualize((signed_offset - 4 + p.as_pointer().clone() as i32) as Pointer);
     let mut swi_target = p.contextualize(0x00000008);
     
-    swi_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
+    swi_target.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
     
     match cond {
         //Unconditional conditional branches are undefined and are thus treated as illegal
@@ -302,7 +303,7 @@ fn uncond_branch_link(p: &memory::Pointer<Pointer>, mem: &Bus, high_offset: u16)
             let offset : u32 = sign | (high_offset as u32) << 12 | (low_offset as u32) << 1;
             let target = p.contextualize((p.as_pointer().clone() as i32 + offset as i32) as u32);
             let mut arm_target = p.contextualize((p.as_pointer().clone() as i32 + offset as i32) as u32 & 0xFFFFFFFC);
-            arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
+            arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
 
             match h {
                 1 if low_offset & 1 == 0 => Ok(Disasm::new(Instruction::new("BLX", vec![op::cptr(arm_target.clone())]), 4, analysis::Flow::Normal, vec![refr::new_static_ref(p.clone(), arm_target, refkind::Subroutine)])),
@@ -392,7 +393,7 @@ fn push_pop(l: u16, r: u16, register_list: u16) -> analysis::Result<Disasm, Poin
 
 fn breakpoint(p: &memory::Pointer<Pointer>, immed: u16) -> analysis::Result<Disasm, Pointer, Offset> {
     let mut bkpt_target = p.contextualize(0x0000000C);
-    bkpt_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
+    bkpt_target.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
 
     let targets = vec![refr::new_static_ref(p.clone(), bkpt_target, refkind::Subroutine)];
     

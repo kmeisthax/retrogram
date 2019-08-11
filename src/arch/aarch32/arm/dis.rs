@@ -1,6 +1,7 @@
 //! Static disassembler for AArch32
 
 use crate::{memory, analysis, ast, reg};
+use crate::reg::New;
 use crate::ast::Operand as op;
 use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
@@ -381,7 +382,7 @@ fn blx_register(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis
 fn blx_immediate(p: &memory::Pointer<Pointer>, h: u32, offset: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     let signbit = if ((offset & 0x00800000) >> 23) != 0 { 0xFF800000 } else { 0 };
     let mut target = p.contextualize(p.as_pointer().wrapping_add(((offset & 0x007FFFFF) | signbit) << 2 | h << 1));
-    target.set_arch_context(THUMB_STATE, reg::Symbolic::from(1));
+    target.set_arch_context(THUMB_STATE, reg::Symbolic::new(1));
     let jumpref = refr::new_static_ref(p.clone(), target.clone(), refkind::Subroutine);
 
     Ok(Disasm::new(Instruction::new("BLX", vec![op::cptr(target)]), 4, analysis::Flow::Normal, vec![jumpref]))

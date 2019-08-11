@@ -1,4 +1,5 @@
 use crate::reg;
+use crate::reg::New;
 
 #[test]
 fn test_symbolic_default() {
@@ -13,7 +14,7 @@ fn test_symbolic_default() {
 #[test]
 fn test_concrete_roundtrip() {
     let start_value : u8 = 142;
-    let sym_value = reg::Symbolic::from(start_value);
+    let sym_value = reg::Symbolic::new(start_value);
 
     assert!(sym_value.is_concrete());
     assert!(!sym_value.is_unconstrained());
@@ -27,7 +28,7 @@ fn test_concrete_roundtrip() {
 #[test]
 fn test_concrete_cares() {
     let start_value : u8 = 243;
-    let sym_value = reg::Symbolic::from(start_value);
+    let sym_value = reg::Symbolic::new(start_value);
 
     assert_eq!(0xFF, sym_value.cares());
     assert_eq!(0x00, sym_value.not_cares());
@@ -36,7 +37,7 @@ fn test_concrete_cares() {
 #[test]
 fn test_concrete_validation() {
     let start_value : u8 = 83;
-    let sym_value = reg::Symbolic::from(start_value);
+    let sym_value = reg::Symbolic::new(start_value);
 
     assert!(sym_value.is_valid(start_value));
     assert!(!sym_value.is_valid(0));
@@ -56,8 +57,8 @@ fn test_concrete_bitor() {
     let value_one : u8 = 0x3C;
     let value_two : u8 = 0xF0;
 
-    let sym_value_one = reg::Symbolic::from(value_one);
-    let sym_value_two = reg::Symbolic::from(value_two);
+    let sym_value_one = reg::Symbolic::new(value_one);
+    let sym_value_two = reg::Symbolic::new(value_two);
 
     let value_or = value_one | value_two;
     let sym_value_or = sym_value_one | sym_value_two;
@@ -70,8 +71,8 @@ fn test_concrete_bitand() {
     let value_one : u8 = 0x3C;
     let value_two : u8 = 0xF0;
 
-    let sym_value_one = reg::Symbolic::from(value_one);
-    let sym_value_two = reg::Symbolic::from(value_two);
+    let sym_value_one = reg::Symbolic::new(value_one);
+    let sym_value_two = reg::Symbolic::new(value_two);
 
     let value_or = value_one & value_two;
     let sym_value_or = sym_value_one & sym_value_two;
@@ -84,8 +85,8 @@ fn test_concrete_bitxor() {
     let value_one : u8 = 0x3C;
     let value_two : u8 = 0xF0;
 
-    let sym_value_one = reg::Symbolic::from(value_one);
-    let sym_value_two = reg::Symbolic::from(value_two);
+    let sym_value_one = reg::Symbolic::new(value_one);
+    let sym_value_two = reg::Symbolic::new(value_two);
 
     let value_xor = value_one ^ value_two;
     let sym_value_xor = sym_value_one ^ sym_value_two;
@@ -96,7 +97,7 @@ fn test_concrete_bitxor() {
 #[test]
 fn test_concrete_not() {
     let value_one : u8 = 0x42;
-    let sym_value_one = reg::Symbolic::from(value_one);
+    let sym_value_one = reg::Symbolic::new(value_one);
 
     let value_not = !value_one;
     let sym_value_not = !sym_value_one;
@@ -109,8 +110,8 @@ fn test_concrete_add() {
     let value_one : u8 = 0x76;
     let value_two : u8 = 0x15;
 
-    let sym_value_one = reg::Symbolic::from(value_one);
-    let sym_value_two = reg::Symbolic::from(value_two);
+    let sym_value_one = reg::Symbolic::new(value_one);
+    let sym_value_two = reg::Symbolic::new(value_two);
 
     let value_sum = value_one + value_two;
     let sym_value_sum = sym_value_one + sym_value_two;
@@ -123,8 +124,8 @@ fn test_concrete_sub() {
     let value_one : u8 = 0x76;
     let value_two : u8 = 0x15;
 
-    let sym_value_one = reg::Symbolic::from(value_one);
-    let sym_value_two = reg::Symbolic::from(value_two);
+    let sym_value_one = reg::Symbolic::new(value_one);
+    let sym_value_two = reg::Symbolic::new(value_two);
 
     let value_sum = value_one - value_two;
     let sym_value_sum = sym_value_one - sym_value_two;
@@ -137,8 +138,8 @@ fn test_concrete_signed_add() {
     let value_one : i8 = 32;
     let value_two : i8 = -6;
 
-    let sym_value_one = reg::Symbolic::from(value_one);
-    let sym_value_two = reg::Symbolic::from(value_two);
+    let sym_value_one = reg::Symbolic::new(value_one);
+    let sym_value_two = reg::Symbolic::new(value_two);
 
     let value_sum = value_one + value_two;
     let sym_value_sum = sym_value_one + sym_value_two;
@@ -184,7 +185,7 @@ fn test_symbolic_not() {
 #[test]
 fn test_concrete_shl() {
     let value_one : u8 = 0x3C;
-    let sym_value_one = reg::Symbolic::from(value_one);
+    let sym_value_one = reg::Symbolic::new(value_one);
 
     let value_shift = value_one << 2;
     let sym_value_shift = sym_value_one << 2;
@@ -195,7 +196,7 @@ fn test_concrete_shl() {
 #[test]
 fn test_concrete_shl_arithmetic() {
     let value_one : i8 = -16;
-    let sym_value_one = reg::Symbolic::from(value_one);
+    let sym_value_one = reg::Symbolic::new(value_one);
 
     let value_shift = value_one << 2;
     let sym_value_shift = sym_value_one << 2;
@@ -206,7 +207,7 @@ fn test_concrete_shl_arithmetic() {
 #[test]
 fn test_concrete_shr() {
     let value_one : u8 = 0xF0;
-    let sym_value_one = reg::Symbolic::from(value_one);
+    let sym_value_one = reg::Symbolic::new(value_one);
 
     let value_shift = value_one >> 2;
     let sym_value_shift = sym_value_one >> 2;
@@ -217,7 +218,7 @@ fn test_concrete_shr() {
 #[test]
 fn test_concrete_shr_arithmetic() {
     let value_one : i8 = -16;
-    let sym_value_one = reg::Symbolic::from(value_one);
+    let sym_value_one = reg::Symbolic::new(value_one);
 
     let value_shift = value_one >> 2;
     let sym_value_shift = sym_value_one >> 2;
@@ -249,7 +250,7 @@ fn test_symbolic_iter_unsatisfiable() {
 
 #[test]
 fn test_symbolic_iter_concrete() {
-    let sym_value = reg::Symbolic::from(0x3F as u8);
+    let sym_value = reg::Symbolic::new(0x3F as u8);
     let mut sym_iter = sym_value.valid();
 
     assert_eq!(sym_iter.next(), Some(0x3F));
@@ -271,7 +272,7 @@ fn test_concrete_conv() {
     use crate::reg::Convertable;
 
     let value : u8 = 0xC0;
-    let sym_value = reg::Symbolic::from(value);
+    let sym_value = reg::Symbolic::new(value);
 
     let wide_value = u16::from(value);
     let wide_sym_value = reg::Symbolic::<u16>::convert_from(sym_value);
@@ -285,7 +286,7 @@ fn test_concrete_tryconv() {
     use crate::reg::TryConvertable;
 
     let value : u16 = 0xC0;
-    let sym_value = reg::Symbolic::from(value);
+    let sym_value = reg::Symbolic::new(value);
 
     let narrow_value = u8::try_from(value).expect("Narrow conversion failed");
     let narrow_sym_value = reg::Symbolic::<u8>::try_convert_from(sym_value).expect("Narrow symbolic conversion failed");
