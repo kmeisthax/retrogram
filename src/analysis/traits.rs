@@ -4,7 +4,7 @@ use std::hash::Hash;
 use std::fmt::Display;
 use std::cmp::Ord;
 use std::str::FromStr;
-use crate::{memory, analysis};
+use crate::{memory, analysis, reg};
 
 pub trait Mappable : Clone + Eq + Hash + Ord + Display + FromStr {
 
@@ -24,4 +24,30 @@ impl<T, I, SI, F, P, MV, S, IO> Disassembler<I, SI, F, P, MV, S, IO> for T
         T: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>) ->
             analysis::Result<analysis::Disasm<I, SI, F, P, S>, P, S> {
     
+}
+
+pub trait PrerequisiteAnalysis<RK, I, P, MV, S, IO>:
+    Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>, &reg::State<RK, I, P, MV>)
+        -> (Vec<RK>, Vec<memory::Pointer<P>>, bool) {
+    
+}
+
+impl<T, RK, I, P, MV, S, IO> PrerequisiteAnalysis<RK, I, P, MV, S, IO> for T
+    where T: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>, &reg::State<RK, I, P, MV>)
+        -> (Vec<RK>, Vec<memory::Pointer<P>>, bool) {
+    
+}
+
+pub trait Tracer<RK, I, P, MV, S, IO>:
+    Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>, reg::State<RK, I, P, MV>)
+        -> analysis::Result<(reg::State<RK, I, P, MV>, memory::Pointer<P>), P, S>
+    where RK: analysis::Mappable, P: analysis::Mappable {
+    
+}
+
+impl<T, RK, I, P, MV, S, IO> Tracer<RK, I, P, MV, S, IO> for T
+    where T: Fn(&memory::Pointer<P>, &memory::Memory<P, MV, S, IO>, reg::State<RK, I, P, MV>)
+        -> analysis::Result<(reg::State<RK, I, P, MV>, memory::Pointer<P>), P, S>,
+        RK: analysis::Mappable, P: analysis::Mappable {
+
 }

@@ -7,6 +7,7 @@ mod block;
 mod trace;
 mod flow;
 mod disasm;
+mod dynamic;
 mod error;
 
 pub use traits::*;
