@@ -2,6 +2,7 @@
 
 use std::io;
 use crate::{reg, memory};
+use crate::reg::New;
 use crate::arch::sm83;
 
 /// Any type which decodes the banked memory region (0x4000) of a Game Boy ROM
@@ -167,7 +168,7 @@ impl<M> memory::Image for GameBoyROMImage<M> where M: Mapper {
         if *ptr.as_pointer() > 0x4000 {
             match ctxts.get(0) {
                 Some(ctxt) => match u64::from_str_radix(ctxt, 16) {
-                    Ok(cval) => ptr.set_platform_context("R", reg::Symbolic::from(cval)),
+                    Ok(cval) => ptr.set_platform_context("R", reg::Symbolic::new(cval)),
                     _ => {}
                 },
                 _ => {}
@@ -202,13 +203,13 @@ pub fn create_context<V>(values: &Vec<V>) -> Option<memory::Pointer<sm83::Pointe
     if values.len() > 1 {
         if values[values.len() - 1] >= V::from(0xE000) {
         } else if values[values.len() - 1] >= V::from(0xC000) {
-            context.set_platform_context("W", reg::Symbolic::from(u64::from(values[values.len() - 2].clone())));
+            context.set_platform_context("W", reg::Symbolic::new(u64::from(values[values.len() - 2].clone())));
         } else if values[values.len() - 1] >= V::from(0xA000) {
-            context.set_platform_context("S", reg::Symbolic::from(u64::from(values[values.len() - 2].clone())));
+            context.set_platform_context("S", reg::Symbolic::new(u64::from(values[values.len() - 2].clone())));
         } else if values[values.len() - 1] >= V::from(0x8000) {
-            context.set_platform_context("V", reg::Symbolic::from(u64::from(values[values.len() - 2].clone())));
+            context.set_platform_context("V", reg::Symbolic::new(u64::from(values[values.len() - 2].clone())));
         } else if values[values.len() - 1] >= V::from(0x4000) {
-            context.set_platform_context("R", reg::Symbolic::from(u64::from(values[values.len() - 2].clone())));
+            context.set_platform_context("R", reg::Symbolic::new(u64::from(values[values.len() - 2].clone())));
         }
     }
 

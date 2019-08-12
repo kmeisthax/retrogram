@@ -6,7 +6,7 @@ use std::cmp::min;
 use std::convert::TryFrom;
 use num::traits::{Bounded, Zero, One, CheckedShl};
 use serde::{Serialize, Deserialize};
-use crate::reg::{Convertable, TryConvertable, Bitwise};
+use crate::reg::{Bitwise, New, Convertable, TryConvertable};
 use crate::maths::BoundWidth;
 
 /// Represents a processor register bounded to a particular set of states.
@@ -53,8 +53,8 @@ impl<T> Default for Symbolic<T> where T: Zero {
     }
 }
 
-impl<T> From<T> for Symbolic<T> where T: Clone + Not<Output=T> {
-    fn from(v: T) -> Self {
+impl<T> New<T> for Symbolic<T> where T: Clone + Not<Output=T> {
+    fn new(v: T) -> Self {
         Symbolic {
             bits_set: v.clone(),
             bits_cleared: !v,
@@ -414,11 +414,11 @@ impl<T,R> Add<Symbolic<R>> for Symbolic<T> where T: Clone + Add<R> + BitXor<R> +
         let half_adds = self.clone() ^ rhs.clone();
         let half_carries = self.clone() & rhs.clone();
         let zero : XOROut<T,R> = XOROut::<T,R>::zero();
-        let mut carry = Symbolic::from(zero);
+        let mut carry = Symbolic::new(zero);
         let mut sum = carry.clone();
 
         for bit in 0..bits {
-            let mask = Symbolic::from(XOROut::<T,R>::one() << bit);
+            let mask = Symbolic::new(XOROut::<T,R>::one() << bit);
             sum = sum | half_adds.clone() & mask.clone() ^ carry.clone() & mask.clone();
             carry = (carry & half_adds.clone() & mask.clone() | half_carries.clone() & mask) << 1;
         }
@@ -451,16 +451,26 @@ impl<T,R> Sub<Symbolic<R>> for Symbolic<T> where T: Clone + Sub<R> + BitXor<R> +
         let half_adds = self.clone() ^ !rhs.clone();
         let half_carries = self.clone() & !rhs.clone();
         let zero : XOROut<T,R> = XOROut::<T,R>::zero();
-        let mut sum = Symbolic::from(zero);
+        let mut sum = Symbolic::new(zero);
         let one : XOROut<T,R> = XOROut::<T,R>::one();
-        let mut carry = Symbolic::from(one);
+        let mut carry = Symbolic::new(one);
 
         for bit in 0..bits {
-            let mask = Symbolic::from(XOROut::<T,R>::one() << bit);
+            let mask = Symbolic::new(XOROut::<T,R>::one() << bit);
             sum = sum | half_adds.clone() & mask.clone() ^ carry.clone() & mask.clone();
             carry = (carry & half_adds.clone() & mask.clone() | half_carries.clone() & mask) << 1;
         }
 
         Symbolic::convert_from(sum)
+    }
+}
+
+impl<T> Bounded for Symbolic<T> where T: Bounded, Symbolic<T>: New<T> {
+    fn min_value() -> Self {
+        Self::new(T::min_value())
+    }
+
+    fn max_value() -> Self {
+        Self::new(T::max_value())
     }
 }

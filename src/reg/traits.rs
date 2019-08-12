@@ -5,6 +5,11 @@ use num::traits::{Zero, CheckedShl};
 use crate::reg;
 use crate::maths::BoundWidth;
 
+/// Interim trait to replace From<T> as a way to construct Symbolic<T>
+pub trait New<T> {
+    fn new(v: T) -> Self;
+}
+
 /// Rust doesn't let us expose the child type's From impl as another From impl
 /// because there's no way to convey a blanket implementation that doesn't
 /// conflict with the blanket self-from impl in core. So instead we define a new

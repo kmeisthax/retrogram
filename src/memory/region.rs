@@ -4,13 +4,14 @@
 use std::io;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
-use num::traits::One;
+use num::traits::{Zero, One};
 use crate::{reg, memory};
 use crate::reg::Convertable;
 use crate::maths::{CheckedSub, BoundWidth};
 use crate::memory::bss::UnknownImage;
 use crate::memory::rombin::ROMBinaryImage;
 use crate::memory::{Image, Behavior, Pointer};
+use crate::reg::New;
 
 /// Models a region of memory visible to the program under analysis.
 /// 
@@ -174,18 +175,40 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     where P: memory::PtrNum<S>, S: memory::Offset<P>, MV: reg::Bitwise,
         IO: One, reg::Symbolic<MV>: Default {
     
+    /// Read a single memory unit (e.g. byte) from memory at a given pointer.
+    /// 
+    /// Yields a symbolic value which is concrete if the memory model has image
+    /// data for the given pointer, and is unconstrained otherwise.
     pub fn read_unit(&self, ptr: &Pointer<P>) -> reg::Symbolic<MV> {
         for view in &self.views {
             if let Some(offset) = view.image.decode_addr(ptr, view.start.clone()) {
                 if let Some(imgdata) = view.image.retrieve(offset, IO::one()) {
                     if imgdata.len() > 0 {
-                        return reg::Symbolic::from(imgdata[0].clone());
+                        return reg::Symbolic::new(imgdata[0].clone());
                     }
                 }
             }
         }
         
         reg::Symbolic::default()
+    }
+
+    /// Read multiple memory units (e.g. bytes) from memory at a given pointer.
+    /// 
+    /// Yields an array of symbolic values whose constraints are equal to the
+    /// result of calling `read_unit` on each pointer from `ptr` to
+    /// `ptr + size`.
+    pub fn read_memory(&self, ptr: &Pointer<P>, size: S) -> Vec<reg::Symbolic<MV>> {
+        let mut count = S::zero();
+        let mut out = Vec::new();
+
+        while count < size {
+            let offptr = ptr.clone() + count.clone();
+            out.push(self.read_unit(&offptr));
+            count = count + S::one();
+        }
+
+        out
     }
 }
 
@@ -207,15 +230,13 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         where EV: memory::Desegmentable<MV> + reg::Bitwise,
             MV: reg::Bitwise,
             reg::Symbolic<EV>: reg::Bitwise {
-        let ev_units = <EV as BoundWidth<u32>>::bound_width();
-        let mv_units = <MV as BoundWidth<u32>>::bound_width();
-        let units_reqd = (ev_units as f32 / mv_units as f32).round() as u32;
-        let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::from(EV::zero());
+        let units_reqd = <EV as memory::Desegmentable<MV>>::units_reqd() as u32;
+        let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::zero();
 
         for i in 0..units_reqd {
             let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
             let unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(self.read_unit(&ptr));
-            sum = sum | unit << (i * mv_units);
+            sum = sum | unit << (i * <MV as BoundWidth<u32>>::bound_width());
         }
 
         sum
@@ -233,15 +254,13 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
         where EV: memory::Desegmentable<MV> + reg::Bitwise,
             MV: reg::Bitwise,
             reg::Symbolic<EV>: reg::Bitwise {
-        let ev_units = <EV as BoundWidth<u32>>::bound_width();
-        let mv_units = <MV as BoundWidth<u32>>::bound_width();
-        let units_reqd = (ev_units as f32 / mv_units as f32).round() as u32;
-        let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::from(EV::zero());
+        let units_reqd = <EV as memory::Desegmentable<MV>>::units_reqd() as u32;
+        let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::zero();
 
         for i in (0..units_reqd).rev() {
             let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
             let unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(self.read_unit(&ptr));
-            sum = sum | unit << (i * mv_units);
+            sum = sum | unit << (i * <MV as BoundWidth<u32>>::bound_width());
         }
 
         sum

@@ -7,11 +7,13 @@ mod cptr;
 mod bss;
 mod rombin;
 mod traits;
+mod endianness;
 
 pub use behavior::Behavior;
 pub use region::Memory;
 pub use image::Image;
 pub use cptr::Pointer;
+pub use endianness::Endianness;
 pub use traits::*;
 
 #[cfg(test)]
