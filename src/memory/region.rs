@@ -229,7 +229,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     pub fn read_leword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
         where EV: memory::Desegmentable<MV> + reg::Bitwise,
             MV: reg::Bitwise,
-            reg::Symbolic<EV>: reg::Bitwise {
+            reg::Symbolic<EV>: reg::Bitwise + Convertable<MV> {
         let units_reqd = <EV as memory::Desegmentable<MV>>::units_reqd() as u32;
         let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::zero();
 
@@ -253,7 +253,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     pub fn read_beword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
         where EV: memory::Desegmentable<MV> + reg::Bitwise,
             MV: reg::Bitwise,
-            reg::Symbolic<EV>: reg::Bitwise {
+            reg::Symbolic<EV>: reg::Bitwise + Convertable<MV> {
         let units_reqd = <EV as memory::Desegmentable<MV>>::units_reqd() as u32;
         let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::zero();
 

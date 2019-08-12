@@ -1,10 +1,10 @@
 //! Helper traits for defining where clauses without getting an RSI
 
-use std::ops::{Sub, Shl};
+use std::ops::Sub;
 use std::convert::TryFrom;
-use num::traits::{Bounded, Zero, One};
+use num::traits::{Zero, One};
 use crate::{reg, memory};
-use crate::maths::{BoundWidth, CheckedAdd, CheckedSub};
+use crate::maths::{BoundWidth, CheckedAdd, CheckedSub, u24};
 
 /// Trait which represents all operations expected of a pointer value.
 /// 
@@ -76,34 +76,14 @@ impl <T, P> Offset<P> for T
 /// the given type. However, Rust doesn't recognize these bounds, so you must
 /// copy and update them in any code that uses `Desegmentable` until I figure
 /// out how to fix that.
-pub trait Desegmentable<U> : Clone + Bounded + From<U> + BoundWidth<u32> + Shl<u32> + reg::Bitwise +
-    From<<Self as Shl<u32>>::Output>
-    where U: BoundWidth<u32>,
-        reg::Symbolic<Self>: Shl<u32, Output = reg::Symbolic<<Self as Shl<u32>>::Output>> {
+pub trait Desegmentable<U> : Clone + reg::Bitwise
+    where U: Clone + BoundWidth<u32> {
     
     /// Given a slice of memory units, attempt to join them into the target
     /// type.
     /// 
     /// The conversion may fail if the data slice is too short.
-    fn from_segments(data: &[U], endianness: memory::Endianness) -> Option<Self>;
-
-    /// Indicates how many units must be passed into `from_segments`in order to
-    /// successfully join them into the target type.
-    fn units_reqd() -> usize;
-}
-
-impl<T, U> Desegmentable<U> for T
-    where T: Clone + Bounded + From<U> + BoundWidth<u32> + Shl<u32> + reg::Bitwise + From<<T as Shl<u32>>::Output>,
-        U: Clone + BoundWidth<u32>,
-        reg::Symbolic<Self>: Shl<u32, Output = reg::Symbolic<<Self as Shl<u32>>::Output>> {
-
-    fn units_reqd() -> usize {
-        let self_units = <Self as BoundWidth<u32>>::bound_width();
-        let from_units = <U as BoundWidth<u32>>::bound_width();
-        (self_units as f32 / from_units as f32).round() as usize
-    }
-    
-    fn from_segments(data: &[U], endianness: memory::Endianness) -> Option<Self> {
+    fn from_segments(data: &[U], endianness: memory::Endianness) -> Option<Self> where Self: From<U> {
         let units_reqd = <Self as Desegmentable<U>>::units_reqd() as u32;
         let mut sum = Self::zero();
         let i_iter : Vec<u32> = match endianness {
@@ -112,10 +92,32 @@ impl<T, U> Desegmentable<U> for T
         };
 
         for i in i_iter {
-            let unit = T::from(data.get(i as usize)?.clone());
+            let unit = Self::from(data.get(i as usize)?.clone());
             sum = sum | unit << (i * <U as BoundWidth<u32>>::bound_width());
         }
 
         Some(sum)
     }
+
+    /// Indicates how many units must be passed into `from_segments`in order to
+    /// successfully join them into the target type.
+    fn units_reqd() -> usize {
+        let self_units = <Self as BoundWidth<u32>>::bound_width();
+        let from_units = <U as BoundWidth<u32>>::bound_width();
+        (self_units as f32 / from_units as f32).round() as usize
+    }
 }
+
+macro_rules! desegmentable_impl {
+    ($from_type:ty, $into_type:ty) => {
+        impl Desegmentable<$from_type> for $into_type {
+
+        }
+    }
+}
+
+desegmentable_impl!(u8, u16);
+desegmentable_impl!(u8, u24);
+desegmentable_impl!(u8, u32);
+desegmentable_impl!(u8, u64);
+desegmentable_impl!(u8, u128);

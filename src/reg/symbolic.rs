@@ -8,6 +8,7 @@ use num::traits::{Bounded, Zero, One, CheckedShl};
 use serde::{Serialize, Deserialize};
 use crate::reg::{Bitwise, New, Convertable, TryConvertable};
 use crate::maths::BoundWidth;
+use crate::memory::{Endianness, Desegmentable};
 
 /// Represents a processor register bounded to a particular set of states.
 /// 
@@ -472,5 +473,33 @@ impl<T> Bounded for Symbolic<T> where T: Bounded, Symbolic<T>: New<T> {
 
     fn max_value() -> Self {
         Self::new(T::max_value())
+    }
+}
+
+impl<T, U> Desegmentable<Symbolic<U>> for Symbolic<T>
+    where T: Desegmentable<U>,
+        U: Clone + BoundWidth<u32> + Bitwise,
+        Symbolic<T>: Zero + Convertable<U> + Bitwise {
+
+    fn units_reqd() -> usize {
+        let self_units = <Self as BoundWidth<u32>>::bound_width();
+        let from_units = <U as BoundWidth<u32>>::bound_width();
+        (self_units as f32 / from_units as f32).round() as usize
+    }
+    
+    fn from_segments(data: &[Symbolic<U>], endianness: Endianness) -> Option<Self> {
+        let units_reqd = <Self as Desegmentable<Symbolic<U>>>::units_reqd() as u32;
+        let mut sum = Self::zero();
+        let i_iter : Vec<u32> = match endianness {
+            Endianness::BigEndian => (0..units_reqd).rev().collect(),
+            Endianness::LittleEndian => (0..units_reqd).collect()
+        };
+
+        for i in i_iter {
+            let unit = Symbolic::convert_from(data.get(i as usize)?.clone());
+            sum = sum | unit << i * <U as BoundWidth<u32>>::bound_width();
+        }
+
+        Some(sum)
     }
 }
