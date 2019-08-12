@@ -220,16 +220,13 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     
     /// Read an arbitary little-endian integer type from memory.
     /// 
-    /// All integer types involved must provide a way to reason about their
-    /// widths. This is provided with the `BoundWidth` trait, which indicates how
-    /// many left shifts of a given integer type are required in order to
-    /// overflow it. The `BoundWidth` of the memory word type (MV) thus
-    /// determines how many atomic memory units are required to be read in order
-    /// to populate the expected value type.
+    /// The underlying memory value types must implement `Desegmentable` and
+    /// their symbolic versions must also implement `Desegmentable`. It must
+    /// also be possible to generate a memory offset from a u32.
     pub fn read_leword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
-        where S: TryFrom<u32>,
+        where S: TryFrom<usize>,
             reg::Symbolic<EV>: Default + memory::Desegmentable<reg::Symbolic<MV>> {
-        let units_reqd = <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<MV>>>::units_reqd() as u32;
+        let units_reqd = <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<MV>>>::units_reqd();
         let data = self.read_memory(ptr, match S::try_from(units_reqd) {
             Ok(u) => u,
             Err(_) => return reg::Symbolic::<EV>::default()
@@ -239,16 +236,13 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     
     /// Read an arbitary big-endian integer type from memory.
     /// 
-    /// All integer types involved must provide a way to reason about their
-    /// widths. This is provided with the `BoundWidth` trait, which indicates how
-    /// many left shifts of a given integer type are required in order to
-    /// overflow it. The `BoundWidth` of the memory word type (MV) thus
-    /// determines how many atomic memory units are required to be read in order
-    /// to populate the expected value type.
+    /// The underlying memory value types must implement `Desegmentable` and
+    /// their symbolic versions must also implement `Desegmentable`. It must
+    /// also be possible to generate a memory offset from a u32.
     pub fn read_beword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
-        where S: TryFrom<u32>,
+        where S: TryFrom<usize>,
             reg::Symbolic<EV>: Default + memory::Desegmentable<reg::Symbolic<MV>> {
-        let units_reqd = <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<MV>>>::units_reqd() as u32;
+        let units_reqd = <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<MV>>>::units_reqd();
         let data = self.read_memory(ptr, match S::try_from(units_reqd) {
             Ok(u) => u,
             Err(_) => return reg::Symbolic::<EV>::default()

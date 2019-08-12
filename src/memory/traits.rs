@@ -56,26 +56,10 @@ impl <T, P> Offset<P> for T
 /// Trait which represents a type which can be constructed from units of some
 /// other numerical type.
 /// 
-/// In plain english: A type is desegmentable from the unit type of a memory
-/// system if:
-/// 
-///  * The desegmentable type has bounds that can be expressed as a number of
-///    left shifts of the type
-///  * The unit type also has bounds expressable in the same manner
-///    (For some reason, Rust won't adopt this into your trait bounds, so you
-///    may need to state it again.)
-///  * You can convert concrete type values into symbolic ones
-///  * You can zero-extend the unit type to the desegmentable one
-///  * You can shift the type left
-///  * You can perform bitwise operations on the type
-///  * The type has an additive and multiplicative identity
-///  * Shifts and bitwise operations on the type produce some type convertable
-///    back to this one
-/// 
-/// Furthermore, this trait places bounds on the behavior of symbolic values of
-/// the given type. However, Rust doesn't recognize these bounds, so you must
-/// copy and update them in any code that uses `Desegmentable` until I figure
-/// out how to fix that.
+/// A default implementation of `units_reqd`, which indicates how many of the
+/// smaller type are necessary to get one of the larger type, is provided.
+/// Implementations of the other method, `from_segments`, must be provided by
+/// the type itself (see `desegmentable_impl` macro).
 pub trait Desegmentable<U> : Clone + reg::Bitwise
     where U: Clone + BoundWidth<u32> {
     
@@ -94,6 +78,11 @@ pub trait Desegmentable<U> : Clone + reg::Bitwise
     }
 }
 
+/// Implement `Desegmentable` for concrete value types.
+/// 
+/// `Symbolic` provides it's own blanket implementation for all value types
+/// so it is not necessary (or even possible) to use this macro for symbolic
+/// values.
 macro_rules! desegmentable_impl {
     ($from_type:ty, $into_type:ty) => {
         impl Desegmentable<$from_type> for $into_type where $into_type: From<$from_type> {
