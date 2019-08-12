@@ -10,7 +10,7 @@ use crate::reg::Convertable;
 use crate::maths::{CheckedSub, BoundWidth};
 use crate::memory::bss::UnknownImage;
 use crate::memory::rombin::ROMBinaryImage;
-use crate::memory::{Image, Behavior, Pointer};
+use crate::memory::{Image, Behavior, Pointer, Desegmentable, Endianness};
 use crate::reg::New;
 
 /// Models a region of memory visible to the program under analysis.
@@ -227,19 +227,14 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     /// determines how many atomic memory units are required to be read in order
     /// to populate the expected value type.
     pub fn read_leword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
-        where EV: memory::Desegmentable<MV> + reg::Bitwise,
-            MV: reg::Bitwise,
-            reg::Symbolic<EV>: reg::Bitwise + Convertable<MV> {
-        let units_reqd = <EV as memory::Desegmentable<MV>>::units_reqd() as u32;
-        let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::zero();
-
-        for i in 0..units_reqd {
-            let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
-            let unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(self.read_unit(&ptr));
-            sum = sum | unit << (i * <MV as BoundWidth<u32>>::bound_width());
-        }
-
-        sum
+        where S: TryFrom<u32>,
+            reg::Symbolic<EV>: Default + memory::Desegmentable<reg::Symbolic<MV>> {
+        let units_reqd = <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<MV>>>::units_reqd() as u32;
+        let data = self.read_memory(ptr, match S::try_from(units_reqd) {
+            Ok(u) => u,
+            Err(_) => return reg::Symbolic::<EV>::default()
+        });
+        reg::Symbolic::<EV>::from_segments(&data, Endianness::LittleEndian).unwrap_or(reg::Symbolic::<EV>::default())
     }
     
     /// Read an arbitary big-endian integer type from memory.
@@ -251,19 +246,14 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     /// determines how many atomic memory units are required to be read in order
     /// to populate the expected value type.
     pub fn read_beword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
-        where EV: memory::Desegmentable<MV> + reg::Bitwise,
-            MV: reg::Bitwise,
-            reg::Symbolic<EV>: reg::Bitwise + Convertable<MV> {
-        let units_reqd = <EV as memory::Desegmentable<MV>>::units_reqd() as u32;
-        let mut sum : reg::Symbolic<EV> = reg::Symbolic::<EV>::zero();
-
-        for i in (0..units_reqd).rev() {
-            let ptr = ptr.contextualize(P::from(ptr.as_pointer().clone() + S::try_from(i).expect("Desired memory type is too wide for the given memory space")));
-            let unit : reg::Symbolic<EV> = reg::Symbolic::convert_from(self.read_unit(&ptr));
-            sum = sum | unit << (i * <MV as BoundWidth<u32>>::bound_width());
-        }
-
-        sum
+        where S: TryFrom<u32>,
+            reg::Symbolic<EV>: Default + memory::Desegmentable<reg::Symbolic<MV>> {
+        let units_reqd = <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<MV>>>::units_reqd() as u32;
+        let data = self.read_memory(ptr, match S::try_from(units_reqd) {
+            Ok(u) => u,
+            Err(_) => return reg::Symbolic::<EV>::default()
+        });
+        reg::Symbolic::<EV>::from_segments(&data, Endianness::BigEndian).unwrap_or(reg::Symbolic::<EV>::default())
     }
 }
 

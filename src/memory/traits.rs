@@ -83,21 +83,7 @@ pub trait Desegmentable<U> : Clone + reg::Bitwise
     /// type.
     /// 
     /// The conversion may fail if the data slice is too short.
-    fn from_segments(data: &[U], endianness: memory::Endianness) -> Option<Self> where Self: From<U> {
-        let units_reqd = <Self as Desegmentable<U>>::units_reqd() as u32;
-        let mut sum = Self::zero();
-        let i_iter : Vec<u32> = match endianness {
-            memory::Endianness::BigEndian => (0..units_reqd).rev().collect(),
-            memory::Endianness::LittleEndian => (0..units_reqd).collect()
-        };
-
-        for i in i_iter {
-            let unit = Self::from(data.get(i as usize)?.clone());
-            sum = sum | unit << (i * <U as BoundWidth<u32>>::bound_width());
-        }
-
-        Some(sum)
-    }
+    fn from_segments(data: &[U], endianness: memory::Endianness) -> Option<Self>;
 
     /// Indicates how many units must be passed into `from_segments`in order to
     /// successfully join them into the target type.
@@ -110,8 +96,22 @@ pub trait Desegmentable<U> : Clone + reg::Bitwise
 
 macro_rules! desegmentable_impl {
     ($from_type:ty, $into_type:ty) => {
-        impl Desegmentable<$from_type> for $into_type {
+        impl Desegmentable<$from_type> for $into_type where $into_type: From<$from_type> {
+            fn from_segments(data: &[$from_type], endianness: memory::Endianness) -> Option<Self> {
+                let units_reqd = <Self as Desegmentable<$from_type>>::units_reqd() as u32;
+                let mut sum = Self::zero();
+                let i_iter : Vec<u32> = match endianness {
+                    memory::Endianness::BigEndian => (0..units_reqd).rev().collect(),
+                    memory::Endianness::LittleEndian => (0..units_reqd).collect()
+                };
 
+                for i in i_iter {
+                    let unit = Self::from(data.get(i as usize)?.clone());
+                    sum = sum | unit << (i * <$from_type as BoundWidth<u32>>::bound_width());
+                }
+
+                Some(sum)
+            }
         }
     }
 }
