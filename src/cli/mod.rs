@@ -1,5 +1,6 @@
 //! CLI commands
 
+mod common;
 mod dis;
 mod scan;
 mod import;
@@ -8,6 +9,7 @@ mod rename;
 mod traits;
 mod main;
 
+pub use common::Command;
 pub use dis::dis;
 pub use scan::scan;
 pub use import::import;
@@ -15,32 +17,3 @@ pub use backref::backref;
 pub use rename::rename;
 pub use traits::*;
 pub use main::main;
-
-use std::str;
-
-/// Enumeration of all CLI commands
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum Command {
-    Scan,
-    Disassemble,
-    Import,
-    Backreference,
-    Rename
-}
-
-impl str::FromStr for Command {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_lowercase().as_ref() {
-            "dis" => Ok(Command::Disassemble),
-            "scan" => Ok(Command::Scan),
-            "chadtronic-scan" => Ok(Command::Scan),
-            "import" => Ok(Command::Import),
-            "backrefs" => Ok(Command::Backreference),
-            "name" => Ok(Command::Rename),
-            "rename" => Ok(Command::Rename),
-            _ => Err(())
-        }
-    }
-}
