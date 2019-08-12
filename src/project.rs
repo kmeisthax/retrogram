@@ -1,9 +1,10 @@
 //! Project file structures
 
 use std::{io, fs};
+use std::str::FromStr;
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use argparse;
+use clap::{App, Arg, ArgMatches, ArgSettings};
 use serde_json;
 use crate::{analysis, database};
 use crate::platform::PlatformName;
@@ -47,11 +48,44 @@ impl Default for Program {
 }
 
 impl Program {
-    pub fn refer_args<'a, 'b>(&'a mut self, ap: &'b mut argparse::ArgumentParser<'a>) {
-        ap.refer(&mut self.images).add_option(&["--image"], argparse::Collect, "The program image file(s) to analyze.");
-        ap.refer(&mut self.platform).add_option(&["--platform"], argparse::StoreOption, "What platform to expect");
-        ap.refer(&mut self.arch).add_option(&["--arch"], argparse::StoreOption, "What architecture to expect");
-        ap.refer(&mut self.assembler).add_option(&["--asm"], argparse::StoreOption, "What assembler to output");
+    pub fn configure_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
+        app.arg(Arg::with_name("image")
+                .long("image")
+                .value_name("image.bin")
+                .help("The program image file(s) to analyze.")
+                .takes_value(true)
+                .set(ArgSettings::Global))
+           .arg(Arg::with_name("platform")
+                .long("platform")
+                .value_name("PLATFORM")
+                .help("What platform to expect.")
+                .takes_value(true)
+                .set(ArgSettings::Global))
+           .arg(Arg::with_name("arch")
+                .long("arch")
+                .value_name("ARCH")
+                .help("What architecture to expect.")
+                .takes_value(true)
+                .set(ArgSettings::Global))
+           .arg(Arg::with_name("asm")
+                .long("asm")
+                .value_name("ASM")
+                .help("What assembler syntax to output.")
+                .takes_value(true)
+                .set(ArgSettings::Global))
+    }
+
+    /// Construct a Program from clap ArgMatches
+    pub fn from_arg_matches(args: &ArgMatches) -> Program {
+        Program {
+            platform: args.value_of("platform").and_then(|s| PlatformName::from_str(s).ok()),
+            arch: args.value_of("arch").and_then(|s| ArchName::from_str(s).ok()),
+            assembler: args.value_of("asm").and_then(|s| AssemblerName::from_str(s).ok()),
+            images: args.values_of("image").map_or(Vec::new(), |v| v.map(|s| s.to_string()).collect()),
+            name: None,
+            data_sources: Vec::new(),
+            database_path: default_db_filename()
+        }
     }
 
     pub fn platform(&self) -> Option<PlatformName> {
@@ -146,9 +180,28 @@ impl DataSource {
     /// is only used for error checking when the user requests an import from a
     /// named data source rather than an anonymous one. Anonymous data sources
     /// have no program limitations by design.
-    pub fn refer_args<'a, 'b>(&'a mut self, ap: &'b mut argparse::ArgumentParser<'a>) {
-        ap.refer(&mut self.format).add_option(&["--external_db_format"], argparse::StoreOption, "The format of external data to import data from");
-        ap.refer(&mut self.files).add_option(&["--external_db_file"], argparse::Collect, "The external data files to import data from");
+    pub fn configure_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
+        app.arg(Arg::with_name("external_db_format")
+                .long("external_db_format")
+                .value_name("FORMAT")
+                .help("The format of external data to import data from")
+                .takes_value(true)
+                .set(ArgSettings::Global))
+           .arg(Arg::with_name("external_db_file")
+                .long("external_db_file")
+                .value_name("data.db")
+                .help("The external data files to import data from")
+                .takes_value(true)
+                .set(ArgSettings::Global))
+    }
+
+    /// Construct a Program from clap ArgMatches
+    pub fn from_arg_matches(args: &ArgMatches) -> DataSource {
+        DataSource {
+            format: args.value_of("external_db_format").and_then(|s| ExternalFormat::from_str(s).ok()),
+            files: args.values_of("external_db_file").map_or(Vec::new(), |v| v.map(|s| s.to_string()).collect()),
+            programs: Vec::new()
+        }
     }
 
     pub fn format(&self) -> Option<ExternalFormat> {

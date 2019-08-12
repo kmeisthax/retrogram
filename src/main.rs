@@ -5,6 +5,9 @@ extern crate lazy_static;
 extern crate serde_plain;
 
 #[macro_use]
+extern crate clap;
+
+#[macro_use]
 pub mod memory;
 pub mod reg;
 pub mod ast;
