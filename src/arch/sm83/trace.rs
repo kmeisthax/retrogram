@@ -1,8 +1,8 @@
 //! Facilities for tracing SM83 code
 
-use crate::{memory, reg};
+use crate::{memory, reg, analysis};
 use crate::reg::{New, Convertable, TryConvertable};
-use crate::arch::sm83::{Register, Pointer, Bus, State, Value};
+use crate::arch::sm83::{Register, Pointer, Bus, State, Value, Offset};
 
 /// Given a targetreg operand, produce a symbolic value of what that target reg
 /// would be given the current state.
@@ -121,33 +121,37 @@ fn trace_bitset(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targe
 }
 
 /// Trace writing the stack pointer to a memory location
-fn trace_sp_storage(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> Option<State> {
-    let memloc = mem.read_leword::<Pointer>(&p.contextualize(p.as_pointer().clone()+1)).into_concrete()?;
+fn trace_sp_storage(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<State, Pointer, Offset> {
+    let op_ptr = p.contextualize(p.as_pointer().clone()+1);
+    let memloc = mem.read_leword::<Pointer>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
 
     state.set_memory(p.contextualize(memloc), state.get_register(Register::P));
     state.set_memory(p.contextualize(memloc+1), state.get_register(Register::S));
 
-    Some(state)
+    Ok(state)
 }
 
 /// Trace pc-relative jumps
-fn trace_pcrel_jump(p: &memory::Pointer<Pointer>, mem: &Bus) -> Option<memory::Pointer<Pointer>> {
-    let offset = mem.read_unit(&p.contextualize(p.as_pointer().clone()+1)).into_concrete()?;
+fn trace_pcrel_jump(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<memory::Pointer<Pointer>, Pointer, Offset> {
+    let op_ptr = p.contextualize(p.as_pointer().clone()+1);
+    let offset = mem.read_unit(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
     let target = ((p.as_pointer() + 1) as i16 + (offset as i8) as i16) as u16;
 
-    Some(p.contextualize(target))
+    Ok(p.contextualize(target))
 }
 
 /// Trace full jumps
-fn trace_jump(p: &memory::Pointer<Pointer>, mem: &Bus) -> Option<memory::Pointer<Pointer>> {
-    let target = mem.read_leword::<u16>(&p.contextualize(p.as_pointer().clone()+1)).into_concrete()?;
+fn trace_jump(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<memory::Pointer<Pointer>, Pointer, Offset> {
+    let op_ptr = p.contextualize(p.as_pointer().clone()+1);
+    let target = mem.read_leword::<u16>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
 
-    Some(p.contextualize(target))
+    Ok(p.contextualize(target))
 }
 
 /// Trace full calls
-fn trace_call(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> Option<(State, memory::Pointer<Pointer>)> {
-    let target = mem.read_leword::<u16>(&ptr.contextualize(ptr.as_pointer().clone()+1)).into_concrete()?;
+fn trace_call(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<(State, memory::Pointer<Pointer>), Pointer, Offset> {
+    let op_ptr = ptr.contextualize(ptr.as_pointer().clone()+1);
+    let target = mem.read_leword::<u16>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
 
     match (state.get_register(Register::S).into_concrete(), state.get_register(Register::P).into_concrete()) {
         (Some(s), Some(p)) => {
@@ -162,14 +166,14 @@ fn trace_call(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> Op
             state.set_register(Register::S, reg::Symbolic::new((next_sp >> 8) as u8));
             state.set_register(Register::P, reg::Symbolic::new((next_sp & 0xFF) as u8));
         },
-        _ => return None
+        _ => return Err(analysis::Error::UnconstrainedRegister)
     };
 
-    Some((state, ptr.contextualize(target)))
+    Ok((state, ptr.contextualize(target)))
 }
 
 /// Trace return
-fn trace_return(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> Option<(State, memory::Pointer<Pointer>)> {
+fn trace_return(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<(State, memory::Pointer<Pointer>), Pointer, Offset> {
     match (state.get_register(Register::S).into_concrete(), state.get_register(Register::P).into_concrete()) {
         (Some(s), Some(p)) => {
             let sp = (s as u16) << 8 | p as u16;
@@ -183,23 +187,23 @@ fn trace_return(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> 
 
                     let next_pc = (hi as u16) << 8 | (lo as u16);
 
-                    Some((state, ptr.contextualize(next_pc)))
+                    Ok((state, ptr.contextualize(next_pc)))
                 },
-                _ => None
+                _ => return Err(analysis::Error::UnconstrainedMemory(ptr.contextualize(sp)))
             }
         },
-        _ => None
+        _ => return Err(analysis::Error::UnconstrainedRegister)
     }
 }
 
 /// Trace dynamic jumps
-fn trace_jump_dynamic(p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) -> Option<memory::Pointer<Pointer>> {
+fn trace_jump_dynamic(p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) -> analysis::Result<memory::Pointer<Pointer>, Pointer, Offset> {
     match (state.get_register(Register::H).into_concrete(), state.get_register(Register::L).into_concrete()) {
         (Some(h), Some(l)) => {
             let hl = (h as u16) << 8 | l as u16;
-            Some(p.contextualize(hl))
+            Ok(p.contextualize(hl))
         },
-        _ => None
+        _ => return Err(analysis::Error::UnconstrainedRegister)
     }
 }
 
@@ -212,14 +216,15 @@ fn trace_sp_set(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> 
 }
 
 /// Trace high memory store
-fn trace_himem_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> Option<State> {
-    match mem.read_unit(&p.contextualize(p.as_pointer().clone()+1)).into_concrete() {
+fn trace_himem_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<State, Pointer, Offset> {
+    let op_ptr = p.contextualize(p.as_pointer().clone()+1);
+    match mem.read_unit(&op_ptr).into_concrete() {
         Some(hi) => {
             state.set_memory(p.contextualize(0xFF00 | hi as u16), state.get_register(Register::A));
 
-            Some(state)
+            Ok(state)
         },
-        _ => None
+        _ => return Err(analysis::Error::UnconstrainedMemory(op_ptr))
     }
 }
 
@@ -254,7 +259,7 @@ fn trace_sp_adjust(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) ->
 /// 
 ///  * The new state after the execution has been traced
 ///  * The address of the next instruction to execute
-pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> Option<(State, memory::Pointer<Pointer>)> {
+pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> analysis::Result<(State, memory::Pointer<Pointer>), Pointer, Offset> {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
             match mem.read_unit(&(p.clone()+1)).into_concrete() {
@@ -263,47 +268,47 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> Option<(S
                     let new_bitop = (subop >> 3) & 0x07;
 
                     match ((subop >> 6) & 0x03, (subop >> 3) & 0x07, subop & 0x07) {
-                        (0, _, _) => Some((trace_bitop(p, mem, state, new_bitop, targetreg), (p.clone()+2))),
-                        (1, bit, _) => Some((trace_bittest(p, mem, state, bit, targetreg), (p.clone()+2))),
-                        (2, bit, _) => Some((trace_bitreset(p, mem, state, bit, targetreg), (p.clone()+2))),
-                        (3, bit, _) => Some((trace_bitset(p, mem, state, bit, targetreg), (p.clone()+2))),
-                        _ => None
+                        (0, _, _) => Ok((trace_bitop(p, mem, state, new_bitop, targetreg), (p.clone()+2))),
+                        (1, bit, _) => Ok((trace_bittest(p, mem, state, bit, targetreg), (p.clone()+2))),
+                        (2, bit, _) => Ok((trace_bitreset(p, mem, state, bit, targetreg), (p.clone()+2))),
+                        (3, bit, _) => Ok((trace_bitset(p, mem, state, bit, targetreg), (p.clone()+2))),
+                        _ => Err(analysis::Error::Misinterpretation(2, false))
                     }
                 },
-                _ => None
+                _ => Err(analysis::Error::UnconstrainedMemory(p.clone()+1))
             }
         }
 
         //Z80 instructions that don't fit the pattern decoder below
-        Some(0x00) => Some((state, p.clone()+1)), //nop
-        Some(0x08) => Some((trace_sp_storage(p, mem, state)?, p.clone()+3)), //ld [u16], SP
-        Some(0x10) => Some((state, p.clone()+1)), //stop
-        Some(0x18) => Some((state, trace_pcrel_jump(p, mem)?)), //jr u8
-        Some(0x76) => Some((state, p.clone()+1)), //halt
+        Some(0x00) => Ok((state, p.clone()+1)), //nop
+        Some(0x08) => Ok((trace_sp_storage(p, mem, state)?, p.clone()+3)), //ld [u16], SP
+        Some(0x10) => Ok((state, p.clone()+1)), //stop
+        Some(0x18) => Ok((state, trace_pcrel_jump(p, mem)?)), //jr u8
+        Some(0x76) => Ok((state, p.clone()+1)), //halt
 
-        Some(0xC3) => Some((state, trace_jump(p, mem)?)), //jp u16
+        Some(0xC3) => Ok((state, trace_jump(p, mem)?)), //jp u16
         Some(0xCD) => trace_call(p, mem, state),
 
         Some(0xC9) => trace_return(p, mem, state), //ret
         Some(0xD9) => trace_return(p, mem, state), //reti
         Some(0xE9) => {
             let target = trace_jump_dynamic(p, mem, &state)?;
-            Some((state, target))
+            Ok((state, target))
         }, //jp hl
-        Some(0xF9) => Some((trace_sp_set(p, mem, state), p.clone()+1)), //ld sp, hl
+        Some(0xF9) => Ok((trace_sp_set(p, mem, state), p.clone()+1)), //ld sp, hl
 
-        Some(0xE0) => Some((trace_himem_store(p, mem, state)?, p.clone()+1)), //ldh [u8], a
-        Some(0xE8) => Some((trace_sp_adjust(p, mem, state), p.clone()+1)), //add sp, u8
-        Some(0xF0) => None, //(Some(inst::new("ldh", vec![op::sym("a"), op::indir(hram_op8(&(p.clone()+1), mem))])), 2, true, true, vec![]),
-        Some(0xF8) => None, //(Some(inst::new("ld", vec![op::sym("hl"), op::add(op::sym("sp"), int_op8(&(p.clone()+1), mem))])), 2, true, true, vec![]),
+        Some(0xE0) => Ok((trace_himem_store(p, mem, state)?, p.clone()+1)), //ldh [u8], a
+        Some(0xE8) => Ok((trace_sp_adjust(p, mem, state), p.clone()+1)), //add sp, u8
+        Some(0xF0) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ldh", vec![op::sym("a"), op::indir(hram_op8(&(p.clone()+1), mem))])), 2, true, true, vec![]),
+        Some(0xF8) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym("hl"), op::add(op::sym("sp"), int_op8(&(p.clone()+1), mem))])), 2, true, true, vec![]),
 
-        Some(0xE2) => None, //(Some(inst::new("ld", vec![op::indir(op::sym("c")), op::sym("a")])), 1, true, true, vec![]),
-        Some(0xEA) => None, //(Some(inst::new("ld", vec![op::indir(dptr_op16(&(p.clone()+1), mem)), op::sym("a")])), 3, true, true, vec![]),
-        Some(0xF2) => None, //(Some(inst::new("ld", vec![op::sym("a"), op::indir(op::sym("c"))])), 1, true, true, vec![]),
-        Some(0xFA) => None, //(Some(inst::new("ld", vec![op::sym("a"), op::indir(dptr_op16(&(p.clone()+1), mem))])), 3, true, true, vec![]),
+        Some(0xE2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::indir(op::sym("c")), op::sym("a")])), 1, true, true, vec![]),
+        Some(0xEA) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::indir(dptr_op16(&(p.clone()+1), mem)), op::sym("a")])), 3, true, true, vec![]),
+        Some(0xF2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym("a"), op::indir(op::sym("c"))])), 1, true, true, vec![]),
+        Some(0xFA) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym("a"), op::indir(dptr_op16(&(p.clone()+1), mem))])), 3, true, true, vec![]),
 
-        Some(0xF3) => None, //(Some(inst::new("di", vec![])), 1, true, true, vec![]),
-        Some(0xFB) => None, //(Some(inst::new("ei", vec![])), 1, true, true, vec![]),
+        Some(0xF3) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("di", vec![])), 1, true, true, vec![]),
+        Some(0xFB) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ei", vec![])), 1, true, true, vec![]),
 
         //Z80 instructions that follow a particular pattern
         Some(op) => {/*
@@ -320,36 +325,36 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> Option<(S
             //the Z80's semiperiodic instruction encoding
             match ((op >> 6) & 0x03, (op >> 5) & 0x01, (op >> 3) & 0x01, op & 0x07) {
                 (0, 0, _, 0) => panic!("Instruction shouldn't be decoded here"), /* 00, 08, 10, 18 */
-                (0, 1, _, 0) => None, //(Some(inst::new("jr", vec![op::sym(condcode), pcrel_op8(&(p.clone()+1), mem)])), 2, true, false, vec![pcrel_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
-                (0, _, 0, 1) => None, //(Some(inst::new("ld", vec![op::sym(targetpair), int_op16(&(p.clone()+1), mem)])), 3, true, true, vec![]),
-                (0, _, 1, 1) => None, //(Some(inst::new("add", vec![op::sym("hl"), op::sym(targetpair)])), 1, true, true, vec![]),
-                (0, _, 0, 2) => None, //(Some(inst::new("ld", vec![op::indir(op::sym(targetmem)), op::sym("a")])), 1, true, true, vec![]),
-                (0, _, 1, 2) => None, //(Some(inst::new("ld", vec![op::sym("a"), op::indir(op::sym(targetmem))])), 1, true, true, vec![]),
-                (0, _, 0, 3) => None, //(Some(inst::new("inc", vec![op::sym(targetpair)])), 1, true, true, vec![]),
-                (0, _, 1, 3) => None, //(Some(inst::new("dec", vec![op::sym(targetpair)])), 1, true, true, vec![]),
-                (0, _, _, 4) => None, //(Some(inst::new("inc", vec![targetreg])), 1, true, true, vec![]),
-                (0, _, _, 5) => None, //(Some(inst::new("dec", vec![targetreg])), 1, true, true, vec![]),
-                (0, _, _, 6) => None, //(Some(inst::new("ld", vec![targetreg, int_op8(&(p.clone()+1), mem)])), 2, true, true, vec![]),
-                (0, _, _, 7) => None, //(Some(inst::new(bitop, vec![])), 1, true, true, vec![]),
-                (1, _, _, _) => None, //(Some(inst::new("ld", vec![targetreg2, targetreg])), 1, true, true, vec![]),
-                (2, _, _, _) => None, //(Some(inst::new(aluop, vec![op::sym("a"), targetreg2])), 1, true, true, vec![]),
-                (3, 0, _, 0) => None, //(Some(inst::new("ret", vec![op::sym(condcode)])), 1, true, false, vec![]),
+                (0, 1, _, 0) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("jr", vec![op::sym(condcode), pcrel_op8(&(p.clone()+1), mem)])), 2, true, false, vec![pcrel_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
+                (0, _, 0, 1) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym(targetpair), int_op16(&(p.clone()+1), mem)])), 3, true, true, vec![]),
+                (0, _, 1, 1) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("add", vec![op::sym("hl"), op::sym(targetpair)])), 1, true, true, vec![]),
+                (0, _, 0, 2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::indir(op::sym(targetmem)), op::sym("a")])), 1, true, true, vec![]),
+                (0, _, 1, 2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym("a"), op::indir(op::sym(targetmem))])), 1, true, true, vec![]),
+                (0, _, 0, 3) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("inc", vec![op::sym(targetpair)])), 1, true, true, vec![]),
+                (0, _, 1, 3) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("dec", vec![op::sym(targetpair)])), 1, true, true, vec![]),
+                (0, _, _, 4) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("inc", vec![targetreg])), 1, true, true, vec![]),
+                (0, _, _, 5) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("dec", vec![targetreg])), 1, true, true, vec![]),
+                (0, _, _, 6) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![targetreg, int_op8(&(p.clone()+1), mem)])), 2, true, true, vec![]),
+                (0, _, _, 7) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new(bitop, vec![])), 1, true, true, vec![]),
+                (1, _, _, _) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![targetreg2, targetreg])), 1, true, true, vec![]),
+                (2, _, _, _) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new(aluop, vec![op::sym("a"), targetreg2])), 1, true, true, vec![]),
+                (3, 0, _, 0) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ret", vec![op::sym(condcode)])), 1, true, false, vec![]),
                 (3, 1, _, 0) => panic!("Instruction shouldn't be decoded here"), /* E0, E8, F0, F8 */
-                (3, _, 0, 1) => None, //(Some(inst::new("pop", vec![op::sym(stackpair)])), 1, true, true, vec![]),
+                (3, _, 0, 1) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("pop", vec![op::sym(stackpair)])), 1, true, true, vec![]),
                 (3, _, 1, 1) => panic!("Instruction shouldn't be decoded here"), /* C9, D9, E9, F9 */
-                (3, 0, _, 2) => None, //(Some(inst::new("jp", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, false, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
+                (3, 0, _, 2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("jp", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, false, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
                 (3, 1, _, 2) => panic!("Instruction shouldn't be decoded here"), /* E2, EA, F2, FA */
-                (3, _, _, 3) => None, //(None, 0, false, true, vec![]),
-                (3, 0, _, 4) => None, //(Some(inst::new("call", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, true, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Subroutine)]),
-                (3, 1, _, 4) => None, //(None, 0, false, true, vec![]),
-                (3, _, 0, 5) => None, //(Some(inst::new("push", vec![op::sym(stackpair)])), 1, true, true, vec![]),
-                (3, _, 1, 5) => None, //(None, 0, false, true, vec![]),
-                (3, _, _, 6) => None, //(Some(inst::new(aluop, vec![op::sym("a"), int_op8(&(p.clone()+1), mem)])), 2, true, true, vec![]),
-                (3, _, _, 7) => None, //(Some(inst::new("rst", vec![op::cptr(op & 0x38)])), 1, true, true, vec![analysis::Reference::new_static_ref(p.clone(), p.contextualize((op & 0x38) as u16), analysis::ReferenceKind::Subroutine)]),
+                (3, _, _, 3) => Err(analysis::Error::InvalidInstruction), //(Err(analysis::Error::NotYetImplemented), 0, false, true, vec![]),
+                (3, 0, _, 4) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("call", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, true, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Subroutine)]),
+                (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction), //(Err(analysis::Error::NotYetImplemented), 0, false, true, vec![]),
+                (3, _, 0, 5) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("push", vec![op::sym(stackpair)])), 1, true, true, vec![]),
+                (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction), //(Err(analysis::Error::NotYetImplemented), 0, false, true, vec![]),
+                (3, _, _, 6) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new(aluop, vec![op::sym("a"), int_op8(&(p.clone()+1), mem)])), 2, true, true, vec![]),
+                (3, _, _, 7) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("rst", vec![op::cptr(op & 0x38)])), 1, true, true, vec![analysis::Reference::new_static_ref(p.clone(), p.contextualize((op & 0x38) as u16), analysis::ReferenceKind::Subroutine)]),
 
-                _ => None, //(None, 0, false, true, vec![])
+                _ => Err(analysis::Error::InvalidInstruction),
             }
         },
-        _ => None, //(None, 0, false, true, vec![])
+        _ => Err(analysis::Error::UnconstrainedMemory(p.clone()))
     }
 }

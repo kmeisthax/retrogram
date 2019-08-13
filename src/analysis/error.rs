@@ -17,6 +17,14 @@ pub enum Error<P, S> {
     /// area.
     UnconstrainedMemory(memory::Pointer<P>),
 
+    /// Read an unconstrained value from a register.
+    /// 
+    /// All tracing should be gated behind a compatible prerequisite analysis,
+    /// so this indicates a problem with said analysis. Tracers should always
+    /// be given a state with the correct constraints on their registers and
+    /// memory locations.
+    UnconstrainedRegister,
+
     /// Instruction decoding failed because the value read from the program
     /// image is not valid code.
     InvalidInstruction,
@@ -48,6 +56,7 @@ impl<P, S> fmt::Display for Error<P, S> where P: fmt::UpperHex {
         match self {
             IOError(e) => write!(f, "I/O error: {}", e),
             Error::UnconstrainedMemory(p) => write!(f, "Location {:X} is not valid", p),
+            UnconstrainedRegister => write!(f, "Prereq analysis failed for instruction"),
             InvalidInstruction => write!(f, "Invalid instruction"),
             NotYetImplemented => write!(f, "Disassembly not yet implemented"),
             BlockSizeOverflow => write!(f, "Block size is too large"),
