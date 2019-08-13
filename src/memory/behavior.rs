@@ -7,6 +7,7 @@
 /// 
 /// The Behavior of a memory area bounds what analysises are considered
 /// meaningful for a program.
+#[derive(PartialEq, Eq)]
 pub enum Behavior {
     /// Memory behavior corresponds to regions which obey the semantics of
     /// normal memory devices (e.g. RAM, ROM, etc):

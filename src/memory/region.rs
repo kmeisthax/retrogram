@@ -10,7 +10,7 @@ use crate::reg::Convertable;
 use crate::maths::{CheckedSub, BoundWidth};
 use crate::memory::bss::UnknownImage;
 use crate::memory::rombin::ROMBinaryImage;
-use crate::memory::{Image, Behavior, Pointer, Desegmentable, Endianness};
+use crate::memory::{Action, Image, Behavior, Pointer, Desegmentable, Endianness};
 use crate::reg::New;
 
 /// Models a region of memory visible to the program under analysis.
@@ -174,6 +174,32 @@ impl<P, MV, S> Memory<P, MV, S, usize>
 impl<P, MV, S, IO> Memory<P, MV, S, IO>
     where P: memory::PtrNum<S>, S: memory::Offset<P>, MV: reg::Bitwise,
         IO: One, reg::Symbolic<MV>: Default {
+    
+    /// Determine if a given region of memory is dynamically overwritable.
+    /// 
+    /// In order for dynamic tracing to simulate a memory overwrite, the
+    /// following events must be true:
+    /// 
+    /// 1. The memory view that answers reads from a given pointer must have
+    ///    `Memory` semantics.
+    /// 2. The memory view that answers writes to a given pointer must have
+    ///    `Memory` semantics.
+    /// 3. Both reads and writes must be answered by the same view.
+    /// 
+    /// 
+    pub fn is_overwritable(&self, ptr: &Pointer<P>) -> bool {
+        for view in &self.views {
+            if let Some(offset) = view.image.decode_addr(ptr, view.start.clone()) {
+                if view.read_memtype == Behavior::Memory && view.write_memtype == Behavior::Memory {
+                    return true;
+                }
+
+                break;
+            }
+        }
+        
+        false
+    }
     
     /// Read a single memory unit (e.g. byte) from memory at a given pointer.
     /// 

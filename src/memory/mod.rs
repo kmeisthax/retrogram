@@ -10,6 +10,7 @@ mod traits;
 mod endianness;
 
 pub use behavior::Behavior;
+pub use behavior::Action;
 pub use region::Memory;
 pub use image::Image;
 pub use cptr::Pointer;
