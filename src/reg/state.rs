@@ -2,6 +2,9 @@
 
 use std::collections::HashMap;
 use std::hash::Hash;
+use num_traits::One;
+use crate::{memory, reg};
+use crate::memory::{Memory, Pointer};
 use crate::reg::Symbolic;
 
 /// Represents a bundle of known program state.
@@ -34,7 +37,7 @@ pub struct State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash {
     cpu_state: HashMap<RK, Symbolic<RV>>,
 
     /// Non-architectural, or memory-related program state.
-    mem_state: HashMap<P, Symbolic<MV>>
+    mem_state: HashMap<Pointer<P>, Symbolic<MV>>
 }
 
 impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash {
@@ -55,7 +58,7 @@ impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash {
     /// If the value was later undefined by other actions, this function will
     /// still return true. To determine if the memory location is currently
     /// undefined, get the value and check if it's symbolic or not.
-    pub fn memory_was_written(&self, k: P) -> bool {
+    pub fn memory_was_written(&self, k: Pointer<P>) -> bool {
         self.mem_state.get(&k).is_some()
     }
 
@@ -63,7 +66,7 @@ impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash {
         self.cpu_state.insert(k, v);
     }
 
-    pub fn set_memory(&mut self, k: P, v: Symbolic<MV>) {
+    pub fn set_memory(&mut self, k: Pointer<P>, v: Symbolic<MV>) {
         self.mem_state.insert(k, v);
     }
 }
@@ -88,11 +91,12 @@ impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash, Symb
 }
 
 impl<RK, RV, P, MV> State<RK, RV, P, MV> where RK: Eq + Hash, P: Eq + Hash, Symbolic<MV>: Clone + Default {
-    pub fn get_memory(&self, k: P) -> Symbolic<MV> {
+    pub fn get_memory<S, IO>(&self, k: Pointer<P>, bus: &Memory<P, MV, S, IO>) -> Symbolic<MV>
+        where P: memory::PtrNum<S>, S: memory::Offset<P>, MV: reg::Bitwise, IO: One {
         if let Some(val) = self.mem_state.get(&k) {
             return val.clone();
         }
 
-        Symbolic::default()
+        bus.read_unit(&k)
     }
 }

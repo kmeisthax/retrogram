@@ -72,7 +72,7 @@ pub type Section = ast::Section<Offset, SignedValue, f32, Pointer, Data, Offset>
 
 /// The register state type which represents the execution state of a given
 /// SM83 program.
-pub type State = reg::State<Register, Value, memory::Pointer<Pointer>, Value>;
+pub type State = reg::State<Register, Value, Pointer, Value>;
 
 /// The disasm type which represents a successful disassembly of a single
 /// instruction.

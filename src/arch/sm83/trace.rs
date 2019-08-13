@@ -178,7 +178,7 @@ fn trace_return(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> 
         (Some(s), Some(p)) => {
             let sp = (s as u16) << 8 | p as u16;
 
-            match (state.get_memory(ptr.contextualize(sp)).into_concrete(), state.get_memory(ptr.contextualize(sp + 1)).into_concrete()) {
+            match (state.get_memory(ptr.contextualize(sp), mem).into_concrete(), state.get_memory(ptr.contextualize(sp + 1), mem).into_concrete()) {
                 (Some(lo), Some(hi)) => {
                     let next_sp = sp + 2;
 
@@ -197,7 +197,7 @@ fn trace_return(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> 
 }
 
 /// Trace dynamic jumps
-fn trace_jump_dynamic(p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) -> analysis::Result<memory::Pointer<Pointer>, Pointer, Offset> {
+fn trace_jump_dynamic(p: &memory::Pointer<Pointer>, state: &State) -> analysis::Result<memory::Pointer<Pointer>, Pointer, Offset> {
     match (state.get_register(Register::H).into_concrete(), state.get_register(Register::L).into_concrete()) {
         (Some(h), Some(l)) => {
             let hl = (h as u16) << 8 | l as u16;
@@ -208,7 +208,7 @@ fn trace_jump_dynamic(p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) ->
 }
 
 /// Trace SP initialization
-fn trace_sp_set(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> State {
+fn trace_sp_set(mut state: State) -> State {
     state.set_register(Register::S, state.get_register(Register::H));
     state.set_register(Register::P, state.get_register(Register::L));
 
@@ -249,7 +249,7 @@ fn trace_himem_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -
     let op_ptr = p.contextualize(p.as_pointer().clone()+1);
     match mem.read_unit(&op_ptr).into_concrete() {
         Some(hi) => {
-            let mv = state.get_memory(p.contextualize(0xFF00 | hi as u16));
+            let mv = state.get_memory(p.contextualize(0xFF00 | hi as u16), mem);
             state.set_register(Register::A, mv);
 
             Ok(state)
@@ -306,10 +306,10 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> analysis:
         Some(0xC9) => trace_return(p, mem, state), //ret
         Some(0xD9) => trace_return(p, mem, state), //reti
         Some(0xE9) => {
-            let target = trace_jump_dynamic(p, mem, &state)?;
+            let target = trace_jump_dynamic(p, &state)?;
             Ok((state, target))
         }, //jp hl
-        Some(0xF9) => Ok((trace_sp_set(p, mem, state), p.clone()+1)), //ld sp, hl
+        Some(0xF9) => Ok((trace_sp_set(state), p.clone()+1)), //ld sp, hl
 
         Some(0xE0) => Ok((trace_himem_store(p, mem, state)?, p.clone()+2)), //ldh [u8], a
         Some(0xE8) => Ok((trace_sp_adjust(p, mem, state), p.clone()+2)), //add sp, u8
