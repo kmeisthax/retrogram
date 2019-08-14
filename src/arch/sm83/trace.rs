@@ -281,6 +281,18 @@ fn trace_sp_offset_calc(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: Stat
     Ok(state)
 }
 
+/// Trace himem indirect load
+fn trace_himem_indir_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<State, Pointer, Offset> {
+    match state.get_register(Register::C).into_concrete() {
+        Some(c) => {
+            let op_ptr = 0xFF00 | c as u16;
+            state.set_memory(p.contextualize(op_ptr), state.get_register(Register::A));
+            Ok(state)
+        },
+        None => Err(analysis::Error::UnconstrainedRegister)
+    }
+}
+
 /// Trace the current instruction state into a new one.
 /// 
 /// This function yields None if the current memory model and execution state
@@ -339,7 +351,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> analysis:
         Some(0xF0) => Ok((trace_himem_load(p, mem, state)?, p.clone()+2)), //ldh a, [u8]
         Some(0xF8) => Ok((trace_sp_offset_calc(p, mem, state)?, p.clone()+2)), //ld hl, sp+u8
 
-        Some(0xE2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::indir(op::sym("c")), op::sym("a")])), 1, true, true, vec![]),
+        Some(0xE2) => Ok((trace_himem_indir_store(p, mem, state)?, p.clone()+1)), //ld [c], a
         Some(0xEA) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::indir(dptr_op16(&(p.clone()+1), mem)), op::sym("a")])), 3, true, true, vec![]),
         Some(0xF2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym("a"), op::indir(op::sym("c"))])), 1, true, true, vec![]),
         Some(0xFA) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym("a"), op::indir(dptr_op16(&(p.clone()+1), mem))])), 3, true, true, vec![]),
