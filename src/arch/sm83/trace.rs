@@ -2,6 +2,7 @@
 
 use crate::{memory, reg, analysis};
 use crate::reg::{New, Convertable, TryConvertable};
+use crate::arch::sm83;
 use crate::arch::sm83::{Register, Pointer, Bus, State, Value, Offset};
 
 /// Given a targetreg operand, produce a symbolic value of what that target reg
@@ -308,7 +309,7 @@ fn trace_himem_indir_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: S
 /// 
 ///  * The new state after the execution has been traced
 ///  * The address of the next instruction to execute
-pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> analysis::Result<(State, memory::Pointer<Pointer>), Pointer, Offset> {
+pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
             match mem.read_unit(&(p.clone()+1)).into_concrete() {
@@ -373,7 +374,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> analysis:
             //decode `op` into aab?cddd. This creates a nice visual table for
             //the Z80's semiperiodic instruction encoding
             match ((op >> 6) & 0x03, (op >> 5) & 0x01, (op >> 3) & 0x01, op & 0x07) {
-                (0, 0, _, 0) => panic!("Instruction shouldn't be decoded here"), /* 00, 08, 10, 18 */
+                (0, 0, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* 00, 08, 10, 18 */
                 (0, 1, _, 0) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("jr", vec![op::sym(condcode), pcrel_op8(&(p.clone()+1), mem)])), 2, true, false, vec![pcrel_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
                 (0, _, 0, 1) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym(targetpair), int_op16(&(p.clone()+1), mem)])), 3, true, true, vec![]),
                 (0, _, 1, 1) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("add", vec![op::sym("hl"), op::sym(targetpair)])), 1, true, true, vec![]),
@@ -388,16 +389,16 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> analysis:
                 (1, _, _, _) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![targetreg2, targetreg])), 1, true, true, vec![]),
                 (2, _, _, _) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new(aluop, vec![op::sym("a"), targetreg2])), 1, true, true, vec![]),
                 (3, 0, _, 0) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ret", vec![op::sym(condcode)])), 1, true, false, vec![]),
-                (3, 1, _, 0) => panic!("Instruction shouldn't be decoded here"), /* E0, E8, F0, F8 */
+                (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
                 (3, _, 0, 1) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("pop", vec![op::sym(stackpair)])), 1, true, true, vec![]),
-                (3, _, 1, 1) => panic!("Instruction shouldn't be decoded here"), /* C9, D9, E9, F9 */
+                (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
                 (3, 0, _, 2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("jp", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, false, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
-                (3, 1, _, 2) => panic!("Instruction shouldn't be decoded here"), /* E2, EA, F2, FA */
-                (3, _, _, 3) => Err(analysis::Error::InvalidInstruction), //(Err(analysis::Error::NotYetImplemented), 0, false, true, vec![]),
+                (3, 1, _, 2) => Err(analysis::Error::Misinterpretation(1, false)), /* E2, EA, F2, FA */
+                (3, _, _, 3) => Err(analysis::Error::InvalidInstruction),
                 (3, 0, _, 4) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("call", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, true, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Subroutine)]),
-                (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction), //(Err(analysis::Error::NotYetImplemented), 0, false, true, vec![]),
+                (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction),
                 (3, _, 0, 5) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("push", vec![op::sym(stackpair)])), 1, true, true, vec![]),
-                (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction), //(Err(analysis::Error::NotYetImplemented), 0, false, true, vec![]),
+                (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction),
                 (3, _, _, 6) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new(aluop, vec![op::sym("a"), int_op8(&(p.clone()+1), mem)])), 2, true, true, vec![]),
                 (3, _, _, 7) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("rst", vec![op::cptr(op & 0x38)])), 1, true, true, vec![analysis::Reference::new_static_ref(p.clone(), p.contextualize((op & 0x38) as u16), analysis::ReferenceKind::Subroutine)]),
 

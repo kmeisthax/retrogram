@@ -1,6 +1,7 @@
 use crate::{analysis, memory};
 use crate::ast::Operand as op;
 use crate::ast::Instruction as inst;
+use crate::arch::sm83;
 use crate::arch::sm83::{Pointer, Offset, Bus, Operand, Disasm};
 
 fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
@@ -114,7 +115,7 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<Disasm, Pointer, Offset> {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> sm83::Result<Disasm> {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => {
             match mem.read_unit(&(p.clone()+1)).into_concrete() {
@@ -176,7 +177,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<
             //decode `op` into aab?cddd. This creates a nice visual table for
             //the Z80's semiperiodic instruction encoding
             match ((op >> 6) & 0x03, (op >> 5) & 0x01, (op >> 3) & 0x01, op & 0x07) {
-                (0, 0, _, 0) => panic!("Instruction shouldn't be decoded here"), /* 00, 08, 10, 18 */
+                (0, 0, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* 00, 08, 10, 18 */
                 (0, 1, _, 0) => Ok(Disasm::new(inst::new("jr", vec![op::sym(condcode), pcrel_op8(&(p.clone()+1), mem)]), 2, analysis::Flow::Branching(true), vec![pcrel_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)])),
                 (0, _, 0, 1) => Ok(Disasm::new(inst::new("ld", vec![op::sym(targetpair), int_op16(&(p.clone()+1), mem)]), 3, analysis::Flow::Normal, vec![])),
                 (0, _, 1, 1) => Ok(Disasm::new(inst::new("add", vec![op::sym("hl"), op::sym(targetpair)]), 1, analysis::Flow::Normal, vec![])),
@@ -191,11 +192,11 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<
                 (1, _, _, _) => Ok(Disasm::new(inst::new("ld", vec![targetreg2, targetreg]), 1, analysis::Flow::Normal, vec![])),
                 (2, _, _, _) => Ok(Disasm::new(inst::new(aluop, vec![op::sym("a"), targetreg2]), 1, analysis::Flow::Normal, vec![])),
                 (3, 0, _, 0) => Ok(Disasm::new(inst::new("ret", vec![op::sym(condcode)]), 1, analysis::Flow::Branching(true), vec![])),
-                (3, 1, _, 0) => panic!("Instruction shouldn't be decoded here"), /* E0, E8, F0, F8 */
+                (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
                 (3, _, 0, 1) => Ok(Disasm::new(inst::new("pop", vec![op::sym(stackpair)]), 1, analysis::Flow::Normal, vec![])),
-                (3, _, 1, 1) => panic!("Instruction shouldn't be decoded here"), /* C9, D9, E9, F9 */
+                (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
                 (3, 0, _, 2) => Ok(Disasm::new(inst::new("jp", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)]), 3, analysis::Flow::Branching(true), vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)])),
-                (3, 1, _, 2) => panic!("Instruction shouldn't be decoded here"), /* E2, EA, F2, FA */
+                (3, 1, _, 2) => Err(analysis::Error::Misinterpretation(1, false)), /* E2, EA, F2, FA */
                 (3, _, _, 3) => Err(analysis::Error::InvalidInstruction),
                 (3, 0, _, 4) => Ok(Disasm::new(inst::new("call", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)]), 3, analysis::Flow::Normal, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Subroutine)])),
                 (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction),

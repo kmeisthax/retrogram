@@ -77,3 +77,5 @@ pub type State = reg::State<Register, Value, Pointer, Value>;
 /// The disasm type which represents a successful disassembly of a single
 /// instruction.
 pub type Disasm = analysis::Disasm<Offset, SignedValue, f32, Pointer, Offset>;
+
+pub type Result<T> = analysis::Result<T, Pointer, Offset>;
