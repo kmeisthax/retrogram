@@ -149,7 +149,7 @@ impl<'a, I, SI, F, P, MV, S> fmt::Display for SectionFmtWrap<'a, I, SI, F, P, MV
                     match thumb_state {
                         Some(0) => write!(f, ".arm\n")?,
                         Some(1) => write!(f, ".thumb\n")?,
-                        _ => panic!("Thumb state must be specified!!!")
+                        _ => {}
                     }
                 },
                 ast::Directive::EmitData(data) => {
