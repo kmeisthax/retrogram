@@ -110,3 +110,6 @@ pub type Section = ast::Section<Offset, Value, f32, Pointer, Data, Offset>;
 
 /// The type which represents a single disassembled instruction.
 pub type Disasm = analysis::Disasm<Offset, Value, f32, Pointer, Offset>;
+
+/// The type which represents any analysis result for this architecture
+pub type Result<T> = analysis::Result<T, Pointer, Offset>;

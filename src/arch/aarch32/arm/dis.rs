@@ -5,6 +5,7 @@ use crate::reg::New;
 use crate::ast::Operand as op;
 use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
+use crate::arch::aarch32;
 use crate::arch::aarch32::{Pointer, Operand, Offset, Instruction, Bus, Disasm, THUMB_STATE};
 use crate::arch::aarch32::Aarch32Register as A32Reg;
 use crate::arch::aarch32::arm::condcode;
@@ -89,7 +90,7 @@ fn dpinst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32,
         _ => analysis::Flow::Normal
     };
 
-    Ok(Disasm::new(Instruction::new(&format!("{}{}", dp_opcode, condcode(cond)), operands), 4, flow, target))
+    Ok(Disasm::new(Instruction::new(&format!("{}{}", dp_opcode, condcode(cond)?), operands), 4, flow, target))
 }
 
 fn ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32,
@@ -156,7 +157,7 @@ fn ldst(p: &memory::Pointer<Pointer>, cond: u32, immediate_bit: u32,
         _ => analysis::Flow::Normal
     };
 
-    Ok(Disasm::new(Instruction::new(&format!("{}{}", lsw_opcode, condcode(cond)), address_operand), 4, flow, targets))
+    Ok(Disasm::new(Instruction::new(&format!("{}{}", lsw_opcode, condcode(cond)?), address_operand), 4, flow, targets))
 }
 
 /// Decode an instruction in the LDM/STM instruction space.
@@ -214,7 +215,7 @@ fn ldmstm(p: &memory::Pointer<Pointer>, cond: u32, q: u32, u: u32, s: u32,
         true => op::suff(op::wrap("{", reglist_operand, "}"), "^")
     };
 
-    Ok(Disasm::new(Instruction::new(&format!("{}{}{}{}", op, condcode(cond), u_string, p_string), vec![rn_operand, reglist_operand]), 4, flow, targets))
+    Ok(Disasm::new(Instruction::new(&format!("{}{}{}{}", op, condcode(cond)?, u_string, p_string), vec![rn_operand, reglist_operand]), 4, flow, targets))
 }
 
 fn bl(pc: &memory::Pointer<Pointer>, cond: u32, l: u32, offset: u32) -> analysis::Result<Disasm, Pointer, Offset> {
@@ -227,8 +228,8 @@ fn bl(pc: &memory::Pointer<Pointer>, cond: u32, l: u32, offset: u32) -> analysis
     };
 
     match is_link {
-        true => Ok(Disasm::new(ast::Instruction::new(&format!("BL{}", condcode(cond)), vec![op::cptr(target.clone())]), 4, flow, vec![refr::new_static_ref(pc.clone(), target.clone(), refkind::Subroutine)])),
-        false => Ok(Disasm::new(ast::Instruction::new(&format!("B{}", condcode(cond)), vec![op::cptr(target.clone())]), 4, flow, vec![refr::new_static_ref(pc.clone(), target, refkind::Code)]))
+        true => Ok(Disasm::new(ast::Instruction::new(&format!("BL{}", condcode(cond)?), vec![op::cptr(target.clone())]), 4, flow, vec![refr::new_static_ref(pc.clone(), target.clone(), refkind::Subroutine)])),
+        false => Ok(Disasm::new(ast::Instruction::new(&format!("B{}", condcode(cond)?), vec![op::cptr(target.clone())]), 4, flow, vec![refr::new_static_ref(pc.clone(), target, refkind::Code)]))
     }
 }
 
@@ -236,7 +237,7 @@ fn swi(pc: &memory::Pointer<Pointer>, cond: u32, offset: u32) -> analysis::Resul
     let target = offset & 0x00FFFFFF;
     
     //TODO: The jump target can be in high RAM, how do we handle that?
-    Ok(Disasm::new(ast::Instruction::new(&format!("SWI{}", condcode(cond)), vec![op::int(target)]),
+    Ok(Disasm::new(ast::Instruction::new(&format!("SWI{}", condcode(cond)?), vec![op::int(target)]),
         4, analysis::Flow::Normal,
         vec![refr::new_static_ref(pc.clone(), pc.contextualize(0x00000008), refkind::Subroutine)]))
 }
@@ -275,19 +276,19 @@ fn mul(p: &memory::Pointer<Pointer>, cond: u32, opcode: u32, rd: A32Reg,
     };
 
     match (is_long, is_unsigned, is_fma, is_status) {
-        (true, true, true, true) => Ok(Disasm::new(Instruction::new(&format!("SMLAL{}S", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
-        (true, true, true, false) => Ok(Disasm::new(Instruction::new(&format!("SMLAL{}", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
-        (true, true, false, true) => Ok(Disasm::new(Instruction::new(&format!("SMULL{}S", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
-        (true, true, false, false) => Ok(Disasm::new(Instruction::new(&format!("SMULL{}", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
-        (true, false, true, true) => Ok(Disasm::new(Instruction::new(&format!("UMLAL{}S", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
-        (true, false, true, false) => Ok(Disasm::new(Instruction::new(&format!("UMLAL{}", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
-        (true, false, false, true) => Ok(Disasm::new(Instruction::new(&format!("UMULL{}S", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
-        (true, false, false, false) => Ok(Disasm::new(Instruction::new(&format!("UMULL{}", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
-        (false, true, false, false) => Ok(Disasm::new(Instruction::new(&format!("UMAAL{}", condcode(cond)), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
-        (false, false, true, true) => Ok(Disasm::new(Instruction::new(&format!("MLA{}S", condcode(cond)), vec![rd_operand, rm_operand, rs_operand, rn_operand]), 4, flow, targets)),
-        (false, false, true, false) => Ok(Disasm::new(Instruction::new(&format!("MLA{}", condcode(cond)), vec![rd_operand, rm_operand, rs_operand, rn_operand]), 4, flow, targets)),
-        (false, false, false, true) => Ok(Disasm::new(Instruction::new(&format!("MUL{}S", condcode(cond)), vec![rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
-        (false, false, false, false) => Ok(Disasm::new(Instruction::new(&format!("MUL{}", condcode(cond)), vec![rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
+        (true, true, true, true) => Ok(Disasm::new(Instruction::new(&format!("SMLAL{}S", condcode(cond)?), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
+        (true, true, true, false) => Ok(Disasm::new(Instruction::new(&format!("SMLAL{}", condcode(cond)?), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
+        (true, true, false, true) => Ok(Disasm::new(Instruction::new(&format!("SMULL{}S", condcode(cond)?), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
+        (true, true, false, false) => Ok(Disasm::new(Instruction::new(&format!("SMULL{}", condcode(cond)?), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
+        (true, false, true, true) => Ok(Disasm::new(Instruction::new(&format!("UMLAL{}S", condcode(cond)?), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
+        (true, false, true, false) => Ok(Disasm::new(Instruction::new(&format!("UMLAL{}", condcode(cond)?), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
+        (true, false, false, true) => Ok(Disasm::new(Instruction::new(&format!("UMULL{}S", condcode(cond)?), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
+        (true, false, false, false) => Ok(Disasm::new(Instruction::new(&format!("UMULL{}", condcode(cond)?), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
+        (false, true, false, false) => Ok(Disasm::new(Instruction::new(&format!("UMAAL{}", condcode(cond)?), vec![rn_operand, rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
+        (false, false, true, true) => Ok(Disasm::new(Instruction::new(&format!("MLA{}S", condcode(cond)?), vec![rd_operand, rm_operand, rs_operand, rn_operand]), 4, flow, targets)),
+        (false, false, true, false) => Ok(Disasm::new(Instruction::new(&format!("MLA{}", condcode(cond)?), vec![rd_operand, rm_operand, rs_operand, rn_operand]), 4, flow, targets)),
+        (false, false, false, true) => Ok(Disasm::new(Instruction::new(&format!("MUL{}S", condcode(cond)?), vec![rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
+        (false, false, false, false) => Ok(Disasm::new(Instruction::new(&format!("MUL{}", condcode(cond)?), vec![rd_operand, rm_operand, rs_operand]), 4, flow, targets)),
         _ => Err(analysis::Error::InvalidInstruction)
     }
 }
@@ -324,7 +325,7 @@ fn msr(cond: u32, immediate_bit: u32, r: u32, rn_val: u32, shift_imm: u32,
         _ => vec!(op::miss())
     };
 
-    Ok(Disasm::new(Instruction::new(&format!("MSR{}", condcode(cond)), op_list), 4, analysis::Flow::Normal, vec![]))
+    Ok(Disasm::new(Instruction::new(&format!("MSR{}", condcode(cond)?), op_list), 4, analysis::Flow::Normal, vec![]))
 }
 
 fn mrs(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
@@ -335,7 +336,7 @@ fn mrs(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm, Pointer, Offse
     
     let op_list = vec![op::sym(&rd.to_string()), op::sym(xpsr)];
 
-    Ok(Disasm::new(Instruction::new(&format!("MRS{}", condcode(cond)), op_list), 4, analysis::Flow::Normal, vec![]))
+    Ok(Disasm::new(Instruction::new(&format!("MRS{}", condcode(cond)?), op_list), 4, analysis::Flow::Normal, vec![]))
 }
 
 fn bx(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
@@ -346,7 +347,7 @@ fn bx(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis::Result<D
         _ => refr::new_dyn_ref(p.clone(), refkind::Code)
     };
 
-    Ok(Disasm::new(Instruction::new(&format!("BX{}", condcode(cond)), vec![op::sym(&rm.to_string())]), 4, analysis::Flow::Branching(cond != 14), vec![jumpref]))
+    Ok(Disasm::new(Instruction::new(&format!("BX{}", condcode(cond)?), vec![op::sym(&rm.to_string())]), 4, analysis::Flow::Branching(cond != 14), vec![jumpref]))
 }
 
 fn bxj(cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
@@ -361,11 +362,11 @@ fn bxj(cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
     //technical details of how Jazelle works have ever been released and
     //analysis of a Jazelle program would probably require adding a JVM disasm
     //that I don't want to write.
-    Ok(Disasm::new(Instruction::new(&format!("BXJ{}", condcode(cond)), vec![op::sym(&rm.to_string())]), 4, flow, vec![]))
+    Ok(Disasm::new(Instruction::new(&format!("BXJ{}", condcode(cond)?), vec![op::sym(&rm.to_string())]), 4, flow, vec![]))
 }
 
 fn clz(cond: u32, rd: A32Reg, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
-    Ok(Disasm::new(Instruction::new(&format!("CLZ{}", condcode(cond)), vec![op::sym(&rd.to_string()), op::sym(&rm.to_string())]), 4, analysis::Flow::Normal, vec![]))
+    Ok(Disasm::new(Instruction::new(&format!("CLZ{}", condcode(cond)?), vec![op::sym(&rd.to_string()), op::sym(&rm.to_string())]), 4, analysis::Flow::Normal, vec![]))
 }
 
 fn blx_register(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
@@ -376,7 +377,7 @@ fn blx_register(p: &memory::Pointer<Pointer>, cond: u32, rm: A32Reg) -> analysis
         _ => refr::new_dyn_ref(p.clone(), refkind::Code)
     };
 
-    Ok(Disasm::new(Instruction::new(&format!("BLX{}", condcode(cond)), vec![op::sym(&rm.to_string())]), 4, analysis::Flow::Normal, vec![jumpref]))
+    Ok(Disasm::new(Instruction::new(&format!("BLX{}", condcode(cond)?), vec![op::sym(&rm.to_string())]), 4, analysis::Flow::Normal, vec![jumpref]))
 }
 
 fn blx_immediate(p: &memory::Pointer<Pointer>, h: u32, offset: u32) -> analysis::Result<Disasm, Pointer, Offset> {
@@ -406,7 +407,7 @@ fn cdp(cond: u32, opcode_1: u32, crn: u32, crd: u32, cp_num: u32, opcode_2: u32,
     
     let arm_opcode = match cond {
         16 => "CDP2".to_string(),
-        cond => format!("CDP{}", condcode(cond))
+        cond => format!("CDP{}", condcode(cond)?)
     };
 
     Ok(Disasm::new(Instruction::new(&arm_opcode, vec![cp_sym, cop1_sym, crd_sym, crn_sym, crm_sym, cop2_sym]), 4, analysis::Flow::Normal, vec![]))
@@ -426,8 +427,8 @@ fn crt(cond: u32, opcode_1: u32, d: u32, crn: u32, rd: A32Reg, cp_num: u32,
     let arm_opcode = match (cond, is_toarm) {
         (16, true) => "MRC2".to_string(),
         (16, false) => "MCR2".to_string(),
-        (cond, true) => format!("MRC{}", condcode(cond)),
-        (cond, false) => format!("MCR{}", condcode(cond))
+        (cond, true) => format!("MRC{}", condcode(cond)?),
+        (cond, false) => format!("MCR{}", condcode(cond)?)
     };
 
     Ok(Disasm::new(Instruction::new(&arm_opcode, vec![cp_sym, cop1_sym, rd_sym, crn_sym, crm_sym, cop2_sym]), 4, analysis::Flow::Normal, vec![]))
@@ -446,8 +447,8 @@ fn crt_double(cond: u32, d: u32, rn: A32Reg, rd: A32Reg, cp_num: u32,
     let arm_opcode = match (cond, is_toarm) {
         (16, true) => "MRRC2".to_string(),
         (16, false) => "MCRR2".to_string(),
-        (cond, true) => format!("MRRC{}", condcode(cond)),
-        (cond, false) => format!("MCRR{}", condcode(cond))
+        (cond, true) => format!("MRRC{}", condcode(cond)?),
+        (cond, false) => format!("MCRR{}", condcode(cond)?)
     };
 
     Ok(Disasm::new(Instruction::new(&arm_opcode, vec![cp_sym, cop_sym, rd_sym, rn_sym, crm_sym]), 4, analysis::Flow::Normal, vec![]))
@@ -509,12 +510,12 @@ fn ldstmisc(cond: u32, pbit: u32, ubit: u32, ibit: u32, wbit: u32, lbit: u32,
     let is_half = hbit != 0;
 
     let opname = match (is_load, is_signed, is_half) {
-        (false, false, true) => format!("STR{}H", condcode(cond)),
-        (false, true, false) => format!("LDR{}D", condcode(cond)),
-        (false, true, true) => format!("STR{}D", condcode(cond)),
-        (true, false, true) => format!("LDR{}H", condcode(cond)),
-        (true, true, false) => format!("LDR{}SB", condcode(cond)),
-        (true, true, true) => format!("LDR{}SH", condcode(cond)),
+        (false, false, true) => format!("STR{}H", condcode(cond)?),
+        (false, true, false) => format!("LDR{}D", condcode(cond)?),
+        (false, true, true) => format!("STR{}D", condcode(cond)?),
+        (true, false, true) => format!("LDR{}H", condcode(cond)?),
+        (true, true, false) => format!("LDR{}SB", condcode(cond)?),
+        (true, true, true) => format!("LDR{}SH", condcode(cond)?),
         _ => return Err(analysis::Error::Misinterpretation(4, false))
     };
 
@@ -574,13 +575,13 @@ fn ldst_coproc(_p: &memory::Pointer<Pointer>, cond: u32, preindex: u32,
 
     let opcode_str = match (is_load, is_nbit, cond) {
         (false, false, 15) => format!("STC2"),
-        (false, false, cond) => format!("STC{}", condcode(cond)),
+        (false, false, cond) => format!("STC{}", condcode(cond)?),
         (false, true, 15) => format!("STC2L"),
-        (false, true, cond) => format!("STC{}L", condcode(cond)),
+        (false, true, cond) => format!("STC{}L", condcode(cond)?),
         (true, false, 15) => format!("LDC2"),
-        (true, false, cond) => format!("LDC{}", condcode(cond)),
+        (true, false, cond) => format!("LDC{}", condcode(cond)?),
         (true, true, 15) => format!("LDC2L"),
-        (true, true, cond) => format!("LDC{}L", condcode(cond))
+        (true, true, cond) => format!("LDC{}L", condcode(cond)?)
     };
 
     //TODO: PC-rel addresses should generate data refs
@@ -592,8 +593,8 @@ pub fn ldstrex(cond: u32, l: u32, rn: A32Reg, rd: A32Reg,
     
     let is_load = l != 0;
     let opname = match is_load {
-        true => format!("LDREX{}", condcode(cond)),
-        false => format!("STREX{}", condcode(cond)),
+        true => format!("LDREX{}", condcode(cond)?),
+        false => format!("STREX{}", condcode(cond)?),
     };
     
     let operands = match is_load {
@@ -609,8 +610,8 @@ pub fn pkh(cond: u32, rn: A32Reg, rd: A32Reg, shift_imm: u32, d: u32,
     rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
     
     let opname = match d {
-        0 => format!("PKHBT{}", condcode(cond)),
-        2 => format!("PKHTB{}", condcode(cond)),
+        0 => format!("PKHBT{}", condcode(cond)?),
+        2 => format!("PKHTB{}", condcode(cond)?),
         _ => return Err(analysis::Error::Misinterpretation(4, false))
     };
 
@@ -670,7 +671,7 @@ pub fn pld(immediate_bit: u32, offsetadd: u32, rn: A32Reg, shift_imm: u32,
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<Disasm, Pointer, Offset> {
+pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> aarch32::Result<Disasm> {
     let instr : reg::Symbolic<u32> = mem.read_leword(&p);
 
     if let Some(instr) = instr.into_concrete() {

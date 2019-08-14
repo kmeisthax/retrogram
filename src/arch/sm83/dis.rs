@@ -2,7 +2,7 @@ use crate::{analysis, memory};
 use crate::ast::Operand as op;
 use crate::ast::Instruction as inst;
 use crate::arch::sm83;
-use crate::arch::sm83::{Pointer, Offset, Bus, Operand, Disasm};
+use crate::arch::sm83::{Pointer, Bus, Operand, Disasm};
 
 fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {

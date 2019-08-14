@@ -26,7 +26,7 @@ fn cond_branch(p: &memory::Pointer<Pointer>, cond: u16, offset: u16) -> analysis
         //TODO: The jump target can be in high RAM, how do we handle that?
         16 => Ok(Disasm::new(Instruction::new("SWI", vec![op::int(offset as u32)]), 2, analysis::Flow::Normal,
                 vec![refr::new_static_ref(p.clone(), swi_target, refkind::Subroutine)])),
-        _ => Ok(Disasm::new(Instruction::new(&format!("B{}", condcode(cond as u32)), vec![op::cptr(target.clone())]),
+        _ => Ok(Disasm::new(Instruction::new(&format!("B{}", condcode(cond as u32)?), vec![op::cptr(target.clone())]),
             2, analysis::Flow::Branching(cond != 15), vec![refr::new_static_ref(p.clone(), target, refkind::Code)]))
     }
 }
@@ -72,7 +72,7 @@ fn special_data(p: &memory::Pointer<Pointer>, dp_opcode: u16, low_rm: u16, low_r
         (2, _) => Ok(Disasm::new(Instruction::new("MOV", vec![rd_operand, rm_operand]), 2, flow, branch_target)),
         (3, false) => Ok(Disasm::new(Instruction::new("BX", vec![rm_operand]), 2, analysis::Flow::Branching(false), vec![refr::new_dyn_ref(p.clone(), refkind::Code)])),
         (3, true) => Ok(Disasm::new(Instruction::new("BLX", vec![rm_operand]), 2, analysis::Flow::Normal, vec![refr::new_dyn_ref(p.clone(), refkind::Subroutine)])),
-        _ => panic!("Invalid opcode or L flag")
+        _ => Err(analysis::Error::Misinterpretation(2, false))
     }
 }
 
@@ -99,7 +99,7 @@ fn data_processing(dp_opcode: u16, low_rm: u16, low_rd: u16) -> analysis::Result
         0xD => Ok(Disasm::new(Instruction::new("MUL", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
         0xE => Ok(Disasm::new(Instruction::new("BIC", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
         0xF => Ok(Disasm::new(Instruction::new("MVN", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
-        _ => panic!("Not a valid THUMB data processing instruction")
+        _ => Err(analysis::Error::Misinterpretation(2, false))
     }
 }
 
@@ -114,7 +114,7 @@ fn add_sub_register(add_sub_bit: u16, low_rm: u16, low_rn: u16, low_rd: u16) -> 
     match add_sub_bit {
         0 => Ok(Disasm::new(Instruction::new("ADD", vec![rd_operand, rn_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
         1 => Ok(Disasm::new(Instruction::new("SUB", vec![rd_operand, rn_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
-        _ => panic!("Neither an add nor sub")
+        _ => Err(analysis::Error::Misinterpretation(2, false))
     }
 }
 
@@ -128,7 +128,7 @@ fn add_sub_immed(add_sub_bit: u16, immed: u16, low_rn: u16, low_rd: u16) -> anal
     match add_sub_bit {
         0 => Ok(Disasm::new(Instruction::new("ADD", vec![rd_operand, rn_operand, immed_operand]), 2, analysis::Flow::Normal, vec![])),
         1 => Ok(Disasm::new(Instruction::new("SUB", vec![rd_operand, rn_operand, immed_operand]), 2, analysis::Flow::Normal, vec![])),
-        _ => panic!("Neither an add nor sub")
+        _ => Err(analysis::Error::Misinterpretation(2, false))
     }
 }
 
@@ -146,7 +146,7 @@ fn shifter_immed(shift_opcode: u16, immed: u16, low_rm: u16, low_rd: u16) -> ana
         0 => Ok(Disasm::new(Instruction::new("LSL", vec![rd_operand, rm_operand, op::int(immed)]), 2, analysis::Flow::Normal, vec![])),
         1 => Ok(Disasm::new(Instruction::new("LSR", vec![rd_operand, rm_operand, op::int(nz_immed)]), 2, analysis::Flow::Normal, vec![])),
         2 => Ok(Disasm::new(Instruction::new("ASR", vec![rd_operand, rm_operand, op::int(nz_immed)]), 2, analysis::Flow::Normal, vec![])),
-        _ => panic!("Invalid opcode for shifter immediate format")
+        _ => Err(analysis::Error::Misinterpretation(2, false))
     }
 }
 
@@ -160,7 +160,7 @@ fn math_immed(math_opcode: u16, low_rd: u16, immed: u16) -> analysis::Result<Dis
         1 => Ok(Disasm::new(Instruction::new("CMP", vec![rd_operand, immed_operand]), 2, analysis::Flow::Normal, vec![])),
         2 => Ok(Disasm::new(Instruction::new("ADD", vec![rd_operand, immed_operand]), 2, analysis::Flow::Normal, vec![])),
         3 => Ok(Disasm::new(Instruction::new("SUB", vec![rd_operand, immed_operand]), 2, analysis::Flow::Normal, vec![])),
-        _ => panic!("Invalid math opcode")
+        _ => Err(analysis::Error::Misinterpretation(2, false))
     }
 }
 
@@ -190,7 +190,7 @@ fn load_store_register_offset(opcode: u16, low_rm: u16, low_rn: u16, low_rd: u16
         5 => "LDRH",
         6 => "LDRB",
         7 => "LDRSH",
-        _ => panic!("Invalid opcode")
+        _ => return Err(analysis::Error::Misinterpretation(2, false))
     };
     let operands = vec![rd_operand, op::wrap("[", vec![rn_operand, rm_operand], "]")];
 
@@ -205,7 +205,7 @@ fn load_store_immed_offset_word(b: u16, l: u16, offset: u16, low_rn: u16, low_rd
     let size = match b {
         0 => 4,
         1 => 1,
-        _ => panic!("Invalid size bit")
+        _ => return Err(analysis::Error::Misinterpretation(2, false))
     };
     let offset_operand = op::int(offset * size);
 
@@ -214,7 +214,7 @@ fn load_store_immed_offset_word(b: u16, l: u16, offset: u16, low_rn: u16, low_rd
         (1, 0) => "STRB",
         (0, 1) => "LDR",
         (1, 1) => "LDRB",
-        _ => panic!("Invalid size/direction bits!")
+        _ => return Err(analysis::Error::Misinterpretation(2, false))
     };
     let operands = vec![rd_operand, op::wrap("[", vec![rn_operand, offset_operand], "]")];
 
@@ -231,7 +231,7 @@ fn load_store_immed_offset_halfword(l: u16, offset: u16, low_rn: u16, low_rd: u1
     let opcode_name = match l {
         0 => "STRH",
         1 => "LDRH",
-        _ => panic!("Invalid direction bit!")
+        _ => return Err(analysis::Error::Misinterpretation(2, false))
     };
     let operands = vec![rd_operand, op::wrap("[", vec![rn_operand, offset_operand], "]")];
 
@@ -246,7 +246,7 @@ fn load_store_stack_offset(l: u16, low_rd: u16, offset: u16) -> analysis::Result
     let opcode_name = match l {
         0 => "STRH",
         1 => "LDRH",
-        _ => panic!("Invalid direction bit!")
+        _ => return Err(analysis::Error::Misinterpretation(2, false))
     };
     let operands = vec![rd_operand, op::wrap("[", vec![op::sym("SP"), offset_operand], "]")];
 
@@ -261,7 +261,7 @@ fn compute_rel_addr(s: u16, low_rd: u16, offset: u16) -> analysis::Result<Disasm
     let s_operand = op::sym(match s {
         0 => "PC",
         1 => "SP",
-        _ => panic!("Invalid direction bit!")
+        _ => return Err(analysis::Error::Misinterpretation(2, false))
     });
 
     Ok(Disasm::new(Instruction::new("ADD", vec![rd_operand, s_operand, offset_operand]), 2, analysis::Flow::Normal, vec![]))
@@ -273,7 +273,7 @@ fn load_store_multiple(l: u16, low_rn: u16, register_list: u16) -> analysis::Res
     let instr = match l {
         0 => "STMIA",
         1 => "LDMIA",
-        _ => panic!("Invalid L bit")
+        _ => return Err(analysis::Error::Misinterpretation(2, false))
     };
     let mut register_list_operand = vec![];
 
@@ -322,7 +322,7 @@ fn sp_adjust(immed: u16) -> analysis::Result<Disasm, Pointer, Offset> {
     match opbit {
         0 => Ok(Disasm::new(Instruction::new("ADD", vec![op::sym("SP"), op::int(target)]), 2, analysis::Flow::Normal, vec![])),
         1 => Ok(Disasm::new(Instruction::new("SUB", vec![op::sym("SP"), op::int(target)]), 2, analysis::Flow::Normal, vec![])),
-        _ => panic!("Invalid opbit")
+        _ => Err(analysis::Error::Misinterpretation(2, false))
     }
 }
 
@@ -338,7 +338,7 @@ fn sign_zero_extend(immed: u16, low_rm: u16, low_rd: u16) -> analysis::Result<Di
         1 => Ok(Disasm::new(Instruction::new("SXTB", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
         2 => Ok(Disasm::new(Instruction::new("UXTH", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
         3 => Ok(Disasm::new(Instruction::new("UXTB", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
-        _ => panic!("Invalid opcode")
+        _ => Err(analysis::Error::Misinterpretation(2, false))
     }
 }
 
@@ -354,7 +354,7 @@ fn endian_reverse(immed: u16, low_rm: u16, low_rd: u16) -> analysis::Result<Disa
         1 => Ok(Disasm::new(Instruction::new("REV16", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
         2 => Err(analysis::Error::InvalidInstruction),
         3 => Ok(Disasm::new(Instruction::new("REVSH", vec![rd_operand, rm_operand]), 2, analysis::Flow::Normal, vec![])),
-        _ => panic!("Invalid opcode")
+        _ => Err(analysis::Error::Misinterpretation(2, false))
     }
 }
 
@@ -375,7 +375,7 @@ fn push_pop(l: u16, r: u16, register_list: u16) -> analysis::Result<Disasm, Poin
         match l {
             0 => register_list_operand.push(op::sym("LR")),
             1 => register_list_operand.push(op::sym("PC")),
-            _ => panic!("Invalid L bit")
+            _ => return Err(analysis::Error::Misinterpretation(2, false))
         }
     }
 
@@ -387,7 +387,7 @@ fn push_pop(l: u16, r: u16, register_list: u16) -> analysis::Result<Disasm, Poin
     match l {
         0 => Ok(Disasm::new(Instruction::new("PUSH", vec![op::wrap("{", register_list_operand, "}")]), 2, analysis::Flow::Normal, vec![])),
         1 => Ok(Disasm::new(Instruction::new("POP", vec![op::wrap("{", register_list_operand, "}")]), 2, flow, vec![])),
-        _ => panic!("Invalid L bit")
+        _ => Err(analysis::Error::Misinterpretation(2, false))
     }
 }
 

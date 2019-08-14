@@ -4,24 +4,27 @@ mod dis;
 
 pub use dis::disassemble;
 
-pub fn condcode(instr: u32) -> &'static str {
+use crate::analysis;
+use crate::arch::aarch32;
+
+pub fn condcode(instr: u32) -> aarch32::Result<&'static str> {
     match instr {
-        0 => "EQ",
-        1 => "NE",
-        2 => "CS",
-        3 => "CC",
-        4 => "MI",
-        5 => "PL",
-        6 => "VS",
-        7 => "VC",
-        8 => "HI",
-        9 => "LS",
-        10 => "GE",
-        11 => "LT",
-        12 => "GT",
-        13 => "LE",
-        14 => "",
-        15 => panic!("Condition code not valid for conditional instruction"),
-        _ => panic!("Not a valid condition code")
+        0 => Ok("EQ"),
+        1 => Ok("NE"),
+        2 => Ok("CS"),
+        3 => Ok("CC"),
+        4 => Ok("MI"),
+        5 => Ok("PL"),
+        6 => Ok("VS"),
+        7 => Ok("VC"),
+        8 => Ok("HI"),
+        9 => Ok("LS"),
+        10 => Ok("GE"),
+        11 => Ok("LT"),
+        12 => Ok("GT"),
+        13 => Ok("LE"),
+        14 => Ok(""),
+        15 => Err(analysis::Error::Misinterpretation(4, false)),
+        _ => Err(analysis::Error::Misinterpretation(4, false))
     }
 }
