@@ -7,47 +7,49 @@ use crate::arch::sm83::{Register, Pointer, Bus, State, Value, Offset};
 
 /// Given a targetreg operand, produce a symbolic value of what that target reg
 /// would be given the current state.
-fn read_value_from_targetreg(p: &memory::Pointer<Pointer>, mem: &Bus, state: &State, targetreg: u8) -> reg::Symbolic<Value> {
+fn read_value_from_targetreg(p: &memory::Pointer<Pointer>, mem: &Bus, state: &State, targetreg: u8) -> sm83::Result<reg::Symbolic<Value>> {
     match targetreg {
-        0 => state.get_register(Register::B),
-        1 => state.get_register(Register::C),
-        2 => state.get_register(Register::D),
-        3 => state.get_register(Register::E),
-        4 => state.get_register(Register::H),
-        5 => state.get_register(Register::L),
+        0 => Ok(state.get_register(Register::B)),
+        1 => Ok(state.get_register(Register::C)),
+        2 => Ok(state.get_register(Register::D)),
+        3 => Ok(state.get_register(Register::E)),
+        4 => Ok(state.get_register(Register::H)),
+        5 => Ok(state.get_register(Register::L)),
         6 => {
             let hl = reg::Symbolic::<Pointer>::convert_from(state.get_register(Register::H)) << 8 | reg::Symbolic::<Pointer>::convert_from(state.get_register(Register::L));
             if let Some(hl) = hl.into_concrete() {
                 let ptr_hl = mem.minimize_context(p.contextualize(hl)); //TODO: Attempt to pull context from state
-                mem.read_unit(&ptr_hl) //TODO: Should respond to memory state
+                Ok(mem.read_unit(&ptr_hl)) //TODO: Should respond to memory state
             } else {
-                reg::Symbolic::default()
+                Ok(reg::Symbolic::default())
             }
         },
-        7 => state.get_register(Register::A),
-        _ => panic!("Not a valid target register to read from")
+        7 => Ok(state.get_register(Register::A)),
+        _ => Err(analysis::Error::Misinterpretation(1, false)) //TODO: Get correct instruction offset
     }
 }
 
 /// Given a targetreg operand, manipulate the given state to incorporate the
 /// effect of writing a given value to that operand.
-fn write_value_to_targetreg(p: &memory::Pointer<Pointer>, mem: &Bus, state: &mut State, targetreg: u8, value: reg::Symbolic<Value>) {
+fn write_value_to_targetreg(p: &memory::Pointer<Pointer>, mem: &Bus, state: &mut State, targetreg: u8, value: reg::Symbolic<Value>) -> sm83::Result<()> {
     match targetreg {
-        0 => state.set_register(Register::B, value),
-        1 => state.set_register(Register::C, value),
-        2 => state.set_register(Register::D, value),
-        3 => state.set_register(Register::E, value),
-        4 => state.set_register(Register::H, value),
-        5 => state.set_register(Register::L, value),
+        0 => Ok(state.set_register(Register::B, value)),
+        1 => Ok(state.set_register(Register::C, value)),
+        2 => Ok(state.set_register(Register::D, value)),
+        3 => Ok(state.set_register(Register::E, value)),
+        4 => Ok(state.set_register(Register::H, value)),
+        5 => Ok(state.set_register(Register::L, value)),
         6 => {
             let hl = reg::Symbolic::<Pointer>::convert_from(state.get_register(Register::H)) << 8 | reg::Symbolic::<Pointer>::convert_from(state.get_register(Register::L));
             if let Some(hl) = hl.into_concrete() {
                 let ptr_hl = mem.minimize_context(p.contextualize(hl)); //TODO: Attempt to pull context from state
-                state.set_memory(ptr_hl, value);
+                return Ok(state.set_memory(ptr_hl, value));
             }
+
+            Err(analysis::Error::UnconstrainedRegister)
         },
-        7 => state.set_register(Register::A, value),
-        _ => panic!("Not a valid target register to write to")
+        7 => Ok(state.set_register(Register::A, value)),
+        _ => Err(analysis::Error::Misinterpretation(1, false)) //TODO: Get correct instruction offset
     }
 }
 
@@ -67,10 +69,10 @@ fn zero_flag(val: reg::Symbolic<Value>) -> reg::Symbolic<Value> {
 
 /// Trace a CB-prefix bit rotate operation (RLC, RRC, RL, RR, SLA, SRA, SWAP,
 /// or SRL).
-fn trace_bitop(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, bitop: u8, targetreg: u8) -> State {
+fn trace_bitop(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, bitop: u8, targetreg: u8) -> sm83::Result<State> {
     let flags = state.get_register(Register::F);
     let carry = flags & reg::Symbolic::new(0x10);
-    let val = read_value_from_targetreg(p, mem, &state, targetreg);
+    let val = read_value_from_targetreg(p, mem, &state, targetreg)?;
 
     let (newval, newcarry) = match bitop {
         0 => (val << 1 | val >> 7, carry), //RLC
@@ -82,47 +84,47 @@ fn trace_bitop(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, bitop:
         5 => (val >> 1 | val & reg::Symbolic::new(0x80), val & reg::Symbolic::new(0x01)), //SRA
         6 => (val >> 4 | val << 4, reg::Symbolic::new(0)), //SWAP
         7 => (val >> 1, val & reg::Symbolic::new(0x01)), //SRL
-        _ => panic!("Invalid bit operation!")
+        _ => return Err(analysis::Error::Misinterpretation(2, false))
     };
     
     state.set_register(Register::F, newcarry << 4 | zero_flag(val)); //N and H flags are always zero
-    write_value_to_targetreg(p, mem, &mut state, targetreg, newval);
+    write_value_to_targetreg(p, mem, &mut state, targetreg, newval)?;
 
-    state
+    Ok(state)
 }
 
 /// Trace a CB-prefix bit test instruction (e.g. BIT n, reg).
-fn trace_bittest(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetbit: u8, targetreg: u8) -> State {
+fn trace_bittest(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetbit: u8, targetreg: u8) -> sm83::Result<State> {
     let flags = state.get_register(Register::F);
-    let val = read_value_from_targetreg(p, mem, &state, targetreg) >> targetbit & reg::Symbolic::new(0x01);
+    let val = read_value_from_targetreg(p, mem, &state, targetreg)? >> targetbit & reg::Symbolic::new(0x01);
 
     state.set_register(Register::F, flags & reg::Symbolic::new(0x10) | reg::Symbolic::new(0x20) | zero_flag(val));
 
-    state
+    Ok(state)
 }
 
 /// Trace a CB-prefix bit reset instruction (e.g. RES n, reg).
-fn trace_bitreset(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetbit: u8, targetreg: u8) -> State {
+fn trace_bitreset(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetbit: u8, targetreg: u8) -> sm83::Result<State> {
     let mask = reg::Symbolic::new(!(1 << targetbit));
-    let val = read_value_from_targetreg(p, mem, &state, targetreg);
+    let val = read_value_from_targetreg(p, mem, &state, targetreg)?;
 
-    write_value_to_targetreg(p, mem, &mut state, targetreg, val & mask);
+    write_value_to_targetreg(p, mem, &mut state, targetreg, val & mask)?;
 
-    state
+    Ok(state)
 }
 
 /// Trace a CB-prefix bit set instruction (e.g. SET n, reg).
-fn trace_bitset(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetbit: u8, targetreg: u8) -> State {
+fn trace_bitset(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetbit: u8, targetreg: u8) -> sm83::Result<State> {
     let bit = reg::Symbolic::new(1 << targetbit);
-    let val = read_value_from_targetreg(p, mem, &state, targetreg);
+    let val = read_value_from_targetreg(p, mem, &state, targetreg)?;
 
-    write_value_to_targetreg(p, mem, &mut state, targetreg, val | bit);
+    write_value_to_targetreg(p, mem, &mut state, targetreg, val | bit)?;
 
-    state
+    Ok(state)
 }
 
 /// Trace writing the stack pointer to a memory location
-fn trace_sp_storage(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<State, Pointer, Offset> {
+fn trace_sp_storage(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<State> {
     let op_ptr = p.contextualize(p.as_pointer().clone()+1);
     let memloc = mem.read_leword::<Pointer>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
 
@@ -217,7 +219,7 @@ fn trace_sp_set(mut state: State) -> State {
 }
 
 /// Trace high memory store
-fn trace_himem_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<State, Pointer, Offset> {
+fn trace_himem_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<State> {
     let op_ptr = p.contextualize(p.as_pointer().clone()+1);
     match mem.read_unit(&op_ptr).into_concrete() {
         Some(hi) => {
@@ -246,7 +248,7 @@ fn trace_sp_adjust(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) ->
 }
 
 /// Trace high memory load
-fn trace_himem_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<State, Pointer, Offset> {
+fn trace_himem_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<State> {
     let op_ptr = p.contextualize(p.as_pointer().clone()+1);
     match mem.read_unit(&op_ptr).into_concrete() {
         Some(hi) => {
@@ -260,7 +262,7 @@ fn trace_himem_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -
 }
 
 /// Trace SP offset calculation
-fn trace_sp_offset_calc(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<State, Pointer, Offset> {
+fn trace_sp_offset_calc(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<State> {
     let op_ptr = p.clone() + 1;
     let r8 : reg::Symbolic<u16> = reg::Symbolic::convert_from(mem.read_unit(&op_ptr));
     let sign = match (r8 & reg::Symbolic::new(0x0080 as u16)).into_concrete() {
@@ -283,7 +285,7 @@ fn trace_sp_offset_calc(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: Stat
 }
 
 /// Trace himem indirect load
-fn trace_himem_indir_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<State, Pointer, Offset> {
+fn trace_himem_indir_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<State> {
     match state.get_register(Register::C).into_concrete() {
         Some(c) => {
             let op_ptr = 0xFF00 | c as u16;
@@ -318,10 +320,10 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                     let new_bitop = (subop >> 3) & 0x07;
 
                     match ((subop >> 6) & 0x03, (subop >> 3) & 0x07, subop & 0x07) {
-                        (0, _, _) => Ok((trace_bitop(p, mem, state, new_bitop, targetreg), (p.clone()+2))),
-                        (1, bit, _) => Ok((trace_bittest(p, mem, state, bit, targetreg), (p.clone()+2))),
-                        (2, bit, _) => Ok((trace_bitreset(p, mem, state, bit, targetreg), (p.clone()+2))),
-                        (3, bit, _) => Ok((trace_bitset(p, mem, state, bit, targetreg), (p.clone()+2))),
+                        (0, _, _) => Ok((trace_bitop(p, mem, state, new_bitop, targetreg)?, (p.clone()+2))),
+                        (1, bit, _) => Ok((trace_bittest(p, mem, state, bit, targetreg)?, (p.clone()+2))),
+                        (2, bit, _) => Ok((trace_bitreset(p, mem, state, bit, targetreg)?, (p.clone()+2))),
+                        (3, bit, _) => Ok((trace_bitset(p, mem, state, bit, targetreg)?, (p.clone()+2))),
                         _ => Err(analysis::Error::Misinterpretation(2, false))
                     }
                 },
