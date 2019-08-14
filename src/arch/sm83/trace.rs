@@ -258,6 +258,29 @@ fn trace_himem_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -
     }
 }
 
+/// Trace SP offset calculation
+fn trace_sp_offset_calc(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<State, Pointer, Offset> {
+    let op_ptr = p.clone() + 1;
+    let r8 : reg::Symbolic<u16> = reg::Symbolic::convert_from(mem.read_unit(&op_ptr));
+    let sign = match (r8 & reg::Symbolic::new(0x0080 as u16)).into_concrete() {
+        Some(0x80) => reg::Symbolic::new(0xFF80 as u16),
+        Some(0x00) => reg::Symbolic::new(0x0000 as u16),
+        _ => reg::Symbolic::from_cares(0 as u16, 0x007F as u16)
+    };
+    let offset = sign | r8;
+    let s : reg::Symbolic<u16> = reg::Symbolic::convert_from(state.get_register(Register::S));
+    let p : reg::Symbolic<u16> = reg::Symbolic::convert_from(state.get_register(Register::P));
+    let sp = (s << 8) | p;
+    let hl = sp + offset;
+    let h : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(hl >> 8).map_err(|e| analysis::Error::BlockSizeOverflow)?;
+    let l : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(hl & reg::Symbolic::new(0xFF as u16)).map_err(|e| analysis::Error::BlockSizeOverflow)?;
+
+    state.set_register(Register::H, h);
+    state.set_register(Register::L, l);
+
+    Ok(state)
+}
+
 /// Trace the current instruction state into a new one.
 /// 
 /// This function yields None if the current memory model and execution state
@@ -314,7 +337,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> analysis:
         Some(0xE0) => Ok((trace_himem_store(p, mem, state)?, p.clone()+2)), //ldh [u8], a
         Some(0xE8) => Ok((trace_sp_adjust(p, mem, state), p.clone()+2)), //add sp, u8
         Some(0xF0) => Ok((trace_himem_load(p, mem, state)?, p.clone()+2)), //ldh a, [u8]
-        Some(0xF8) => Err(analysis::Error::NotYetImplemented), //ld hl, sp+u8
+        Some(0xF8) => Ok((trace_sp_offset_calc(p, mem, state)?, p.clone()+2)), //ld hl, sp+u8
 
         Some(0xE2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::indir(op::sym("c")), op::sym("a")])), 1, true, true, vec![]),
         Some(0xEA) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::indir(dptr_op16(&(p.clone()+1), mem)), op::sym("a")])), 3, true, true, vec![]),
