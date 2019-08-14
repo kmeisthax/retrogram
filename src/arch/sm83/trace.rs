@@ -355,12 +355,12 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
         Some(0xF8) => Ok((trace_sp_offset_calc(p, mem, state)?, p.clone()+2)), //ld hl, sp+u8
 
         Some(0xE2) => Ok((trace_himem_indir_store(p, mem, state)?, p.clone()+1)), //ld [c], a
-        Some(0xEA) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::indir(dptr_op16(&(p.clone()+1), mem)), op::sym("a")])), 3, true, true, vec![]),
-        Some(0xF2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym("a"), op::indir(op::sym("c"))])), 1, true, true, vec![]),
-        Some(0xFA) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym("a"), op::indir(dptr_op16(&(p.clone()+1), mem))])), 3, true, true, vec![]),
+        Some(0xEA) => Err(analysis::Error::NotYetImplemented), //ld [u16], a
+        Some(0xF2) => Err(analysis::Error::NotYetImplemented), //ld a, [c]
+        Some(0xFA) => Err(analysis::Error::NotYetImplemented), //ld a, [u16]
 
-        Some(0xF3) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("di", vec![])), 1, true, true, vec![]),
-        Some(0xFB) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ei", vec![])), 1, true, true, vec![]),
+        Some(0xF3) => Ok((state, p.clone()+1)), //di
+        Some(0xFB) => Ok((state, p.clone()+1)), //ei
 
         //Z80 instructions that follow a particular pattern
         Some(op) => {/*
