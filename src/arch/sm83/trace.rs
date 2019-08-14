@@ -284,7 +284,7 @@ fn trace_sp_offset_calc(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: Stat
     Ok(state)
 }
 
-/// Trace himem indirect load
+/// Trace himem indirect store
 fn trace_himem_indir_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<State> {
     match state.get_register(Register::C).into_concrete() {
         Some(c) => {
@@ -294,6 +294,38 @@ fn trace_himem_indir_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: S
         },
         None => Err(analysis::Error::UnconstrainedRegister)
     }
+}
+
+/// Trace writing the accumulator to a memory location
+fn trace_mem_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<State> {
+    let op_ptr = p.contextualize(p.as_pointer().clone()+1);
+    let memloc = mem.read_leword::<Pointer>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
+
+    state.set_memory(p.contextualize(memloc), state.get_register(Register::A));
+
+    Ok(state)
+}
+
+/// Trace himem indirect load
+fn trace_himem_indir_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<State> {
+    match state.get_register(Register::C).into_concrete() {
+        Some(c) => {
+            let op_ptr = 0xFF00 | c as u16;
+            state.set_register(Register::A, state.get_memory(p.contextualize(op_ptr), mem));
+            Ok(state)
+        },
+        None => Err(analysis::Error::UnconstrainedRegister)
+    }
+}
+
+/// Trace loading the accumulator from a memory location
+fn trace_mem_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<State> {
+    let op_ptr = p.contextualize(p.as_pointer().clone()+1);
+    let memloc = mem.read_leword::<Pointer>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
+
+    state.set_register(Register::A, state.get_memory(p.contextualize(memloc), mem));
+
+    Ok(state)
 }
 
 /// Trace the current instruction state into a new one.
@@ -355,9 +387,9 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
         Some(0xF8) => Ok((trace_sp_offset_calc(p, mem, state)?, p.clone()+2)), //ld hl, sp+u8
 
         Some(0xE2) => Ok((trace_himem_indir_store(p, mem, state)?, p.clone()+1)), //ld [c], a
-        Some(0xEA) => Err(analysis::Error::NotYetImplemented), //ld [u16], a
-        Some(0xF2) => Err(analysis::Error::NotYetImplemented), //ld a, [c]
-        Some(0xFA) => Err(analysis::Error::NotYetImplemented), //ld a, [u16]
+        Some(0xEA) => Ok((trace_mem_store(p, mem, state)?, p.clone()+3)), //ld [u16], a
+        Some(0xF2) => Ok((trace_himem_indir_load(p, mem, state)?, p.clone()+1)), //ld a, [c]
+        Some(0xFA) => Ok((trace_mem_load(p, mem, state)?, p.clone()+3)), //ld a, [u16]
 
         Some(0xF3) => Ok((state, p.clone()+1)), //di
         Some(0xFB) => Ok((state, p.clone()+1)), //ei
