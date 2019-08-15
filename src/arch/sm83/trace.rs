@@ -3,6 +3,7 @@
 use crate::{memory, reg, analysis};
 use crate::reg::{New, Convertable, TryConvertable};
 use crate::arch::sm83;
+use crate::arch::sm83::dis::ALU_CONDCODE;
 use crate::arch::sm83::{Register, Pointer, Bus, State, Value, Offset};
 
 /// Given a targetreg operand, produce a symbolic value of what that target reg
@@ -132,15 +133,6 @@ fn trace_sp_storage(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -
     state.set_memory(p.contextualize(memloc+1), state.get_register(Register::S));
 
     Ok(state)
-}
-
-/// Trace pc-relative jumps
-fn trace_pcrel_jump(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<memory::Pointer<Pointer>, Pointer, Offset> {
-    let op_ptr = p.contextualize(p.as_pointer().clone()+1);
-    let offset = mem.read_unit(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
-    let target = ((p.as_pointer() + 1) as i16 + (offset as i8) as i16) as u16;
-
-    Ok(p.contextualize(target))
 }
 
 /// Trace full jumps
@@ -328,6 +320,32 @@ fn trace_mem_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> 
     Ok(state)
 }
 
+/// Trace jr
+fn trace_jr(condcode: Option<&str>, p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) -> sm83::Result<memory::Pointer<Pointer>> {
+    let op_ptr = p.contextualize(p.as_pointer().clone() + 1);
+    let offset = state.get_memory(op_ptr.clone(), mem).into_concrete().ok_or_else(|| analysis::Error::UnconstrainedMemory(op_ptr))? as i8 as i16 as u16;
+    let target = p.contextualize(p.as_pointer().clone() + 2 + offset);
+
+    match condcode {
+        None => Ok(target),
+        Some(condcode) => {
+            let flag = match condcode {
+                "NZ" => (state.get_register(Register::F) & reg::Symbolic::new(0x80)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? != 0,
+                "Z" => (state.get_register(Register::F) & reg::Symbolic::new(0x80)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? == 0,
+                "NC" => (state.get_register(Register::F) & reg::Symbolic::new(0x10)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? != 0,
+                "C" => (state.get_register(Register::F) & reg::Symbolic::new(0x10)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? == 0,
+                _ => return Err(analysis::Error::Misinterpretation(2, false))
+            };
+
+            if flag {
+                Ok(target)
+            } else {
+                Ok(p.clone()+2)
+            }
+        }
+    }
+}
+
 /// Trace the current instruction state into a new one.
 /// 
 /// This function yields None if the current memory model and execution state
@@ -367,7 +385,10 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
         Some(0x00) => Ok((state, p.clone()+1)), //nop
         Some(0x08) => Ok((trace_sp_storage(p, mem, state)?, p.clone()+3)), //ld [u16], SP
         Some(0x10) => Ok((state, p.clone()+1)), //stop
-        Some(0x18) => Ok((state, trace_pcrel_jump(p, mem)?)), //jr u8
+        Some(0x18) => { //jr u8
+            let target = trace_jr(None, p, mem, &state)?;
+            Ok((state, target))
+        },
         Some(0x76) => Ok((state, p.clone()+1)), //halt
 
         Some(0xC3) => Ok((state, trace_jump(p, mem)?)), //jp u16
@@ -395,9 +416,9 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
         Some(0xFB) => Ok((state, p.clone()+1)), //ei
 
         //Z80 instructions that follow a particular pattern
-        Some(op) => {/*
+        Some(op) => {
             let condcode = ALU_CONDCODE[((op >> 3) & 0x03) as usize];
-            let targetpair = ALU_TARGET_PAIRS[((op >> 4) & 0x03) as usize];
+            /*let targetpair = ALU_TARGET_PAIRS[((op >> 4) & 0x03) as usize];
             let targetreg = ALU_TARGET_REGS[((op >> 3) & 0x07) as usize].clone();
             let targetmem = ALU_TARGET_MEM[((op >> 4) & 0x03) as usize];
             let bitop = ALU_BITOPS[((op >> 3) & 0x07) as usize];
@@ -409,7 +430,10 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
             //the Z80's semiperiodic instruction encoding
             match ((op >> 6) & 0x03, (op >> 5) & 0x01, (op >> 3) & 0x01, op & 0x07) {
                 (0, 0, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* 00, 08, 10, 18 */
-                (0, 1, _, 0) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("jr", vec![op::sym(condcode), pcrel_op8(&(p.clone()+1), mem)])), 2, true, false, vec![pcrel_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
+                (0, 1, _, 0) => {
+                    let target = trace_jr(Some(condcode), p, mem, &state)?;
+                    Ok((state, target))
+                }, //jr cond, u8
                 (0, _, 0, 1) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym(targetpair), int_op16(&(p.clone()+1), mem)])), 3, true, true, vec![]),
                 (0, _, 1, 1) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("add", vec![op::sym("hl"), op::sym(targetpair)])), 1, true, true, vec![]),
                 (0, _, 0, 2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::indir(op::sym(targetmem)), op::sym("a")])), 1, true, true, vec![]),
