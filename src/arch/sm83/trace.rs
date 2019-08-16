@@ -455,14 +455,14 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
 
         //Z80 instructions that follow a particular pattern
         Some(op) => {
-            let condcode = ((op >> 3) & 0x03);
-            let targetpair = ((op >> 4) & 0x03);
-            let targetreg = ((op >> 3) & 0x07);
-            let targetmem = ((op >> 4) & 0x03);
-            let bitop = ((op >> 3) & 0x07);
+            let condcode = (op >> 3) & 0x03;
+            let targetpair = (op >> 4) & 0x03;
+            let targetreg = (op >> 3) & 0x07;
+            let targetmem = (op >> 4) & 0x03;
+            let bitop = (op >> 3) & 0x07;
             let targetreg2 = (op & 0x07);
-            let aluop = ((op >> 3) & 0x07);
-            let stackpair = ((op >> 4) & 0x03);
+            let aluop = (op >> 3) & 0x07;
+            let stackpair = (op >> 4) & 0x03;
 
             //decode `op` into aab?cddd. This creates a nice visual table for
             //the Z80's semiperiodic instruction encoding
