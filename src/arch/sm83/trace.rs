@@ -434,31 +434,31 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                     let target = trace_jr(Some(condcode), p, mem, &state)?;
                     Ok((state, target))
                 }, //jr cond, u8
-                (0, _, 0, 1) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym(targetpair), int_op16(&(p.clone()+1), mem)])), 3, true, true, vec![]),
-                (0, _, 1, 1) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("add", vec![op::sym("hl"), op::sym(targetpair)])), 1, true, true, vec![]),
-                (0, _, 0, 2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::indir(op::sym(targetmem)), op::sym("a")])), 1, true, true, vec![]),
-                (0, _, 1, 2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![op::sym("a"), op::indir(op::sym(targetmem))])), 1, true, true, vec![]),
-                (0, _, 0, 3) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("inc", vec![op::sym(targetpair)])), 1, true, true, vec![]),
-                (0, _, 1, 3) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("dec", vec![op::sym(targetpair)])), 1, true, true, vec![]),
-                (0, _, _, 4) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("inc", vec![targetreg])), 1, true, true, vec![]),
-                (0, _, _, 5) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("dec", vec![targetreg])), 1, true, true, vec![]),
-                (0, _, _, 6) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![targetreg, int_op8(&(p.clone()+1), mem)])), 2, true, true, vec![]),
-                (0, _, _, 7) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new(bitop, vec![])), 1, true, true, vec![]),
-                (1, _, _, _) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ld", vec![targetreg2, targetreg])), 1, true, true, vec![]),
-                (2, _, _, _) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new(aluop, vec![op::sym("a"), targetreg2])), 1, true, true, vec![]),
-                (3, 0, _, 0) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("ret", vec![op::sym(condcode)])), 1, true, false, vec![]),
+                (0, _, 0, 1) => Err(analysis::Error::NotYetImplemented), //ld targetpair, u16
+                (0, _, 1, 1) => Err(analysis::Error::NotYetImplemented), //add hl, targetpair
+                (0, _, 0, 2) => Err(analysis::Error::NotYetImplemented), //ld [targetmem], a
+                (0, _, 1, 2) => Err(analysis::Error::NotYetImplemented), //ld a, [targetmem]
+                (0, _, 0, 3) => Err(analysis::Error::NotYetImplemented), //inc targetpair
+                (0, _, 1, 3) => Err(analysis::Error::NotYetImplemented), //dec targetpair
+                (0, _, _, 4) => Err(analysis::Error::NotYetImplemented), //inc targetreg
+                (0, _, _, 5) => Err(analysis::Error::NotYetImplemented), //dec targetreg
+                (0, _, _, 6) => Err(analysis::Error::NotYetImplemented), //ld targetreg, u8
+                (0, _, _, 7) => Err(analysis::Error::NotYetImplemented), //old bitops
+                (1, _, _, _) => Err(analysis::Error::NotYetImplemented), //ld targetreg2, targetreg
+                (2, _, _, _) => Err(analysis::Error::NotYetImplemented), //(aluop) a, targetreg2
+                (3, 0, _, 0) => Err(analysis::Error::NotYetImplemented), //ret cond
                 (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
-                (3, _, 0, 1) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("pop", vec![op::sym(stackpair)])), 1, true, true, vec![]),
+                (3, _, 0, 1) => Err(analysis::Error::NotYetImplemented), //pop stackpair
                 (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
-                (3, 0, _, 2) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("jp", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, false, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)]),
+                (3, 0, _, 2) => Err(analysis::Error::NotYetImplemented), //jp cond, u16
                 (3, 1, _, 2) => Err(analysis::Error::Misinterpretation(1, false)), /* E2, EA, F2, FA */
                 (3, _, _, 3) => Err(analysis::Error::InvalidInstruction),
-                (3, 0, _, 4) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("call", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)])), 3, true, true, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Subroutine)]),
+                (3, 0, _, 4) => Err(analysis::Error::NotYetImplemented), //call cond, u16
                 (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction),
-                (3, _, 0, 5) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("push", vec![op::sym(stackpair)])), 1, true, true, vec![]),
+                (3, _, 0, 5) => Err(analysis::Error::NotYetImplemented), //push stackpair
                 (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction),
-                (3, _, _, 6) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new(aluop, vec![op::sym("a"), int_op8(&(p.clone()+1), mem)])), 2, true, true, vec![]),
-                (3, _, _, 7) => Err(analysis::Error::NotYetImplemented), //(Some(inst::new("rst", vec![op::cptr(op & 0x38)])), 1, true, true, vec![analysis::Reference::new_static_ref(p.clone(), p.contextualize((op & 0x38) as u16), analysis::ReferenceKind::Subroutine)]),
+                (3, _, _, 6) => Err(analysis::Error::NotYetImplemented), //(aluop) a, u8
+                (3, _, _, 7) => Err(analysis::Error::NotYetImplemented), //rst op& 0x38
 
                 _ => Err(analysis::Error::InvalidInstruction),
             }
