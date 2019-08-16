@@ -91,7 +91,7 @@ static ALU_OPS: [&str; 8] = ["add", "adc", "sub", "sbc", "and", "xor", "or", "cp
 
 /// z80 instruction encoding uses this 2-bit enumeration to encode condition
 /// codes for instructions that change control flow.
-pub static ALU_CONDCODE: [&str; 4] = ["nz", "z", "nc", "c"];
+static ALU_CONDCODE: [&str; 4] = ["nz", "z", "nc", "c"];
 
 /// z80 instruction encoding uses this 3-bit enumeration to encode "bitwise" ALU
 /// operations, such as rotates, carry flag manipulation, and BCD adjustment

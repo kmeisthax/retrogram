@@ -3,7 +3,7 @@
 use crate::{memory, reg, analysis};
 use crate::reg::{New, Convertable, TryConvertable};
 use crate::arch::sm83;
-use crate::arch::sm83::dis::ALU_CONDCODE;
+//use crate::arch::sm83::dis::{ALU_BITOPS, ALU_CONDCODE, ALU_OPS, ALU_TARGET_MEM, ALU_TARGET_PAIRS, ALU_TARGET_REGS, STACK_TARGET_PAIRS};
 use crate::arch::sm83::{Register, Pointer, Bus, State, Value, Offset};
 
 /// Given a targetreg operand, produce a symbolic value of what that target reg
@@ -52,6 +52,36 @@ fn write_value_to_targetreg(p: &memory::Pointer<Pointer>, mem: &Bus, state: &mut
         7 => Ok(state.set_register(Register::A, value)),
         _ => Err(analysis::Error::Misinterpretation(1, false)) //TODO: Get correct instruction offset
     }
+}
+
+/// Given a targetpair operand, manipulate the given state to incorporate the
+/// effect of writing values to those operands.
+fn write_value_to_targetpair(state: &mut State, targetpair: u8, value: reg::Symbolic<Pointer>) -> sm83::Result<()> {
+    //TODO: Some kind of "regsegment" method?
+    let loval : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(value.clone() & reg::Symbolic::new(0x00FF)).map_err(|_| analysis::Error::BlockSizeOverflow)?;
+    let hival : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(value >> 8).map_err(|_| analysis::Error::BlockSizeOverflow)?;
+
+    match targetpair {
+        0 => {
+            state.set_register(Register::B, hival);
+            state.set_register(Register::C, loval);
+        }, //BC
+        1 => {
+            state.set_register(Register::D, hival);
+            state.set_register(Register::E, loval);
+        }, //DE
+        2 => {
+            state.set_register(Register::H, hival);
+            state.set_register(Register::L, loval);
+        }, //HL
+        3 => {
+            state.set_register(Register::S, hival);
+            state.set_register(Register::P, loval);
+        }, //SP
+        _ => return Err(analysis::Error::Misinterpretation(1, false)) //TODO: Get correct instruction offset
+    }
+
+    Ok(())
 }
 
 /// Given a symbolic value, compute the zero flag that it would generate in the
@@ -267,8 +297,8 @@ fn trace_sp_offset_calc(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: Stat
     let p : reg::Symbolic<u16> = reg::Symbolic::convert_from(state.get_register(Register::P));
     let sp = (s << 8) | p;
     let hl = sp + offset;
-    let h : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(hl >> 8).map_err(|e| analysis::Error::BlockSizeOverflow)?;
-    let l : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(hl & reg::Symbolic::new(0xFF as u16)).map_err(|e| analysis::Error::BlockSizeOverflow)?;
+    let h : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(hl >> 8).map_err(|_| analysis::Error::BlockSizeOverflow)?;
+    let l : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(hl & reg::Symbolic::new(0xFF as u16)).map_err(|_| analysis::Error::BlockSizeOverflow)?;
 
     state.set_register(Register::H, h);
     state.set_register(Register::L, l);
@@ -321,7 +351,7 @@ fn trace_mem_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> 
 }
 
 /// Trace jr
-fn trace_jr(condcode: Option<&str>, p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) -> sm83::Result<memory::Pointer<Pointer>> {
+fn trace_jr(condcode: Option<u8>, p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) -> sm83::Result<memory::Pointer<Pointer>> {
     let op_ptr = p.contextualize(p.as_pointer().clone() + 1);
     let offset = state.get_memory(op_ptr.clone(), mem).into_concrete().ok_or_else(|| analysis::Error::UnconstrainedMemory(op_ptr))? as i8 as i16 as u16;
     let target = p.contextualize(p.as_pointer().clone() + 2 + offset);
@@ -330,10 +360,10 @@ fn trace_jr(condcode: Option<&str>, p: &memory::Pointer<Pointer>, mem: &Bus, sta
         None => Ok(target),
         Some(condcode) => {
             let flag = match condcode {
-                "NZ" => (state.get_register(Register::F) & reg::Symbolic::new(0x80)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? != 0,
-                "Z" => (state.get_register(Register::F) & reg::Symbolic::new(0x80)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? == 0,
-                "NC" => (state.get_register(Register::F) & reg::Symbolic::new(0x10)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? != 0,
-                "C" => (state.get_register(Register::F) & reg::Symbolic::new(0x10)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? == 0,
+                0 => (state.get_register(Register::F) & reg::Symbolic::new(0x80)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? != 0, //NZ
+                1 => (state.get_register(Register::F) & reg::Symbolic::new(0x80)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? == 0, //Z
+                2 => (state.get_register(Register::F) & reg::Symbolic::new(0x10)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? != 0, //NC
+                3 => (state.get_register(Register::F) & reg::Symbolic::new(0x10)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? == 0, //C
                 _ => return Err(analysis::Error::Misinterpretation(2, false))
             };
 
@@ -344,6 +374,14 @@ fn trace_jr(condcode: Option<&str>, p: &memory::Pointer<Pointer>, mem: &Bus, sta
             }
         }
     }
+}
+
+fn trace_regpair_set(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetpair: u8) -> sm83::Result<State> {
+    let value : reg::Symbolic<Pointer> = mem.read_leword(&(p.clone() + 1));
+
+    write_value_to_targetpair(&mut state, targetpair, value)?;
+
+    Ok(state)
 }
 
 /// Trace the current instruction state into a new one.
@@ -417,14 +455,14 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
 
         //Z80 instructions that follow a particular pattern
         Some(op) => {
-            let condcode = ALU_CONDCODE[((op >> 3) & 0x03) as usize];
-            /*let targetpair = ALU_TARGET_PAIRS[((op >> 4) & 0x03) as usize];
-            let targetreg = ALU_TARGET_REGS[((op >> 3) & 0x07) as usize].clone();
-            let targetmem = ALU_TARGET_MEM[((op >> 4) & 0x03) as usize];
-            let bitop = ALU_BITOPS[((op >> 3) & 0x07) as usize];
-            let targetreg2 = ALU_TARGET_REGS[(op & 0x07) as usize].clone();
-            let aluop = ALU_OPS[((op >> 3) & 0x07) as usize];
-            let stackpair = STACK_TARGET_PAIRS[((op >> 4) & 0x03) as usize];*/
+            let condcode = ((op >> 3) & 0x03);
+            let targetpair = ((op >> 4) & 0x03);
+            let targetreg = ((op >> 3) & 0x07);
+            let targetmem = ((op >> 4) & 0x03);
+            let bitop = ((op >> 3) & 0x07);
+            let targetreg2 = (op & 0x07);
+            let aluop = ((op >> 3) & 0x07);
+            let stackpair = ((op >> 4) & 0x03);
 
             //decode `op` into aab?cddd. This creates a nice visual table for
             //the Z80's semiperiodic instruction encoding
@@ -434,7 +472,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                     let target = trace_jr(Some(condcode), p, mem, &state)?;
                     Ok((state, target))
                 }, //jr cond, u8
-                (0, _, 0, 1) => Err(analysis::Error::NotYetImplemented), //ld targetpair, u16
+                (0, _, 0, 1) => Ok((trace_regpair_set(p, mem, state, targetpair)?, p.clone()+3)), //ld targetpair, u16
                 (0, _, 1, 1) => Err(analysis::Error::NotYetImplemented), //add hl, targetpair
                 (0, _, 0, 2) => Err(analysis::Error::NotYetImplemented), //ld [targetmem], a
                 (0, _, 1, 2) => Err(analysis::Error::NotYetImplemented), //ld a, [targetmem]
