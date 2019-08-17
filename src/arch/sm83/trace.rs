@@ -54,6 +54,25 @@ fn write_value_to_targetreg(p: &memory::Pointer<Pointer>, mem: &Bus, state: &mut
     }
 }
 
+fn read_value_from_targetpair(state: &State, targetpair: u8) -> sm83::Result<(reg::Symbolic<Pointer>)> {
+    let hival : reg::Symbolic<u16> = reg::Symbolic::convert_from(match targetpair {
+        0 => state.get_register(Register::B),
+        1 => state.get_register(Register::D),
+        2 => state.get_register(Register::H),
+        3 => state.get_register(Register::S),
+        _ => return Err(analysis::Error::Misinterpretation(1, false))
+    });
+    let loval : reg::Symbolic<u16> = reg::Symbolic::convert_from(match targetpair {
+        0 => state.get_register(Register::C),
+        1 => state.get_register(Register::E),
+        2 => state.get_register(Register::L),
+        3 => state.get_register(Register::P),
+        _ => return Err(analysis::Error::Misinterpretation(1, false))
+    });
+
+    Ok(hival << 8 | loval)
+}
+
 /// Given a targetpair operand, manipulate the given state to incorporate the
 /// effect of writing values to those operands.
 fn write_value_to_targetpair(state: &mut State, targetpair: u8, value: reg::Symbolic<Pointer>) -> sm83::Result<()> {
@@ -384,6 +403,17 @@ fn trace_regpair_set(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, 
     Ok(state)
 }
 
+fn trace_wide_add(mut state: State, targetpair: u8) -> sm83::Result<State> {
+    let hl = read_value_from_targetpair(&state, 2)?;
+    let other_val = read_value_from_targetpair(&state, targetpair)?;
+
+    let new_hl = hl + other_val;
+
+    write_value_to_targetpair(&mut state, 2, new_hl)?;
+
+    Ok(state)
+}
+
 /// Trace the current instruction state into a new one.
 /// 
 /// This function yields None if the current memory model and execution state
@@ -460,7 +490,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
             let targetreg = (op >> 3) & 0x07;
             let targetmem = (op >> 4) & 0x03;
             let bitop = (op >> 3) & 0x07;
-            let targetreg2 = (op & 0x07);
+            let targetreg2 = op & 0x07;
             let aluop = (op >> 3) & 0x07;
             let stackpair = (op >> 4) & 0x03;
 
@@ -473,7 +503,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                     Ok((state, target))
                 }, //jr cond, u8
                 (0, _, 0, 1) => Ok((trace_regpair_set(p, mem, state, targetpair)?, p.clone()+3)), //ld targetpair, u16
-                (0, _, 1, 1) => Err(analysis::Error::NotYetImplemented), //add hl, targetpair
+                (0, _, 1, 1) => Ok((trace_wide_add(state, targetpair)?, p.clone()+1)), //add hl, targetpair
                 (0, _, 0, 2) => Err(analysis::Error::NotYetImplemented), //ld [targetmem], a
                 (0, _, 1, 2) => Err(analysis::Error::NotYetImplemented), //ld a, [targetmem]
                 (0, _, 0, 3) => Err(analysis::Error::NotYetImplemented), //inc targetpair
