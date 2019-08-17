@@ -326,7 +326,7 @@ fn trace_sp_offset_calc(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: Stat
 }
 
 /// Trace himem indirect store
-fn trace_himem_indir_store(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<State> {
+fn trace_himem_indir_store(p: &memory::Pointer<Pointer>, mut state: State) -> sm83::Result<State> {
     match state.get_register(Register::C).into_concrete() {
         Some(c) => {
             let op_ptr = 0xFF00 | c as u16;
@@ -475,7 +475,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
         Some(0xF0) => Ok((trace_himem_load(p, mem, state)?, p.clone()+2)), //ldh a, [u8]
         Some(0xF8) => Ok((trace_sp_offset_calc(p, mem, state)?, p.clone()+2)), //ld hl, sp+u8
 
-        Some(0xE2) => Ok((trace_himem_indir_store(p, mem, state)?, p.clone()+1)), //ld [c], a
+        Some(0xE2) => Ok((trace_himem_indir_store(p, state)?, p.clone()+1)), //ld [c], a
         Some(0xEA) => Ok((trace_mem_store(p, mem, state)?, p.clone()+3)), //ld [u16], a
         Some(0xF2) => Ok((trace_himem_indir_load(p, mem, state)?, p.clone()+1)), //ld a, [c]
         Some(0xFA) => Ok((trace_mem_load(p, mem, state)?, p.clone()+3)), //ld a, [u16]

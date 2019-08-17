@@ -10,8 +10,8 @@ use crate::{reg, analysis, memory};
 /// symbolically.
 fn trace_until_fork<RK, I, SI, F, P, MV, S, IO>(pc: &memory::Pointer<P>,
     bus: &memory::Memory<P, MV, S, IO>, pre_state: &reg::State<RK, I, P, MV>,
-    prereq: &analysis::PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
-    tracer: &analysis::Tracer<RK, I, P, MV, S, IO>)
+    prereq: &dyn analysis::PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
+    tracer: &dyn analysis::Tracer<RK, I, P, MV, S, IO>)
         -> analysis::Result<(memory::Pointer<P>, reg::State<RK, I, P, MV>), P, S>
     where RK: analysis::Mappable,
         P: analysis::Mappable,
@@ -22,7 +22,7 @@ fn trace_until_fork<RK, I, SI, F, P, MV, S, IO>(pc: &memory::Pointer<P>,
     let mut new_state = pre_state.clone();
 
     loop {
-        let (missing_regs, missing_mem, is_complete) = prereq(&new_pc, bus, &new_state);
+        let (missing_regs, missing_mem, _is_complete) = prereq(&new_pc, bus, &new_state);
         let is_forking = missing_regs.len() > 0 || missing_mem.len() > 0;
 
         if is_forking {

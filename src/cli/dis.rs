@@ -89,7 +89,7 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(prog: &project::Program,
             }
         }
 
-        if let Some(e) = terminating_error {
+        if let Some(_) = terminating_error {
             eprintln!("WARN: Block at {} terminates at an invalid instruction", block.as_start());
         }
 

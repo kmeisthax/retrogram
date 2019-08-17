@@ -4,13 +4,12 @@
 use std::io;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
-use num::traits::{Zero, One};
+use num::traits::One;
 use crate::{reg, memory};
-use crate::reg::Convertable;
-use crate::maths::{CheckedSub, BoundWidth};
+use crate::maths::CheckedSub;
 use crate::memory::bss::UnknownImage;
 use crate::memory::rombin::ROMBinaryImage;
-use crate::memory::{Action, Image, Behavior, Pointer, Desegmentable, Endianness};
+use crate::memory::{Image, Behavior, Pointer, Desegmentable, Endianness};
 use crate::reg::New;
 
 /// Models a region of memory visible to the program under analysis.
@@ -189,7 +188,7 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO>
     /// 
     pub fn is_overwritable(&self, ptr: &Pointer<P>) -> bool {
         for view in &self.views {
-            if let Some(offset) = view.image.decode_addr(ptr, view.start.clone()) {
+            if let Some(_) = view.image.decode_addr(ptr, view.start.clone()) {
                 if view.read_memtype == Behavior::Memory && view.write_memtype == Behavior::Memory {
                     return true;
                 }

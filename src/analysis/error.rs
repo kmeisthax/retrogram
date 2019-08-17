@@ -66,7 +66,7 @@ impl<P, S> fmt::Display for Error<P, S> where P: fmt::UpperHex {
 }
 
 impl<P, S> error::Error for Error<P, S> where S: fmt::Debug, P: fmt::Debug + fmt::UpperHex {
-    fn source(&self) -> Option<&(error::Error + 'static)> {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         use Error::*;
 
         match self {
