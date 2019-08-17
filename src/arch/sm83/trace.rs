@@ -414,6 +414,90 @@ fn trace_wide_add(mut state: State, targetpair: u8) -> sm83::Result<State> {
     Ok(state)
 }
 
+fn trace_targetmem_store(p: &memory::Pointer<Pointer>, mut state: State, targetmem: u8) -> sm83::Result<State> {
+    let ptr = match targetmem {
+        2 => {
+            let ptr = read_value_from_targetpair(&state, 2)?;
+            let writeback = ptr + reg::Symbolic::new(1);
+
+            write_value_to_targetpair(&mut state, 2, writeback)?;
+            ptr
+        },
+        3 => {
+            let ptr = read_value_from_targetpair(&state, 2)?;
+            let writeback = ptr - reg::Symbolic::new(1);
+
+            write_value_to_targetpair(&mut state, 2, writeback)?;
+            ptr
+        },
+        _ => read_value_from_targetpair(&state, targetmem)?
+    };
+
+    let a = state.get_register(Register::A);
+    let hl = match ptr.into_concrete() {
+        Some(ptr) => p.contextualize(ptr),
+        None => return Err(analysis::Error::UnconstrainedRegister)
+    };
+
+    state.set_memory(hl, a);
+
+    match targetmem {
+        2 => {
+            let writeback = ptr + reg::Symbolic::new(1);
+            write_value_to_targetpair(&mut state, 2, writeback)?;
+        },
+        3 => {
+            let writeback = ptr - reg::Symbolic::new(1);
+            write_value_to_targetpair(&mut state, 2, writeback)?;
+        },
+        _ => {}
+    };
+
+    Ok(state)
+}
+
+fn trace_targetmem_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetmem: u8) -> sm83::Result<State> {
+    let ptr = match targetmem {
+        2 => {
+            let ptr = read_value_from_targetpair(&state, 2)?;
+            let writeback = ptr + reg::Symbolic::new(1);
+
+            write_value_to_targetpair(&mut state, 2, writeback)?;
+            ptr
+        },
+        3 => {
+            let ptr = read_value_from_targetpair(&state, 2)?;
+            let writeback = ptr - reg::Symbolic::new(1);
+
+            write_value_to_targetpair(&mut state, 2, writeback)?;
+            ptr
+        },
+        _ => read_value_from_targetpair(&state, targetmem)?
+    };
+    
+    let hl = match ptr.into_concrete() {
+        Some(ptr) => p.contextualize(ptr),
+        None => return Err(analysis::Error::UnconstrainedRegister)
+    };
+    let a = state.get_memory(hl, mem);
+
+    state.set_register(Register::A, a);
+
+    match targetmem {
+        2 => {
+            let writeback = ptr + reg::Symbolic::new(1);
+            write_value_to_targetpair(&mut state, 2, writeback)?;
+        },
+        3 => {
+            let writeback = ptr - reg::Symbolic::new(1);
+            write_value_to_targetpair(&mut state, 2, writeback)?;
+        },
+        _ => {}
+    };
+
+    Ok(state)
+}
+
 /// Trace the current instruction state into a new one.
 /// 
 /// This function yields None if the current memory model and execution state
@@ -504,8 +588,8 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                 }, //jr cond, u8
                 (0, _, 0, 1) => Ok((trace_regpair_set(p, mem, state, targetpair)?, p.clone()+3)), //ld targetpair, u16
                 (0, _, 1, 1) => Ok((trace_wide_add(state, targetpair)?, p.clone()+1)), //add hl, targetpair
-                (0, _, 0, 2) => Err(analysis::Error::NotYetImplemented), //ld [targetmem], a
-                (0, _, 1, 2) => Err(analysis::Error::NotYetImplemented), //ld a, [targetmem]
+                (0, _, 0, 2) => Ok((trace_targetmem_store(p, state, targetmem)?, p.clone()+1)), //ld [targetmem], a
+                (0, _, 1, 2) => Ok((trace_targetmem_load(p, mem, state, targetmem)?, p.clone()+1)), //ld a, [targetmem]
                 (0, _, 0, 3) => Err(analysis::Error::NotYetImplemented), //inc targetpair
                 (0, _, 1, 3) => Err(analysis::Error::NotYetImplemented), //dec targetpair
                 (0, _, _, 4) => Err(analysis::Error::NotYetImplemented), //inc targetreg
