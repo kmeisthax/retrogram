@@ -294,25 +294,24 @@ fn trace_return(condcode: Option<u8>, ptr: &memory::Pointer<Pointer>, mem: &Bus,
     }
 }
 
-/// Trace jr
-fn trace_jr(condcode: Option<u8>, p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) -> sm83::Result<memory::Pointer<Pointer>> {
+/// Trace relative jumps
+fn trace_jump_relative(condcode: Option<u8>, p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
     let op_ptr = p.contextualize(p.as_pointer().clone() + 1);
     let offset = state.get_memory(op_ptr.clone(), mem).into_concrete().ok_or_else(|| analysis::Error::UnconstrainedMemory(op_ptr))? as i8 as i16 as u16;
     let target = p.contextualize(p.as_pointer().clone() + 2 + offset);
     
     if flag_test(condcode, state.get_register(Register::F))? {
-        Ok(target)
+        Ok((state, target))
     } else {
-        Ok(p.clone()+2)
+        Ok((state, p.clone()+2))
     }
 }
 
 /// Trace dynamic jumps
-fn trace_jump_dynamic(p: &memory::Pointer<Pointer>, state: &State) -> analysis::Result<memory::Pointer<Pointer>, Pointer, Offset> {
-    match (state.get_register(Register::H).into_concrete(), state.get_register(Register::L).into_concrete()) {
-        (Some(h), Some(l)) => {
-            let hl = (h as u16) << 8 | l as u16;
-            Ok(p.contextualize(hl))
+fn trace_jump_dynamic(p: &memory::Pointer<Pointer>, state: State) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
+    match read_value_from_targetpair(&state, 2, false)?.into_concrete() {
+        Some(hl) => {
+            Ok((state, p.contextualize(hl)))
         },
         _ => return Err(analysis::Error::UnconstrainedRegister)
     }
@@ -639,10 +638,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
         Some(0x00) => Ok((state, p.clone()+1)), //nop
         Some(0x08) => Ok((trace_sp_storage(p, mem, state)?, p.clone()+3)), //ld [u16], SP
         Some(0x10) => Ok((state, p.clone()+1)), //stop
-        Some(0x18) => { //jr u8
-            let target = trace_jr(None, p, mem, &state)?;
-            Ok((state, target))
-        },
+        Some(0x18) => trace_jump_relative(None, p, mem, state), //jr u8
         Some(0x76) => Ok((state, p.clone()+1)), //halt
 
         Some(0xC3) => trace_jump(None, p, mem, state), //jp u16
@@ -650,10 +646,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
 
         Some(0xC9) => trace_return(None, p, mem, state), //ret
         Some(0xD9) => trace_return(None, p, mem, state), //reti
-        Some(0xE9) => {
-            let target = trace_jump_dynamic(p, &state)?;
-            Ok((state, target))
-        }, //jp hl
+        Some(0xE9) => trace_jump_dynamic(p, state), //jp hl
         Some(0xF9) => Ok((trace_sp_set(state), p.clone()+1)), //ld sp, hl
 
         Some(0xE0) => Ok((trace_himem_store(p, mem, state)?, p.clone()+2)), //ldh [u8], a
@@ -684,10 +677,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
             //the Z80's semiperiodic instruction encoding
             match ((op >> 6) & 0x03, (op >> 5) & 0x01, (op >> 3) & 0x01, op & 0x07) {
                 (0, 0, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* 00, 08, 10, 18 */
-                (0, 1, _, 0) => {
-                    let target = trace_jr(Some(condcode), p, mem, &state)?;
-                    Ok((state, target))
-                }, //jr cond, u8
+                (0, 1, _, 0) => trace_jump_relative(Some(condcode), p, mem, state), //jr cond, u8
                 (0, _, 0, 1) => Ok((trace_regpair_set(p, mem, state, targetpair)?, p.clone()+3)), //ld targetpair, u16
                 (0, _, 1, 1) => Ok((trace_wide_add(state, targetpair)?, p.clone()+1)), //add hl, targetpair
                 (0, _, 0, 2) => Ok((trace_targetmem_store(p, state, targetmem)?, p.clone()+1)), //ld [targetmem], a
