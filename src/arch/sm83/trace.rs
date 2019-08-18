@@ -498,6 +498,38 @@ fn trace_targetmem_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: Stat
     Ok(state)
 }
 
+fn trace_targetpair_inc(mut state: State, targetpair: u8) -> sm83::Result<State> {
+    let pairval = read_value_from_targetpair(&state, targetpair)?;
+    let newval = pairval + reg::Symbolic::new(1);
+    write_value_to_targetpair(&mut state, targetpair, newval)?;
+
+    Ok(state)
+}
+
+fn trace_targetpair_dec(mut state: State, targetpair: u8) -> sm83::Result<State> {
+    let pairval = read_value_from_targetpair(&state, targetpair)?;
+    let newval = pairval - reg::Symbolic::new(1);
+    write_value_to_targetpair(&mut state, targetpair, newval)?;
+
+    Ok(state)
+}
+
+fn trace_targetreg_inc(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetreg: u8) -> sm83::Result<State> {
+    let pairval = read_value_from_targetreg(p, mem, &state, targetreg)?;
+    let newval = pairval + reg::Symbolic::new(1);
+    write_value_to_targetreg(p, mem, &mut state, targetreg, newval)?;
+
+    Ok(state)
+}
+
+fn trace_targetreg_dec(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetreg: u8) -> sm83::Result<State> {
+    let pairval = read_value_from_targetreg(p, mem, &state, targetreg)?;
+    let newval = pairval - reg::Symbolic::new(1);
+    write_value_to_targetreg(p, mem, &mut state, targetreg, newval)?;
+
+    Ok(state)
+}
+
 /// Trace the current instruction state into a new one.
 /// 
 /// This function yields None if the current memory model and execution state
@@ -590,10 +622,10 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                 (0, _, 1, 1) => Ok((trace_wide_add(state, targetpair)?, p.clone()+1)), //add hl, targetpair
                 (0, _, 0, 2) => Ok((trace_targetmem_store(p, state, targetmem)?, p.clone()+1)), //ld [targetmem], a
                 (0, _, 1, 2) => Ok((trace_targetmem_load(p, mem, state, targetmem)?, p.clone()+1)), //ld a, [targetmem]
-                (0, _, 0, 3) => Err(analysis::Error::NotYetImplemented), //inc targetpair
-                (0, _, 1, 3) => Err(analysis::Error::NotYetImplemented), //dec targetpair
-                (0, _, _, 4) => Err(analysis::Error::NotYetImplemented), //inc targetreg
-                (0, _, _, 5) => Err(analysis::Error::NotYetImplemented), //dec targetreg
+                (0, _, 0, 3) => Ok((trace_targetpair_inc(state, targetpair)?, p.clone()+1)), //inc targetpair
+                (0, _, 1, 3) => Ok((trace_targetpair_dec(state, targetpair)?, p.clone()+1)), //dec targetpair
+                (0, _, _, 4) => Ok((trace_targetreg_inc(p, mem, state, targetreg)?, p.clone()+1)), //inc targetreg
+                (0, _, _, 5) => Ok((trace_targetreg_dec(p, mem, state, targetreg)?, p.clone()+1)), //dec targetreg
                 (0, _, _, 6) => Err(analysis::Error::NotYetImplemented), //ld targetreg, u8
                 (0, _, _, 7) => Err(analysis::Error::NotYetImplemented), //old bitops
                 (1, _, _, _) => Err(analysis::Error::NotYetImplemented), //ld targetreg2, targetreg
