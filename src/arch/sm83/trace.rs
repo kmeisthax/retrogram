@@ -538,6 +538,13 @@ fn trace_targetreg_set(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State
     Ok(state)
 }
 
+fn trace_targetreg_copy(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetreg_src: u8, targetreg_dst: u8) -> sm83::Result<State> {
+    let value = read_value_from_targetreg(p, mem, &state, targetreg_src)?;
+    write_value_to_targetreg(p, mem, &mut state, targetreg_dst, value)?;
+
+    Ok(state)
+}
+
 /// Trace the current instruction state into a new one.
 /// 
 /// This function yields None if the current memory model and execution state
@@ -636,7 +643,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                 (0, _, _, 5) => Ok((trace_targetreg_dec(p, mem, state, targetreg)?, p.clone()+1)), //dec targetreg
                 (0, _, _, 6) => Ok((trace_targetreg_set(p, mem, state, targetreg)?, p.clone()+2)), //ld targetreg, u8
                 (0, _, _, 7) => Err(analysis::Error::NotYetImplemented), //old bitops
-                (1, _, _, _) => Err(analysis::Error::NotYetImplemented), //ld targetreg2, targetreg
+                (1, _, _, _) => Ok((trace_targetreg_copy(p, mem, state, targetreg, targetreg2)?, p.clone()+1)), //ld targetreg2, targetreg
                 (2, _, _, _) => Err(analysis::Error::NotYetImplemented), //(aluop) a, targetreg2
                 (3, 0, _, 0) => Err(analysis::Error::NotYetImplemented), //ret cond
                 (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
