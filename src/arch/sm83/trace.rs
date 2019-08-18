@@ -1,5 +1,6 @@
 //! Facilities for tracing SM83 code
 
+use std::cmp::PartialEq;
 use crate::{memory, reg, analysis};
 use crate::reg::{New, Convertable, TryConvertable};
 use crate::arch::sm83;
@@ -163,12 +164,33 @@ fn push_value_to_sp(ptr: &memory::Pointer<Pointer>, state: &mut State, value: re
 /// 
 /// The resulting value is suitable for use as a new flags register with the
 /// format of Z000. You may OR in additional bits as necessary.
-fn zero_flag(val: reg::Symbolic<Value>) -> reg::Symbolic<Value> {
-    match (val.into_concrete(), val.is_valid(0)) {
-        (Some(0), _) => reg::Symbolic::new(0x80 as Value),
-        (Some(_), _) => reg::Symbolic::new(0 as Value),
-        (None, true) => reg::Symbolic::from_cares(0 as Value, 0x7F as Value),
-        (None, false) => reg::Symbolic::new(0 as Value),
+fn zero_flag<T>(val: reg::Symbolic<T>) -> reg::Symbolic<T>
+    where T: Clone + From<u8> + reg::Bitwise + PartialEq {
+    match (val.clone().into_concrete(), val.is_valid(T::from(0))) {
+        (Some(ref e), _) if *e == T::from(0) => reg::Symbolic::new(T::from(0x80)),
+        (Some(_), _) => reg::Symbolic::new(T::from(0)),
+        (None, true) => reg::Symbolic::from_cares(T::from(0), T::from(0x7F)),
+        (None, false) => reg::Symbolic::new(T::from(0)),
+    }
+}
+
+/// Given a symbolic value, compute the carry flag that it would generate in the
+/// F register if it were the result of a computation.
+/// 
+/// This operates under the assumption that the value was constructed by summing
+/// two zero-extended u8 values to produce a u9 result (represented as u16). For
+/// 16-bit math, you would need to sum u16 values into a u17 (represented as
+/// u32) and then use the appropriate function to extract a carry flag for it.
+/// 
+/// The resulting value is suitable for use as a new flags register with the
+/// format of Z000. You may OR in additional bits as necessary.
+fn carry_flag_u9(val: reg::Symbolic<u16>) -> reg::Symbolic<u8> {
+    let carry_bit = val & reg::Symbolic::new(0x100);
+    match (carry_bit.into_concrete(), carry_bit.is_valid(0x100)) {
+        (Some(0), _) => reg::Symbolic::new(0 as u8),
+        (Some(_), _) => reg::Symbolic::new(0x10 as u8),
+        (None, true) => reg::Symbolic::from_cares(0 as u8, 0xEF as u8),
+        (None, false) => reg::Symbolic::new(0)
     }
 }
 
@@ -184,6 +206,36 @@ fn flag_test(condcode: Option<u8>, value: reg::Symbolic<Value>) -> sm83::Result<
         Some(3) => Ok((value & reg::Symbolic::new(0x10)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? == 0), //C
         None => Ok(true),
         _ => Err(analysis::Error::Misinterpretation(2, false))
+    }
+}
+
+/// Given an ALU opcode, accumulator, operand, and flags, compute the new
+/// accumulator and flag values.
+fn aluop(aluop: u8, a: reg::Symbolic<u8>, operand: reg::Symbolic<u8>, flags: reg::Symbolic<u8>) -> sm83::Result<(reg::Symbolic<u8>, reg::Symbolic<u8>)> {
+    let old_carry : reg::Symbolic<u8> = flags & reg::Symbolic::new(0x10 as u8) >> 4;
+    let wide_carry : reg::Symbolic<u16> = reg::Symbolic::convert_from(old_carry);
+    let wide_a : reg::Symbolic<u16> = reg::Symbolic::convert_from(a);
+    let wide_op : reg::Symbolic<u16> = reg::Symbolic::convert_from(operand);
+    
+    let wide_result = match aluop {
+        0 => wide_a + wide_op, //add
+        1 => wide_a + wide_op + wide_carry, //adc
+        2 => wide_a + !(wide_op + reg::Symbolic::new(1)), //sub
+        3 => wide_a + !((wide_op + wide_carry) + reg::Symbolic::new(1)), //sbc
+        4 => wide_a & wide_op, //and
+        5 => wide_a ^ wide_op, //xor
+        6 => wide_a | wide_op, //or
+        7 => wide_a + !(wide_op + reg::Symbolic::new(1)), //cp
+        _ => return Err(analysis::Error::Misinterpretation(1, false))
+    };
+
+    let new_a : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(wide_result & reg::Symbolic::new(0xFF)).map_err(|_| analysis::Error::BlockSizeOverflow)?;
+    let new_flags = (flags & reg::Symbolic::new(0x60)) | zero_flag(new_a) | carry_flag_u9(wide_result);
+
+    if aluop != 7 {
+        Ok((new_a, new_flags))
+    } else {
+        Ok((a, new_flags))
     }
 }
 
@@ -599,6 +651,27 @@ fn trace_stackpair_pop(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State
     Ok(state)
 }
 
+fn trace_aluop_register(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, the_aluop: u8, targetreg: u8) -> sm83::Result<State> {
+    let operand = read_value_from_targetreg(p, mem, &state, targetreg)?;
+    let (new_accum, new_flags) = aluop(the_aluop, state.get_register(Register::A), operand, state.get_register(Register::F))?;
+
+    state.set_register(Register::A, new_accum);
+    state.set_register(Register::F, new_flags);
+
+    Ok(state)
+}
+
+fn trace_aluop_immediate(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, the_aluop: u8) -> sm83::Result<State> {
+    let op_ptr = p.clone()+1;
+    let operand = mem.read_unit(&op_ptr);
+    let (new_accum, new_flags) = aluop(the_aluop, state.get_register(Register::A), operand, state.get_register(Register::F))?;
+
+    state.set_register(Register::A, new_accum);
+    state.set_register(Register::F, new_flags);
+
+    Ok(state)
+}
+
 /// Trace the current instruction state into a new one.
 /// 
 /// This function yields None if the current memory model and execution state
@@ -689,7 +762,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                 (0, _, _, 6) => Ok((trace_targetreg_set(p, mem, state, targetreg)?, p.clone()+2)), //ld targetreg, u8
                 (0, _, _, 7) => Err(analysis::Error::NotYetImplemented), //old bitops
                 (1, _, _, _) => Ok((trace_targetreg_copy(p, mem, state, targetreg, targetreg2)?, p.clone()+1)), //ld targetreg2, targetreg
-                (2, _, _, _) => Err(analysis::Error::NotYetImplemented), //(aluop) a, targetreg2
+                (2, _, _, _) => Ok((trace_aluop_register(p, mem, state, aluop, targetreg2)?, p.clone()+1)), //(aluop) a, targetreg2
                 (3, 0, _, 0) => trace_return(Some(condcode), p, mem, state), //ret cond
                 (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
                 (3, _, 0, 1) => Ok((trace_stackpair_pop(p, mem, state, stackpair)?, p.clone()+1)), //pop stackpair
@@ -701,7 +774,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                 (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction),
                 (3, _, 0, 5) => Ok((trace_stackpair_push(p, state, stackpair)?, p.clone()+1)), //push stackpair
                 (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction),
-                (3, _, _, 6) => Err(analysis::Error::NotYetImplemented), //(aluop) a, u8
+                (3, _, _, 6) => Ok((trace_aluop_immediate(p, mem, state, aluop)?, p.clone()+2)), //(aluop) a, u8
                 (3, _, _, 7) => Err(analysis::Error::NotYetImplemented), //rst op& 0x38
 
                 _ => Err(analysis::Error::InvalidInstruction),
