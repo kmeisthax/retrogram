@@ -255,22 +255,30 @@ fn trace_sp_storage(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -
 }
 
 /// Trace full jumps
-fn trace_jump(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<memory::Pointer<Pointer>, Pointer, Offset> {
-    let op_ptr = p.contextualize(p.as_pointer().clone()+1);
-    let target = mem.read_leword::<u16>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
+fn trace_jump(condcode: Option<u8>, p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
+    if flag_test(condcode, state.get_register(Register::F))? {
+        let op_ptr = p.contextualize(p.as_pointer().clone()+1);
+        let target = mem.read_leword::<u16>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
 
-    Ok(p.contextualize(target))
+        Ok((state, p.contextualize(target)))
+    } else {
+        Ok((state, p.clone() + 3))
+    }
 }
 
 /// Trace full calls
-fn trace_call(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<(State, memory::Pointer<Pointer>), Pointer, Offset> {
-    let op_ptr = ptr.contextualize(ptr.as_pointer().clone()+1);
-    let target = mem.read_leword::<u16>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
-    let ret_pc = ptr.as_pointer().clone() + 3;
+fn trace_call(condcode: Option<u8>, ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<(State, memory::Pointer<Pointer>), Pointer, Offset> {
+    if flag_test(condcode, state.get_register(Register::F))? {
+        let op_ptr = ptr.contextualize(ptr.as_pointer().clone()+1);
+        let target = mem.read_leword::<u16>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
+        let ret_pc = ptr.as_pointer().clone() + 3;
 
-    push_value_to_sp(ptr, &mut state, reg::Symbolic::new(ret_pc))?;
+        push_value_to_sp(ptr, &mut state, reg::Symbolic::new(ret_pc))?;
 
-    Ok((state, ptr.contextualize(target)))
+        Ok((state, ptr.contextualize(target)))
+    } else {
+        Ok((state, ptr.clone() + 3))
+    }
 }
 
 /// Trace return
@@ -637,8 +645,8 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
         },
         Some(0x76) => Ok((state, p.clone()+1)), //halt
 
-        Some(0xC3) => Ok((state, trace_jump(p, mem)?)), //jp u16
-        Some(0xCD) => trace_call(p, mem, state),
+        Some(0xC3) => trace_jump(None, p, mem, state), //jp u16
+        Some(0xCD) => trace_call(None, p, mem, state),
 
         Some(0xC9) => trace_return(None, p, mem, state), //ret
         Some(0xD9) => trace_return(None, p, mem, state), //reti
@@ -696,10 +704,10 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                 (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
                 (3, _, 0, 1) => Ok((trace_stackpair_pop(p, mem, state, stackpair)?, p.clone()+1)), //pop stackpair
                 (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
-                (3, 0, _, 2) => Err(analysis::Error::NotYetImplemented), //jp cond, u16
+                (3, 0, _, 2) => trace_jump(Some(condcode), p, mem, state), //jp cond, u16
                 (3, 1, _, 2) => Err(analysis::Error::Misinterpretation(1, false)), /* E2, EA, F2, FA */
                 (3, _, _, 3) => Err(analysis::Error::InvalidInstruction),
-                (3, 0, _, 4) => Err(analysis::Error::NotYetImplemented), //call cond, u16
+                (3, 0, _, 4) => trace_call(Some(condcode), p, mem, state), //call cond, u16
                 (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction),
                 (3, _, 0, 5) => Ok((trace_stackpair_push(p, state, stackpair)?, p.clone()+1)), //push stackpair
                 (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction),
