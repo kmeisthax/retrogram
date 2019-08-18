@@ -117,6 +117,21 @@ fn zero_flag(val: reg::Symbolic<Value>) -> reg::Symbolic<Value> {
     }
 }
 
+/// Given a condition code and flags, return true if the test would pass.
+/// 
+/// You may pass None as the condition code, which indicates an unconditional
+/// branch (and thus, always returns true).
+fn flag_test(condcode: Option<u8>, value: reg::Symbolic<Value>) -> sm83::Result<bool> {
+    match condcode {
+        Some(0) => Ok((value & reg::Symbolic::new(0x80)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? != 0), //NZ
+        Some(1) => Ok((value & reg::Symbolic::new(0x80)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? == 0), //Z
+        Some(2) => Ok((value & reg::Symbolic::new(0x10)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? != 0), //NC
+        Some(3) => Ok((value & reg::Symbolic::new(0x10)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? == 0), //C
+        None => Ok(true),
+        _ => Err(analysis::Error::Misinterpretation(2, false))
+    }
+}
+
 /// Trace a CB-prefix bit rotate operation (RLC, RRC, RL, RR, SLA, SRA, SWAP,
 /// or SRL).
 fn trace_bitop(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, bitop: u8, targetreg: u8) -> sm83::Result<State> {
@@ -217,7 +232,9 @@ fn trace_call(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> an
 }
 
 /// Trace return
-fn trace_return(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<(State, memory::Pointer<Pointer>), Pointer, Offset> {
+fn trace_return(condcode: Option<u8>, ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<(State, memory::Pointer<Pointer>), Pointer, Offset> {
+    let is_branch_taken = flag_test(condcode, state.get_register(Register::F))?;
+
     match (state.get_register(Register::S).into_concrete(), state.get_register(Register::P).into_concrete()) {
         (Some(s), Some(p)) => {
             let sp = (s as u16) << 8 | p as u16;
@@ -237,6 +254,19 @@ fn trace_return(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> 
             }
         },
         _ => return Err(analysis::Error::UnconstrainedRegister)
+    }
+}
+
+/// Trace jr
+fn trace_jr(condcode: Option<u8>, p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) -> sm83::Result<memory::Pointer<Pointer>> {
+    let op_ptr = p.contextualize(p.as_pointer().clone() + 1);
+    let offset = state.get_memory(op_ptr.clone(), mem).into_concrete().ok_or_else(|| analysis::Error::UnconstrainedMemory(op_ptr))? as i8 as i16 as u16;
+    let target = p.contextualize(p.as_pointer().clone() + 2 + offset);
+    
+    if flag_test(condcode, state.get_register(Register::F))? {
+        Ok(target)
+    } else {
+        Ok(p.clone()+2)
     }
 }
 
@@ -367,32 +397,6 @@ fn trace_mem_load(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> 
     state.set_register(Register::A, state.get_memory(p.contextualize(memloc), mem));
 
     Ok(state)
-}
-
-/// Trace jr
-fn trace_jr(condcode: Option<u8>, p: &memory::Pointer<Pointer>, mem: &Bus, state: &State) -> sm83::Result<memory::Pointer<Pointer>> {
-    let op_ptr = p.contextualize(p.as_pointer().clone() + 1);
-    let offset = state.get_memory(op_ptr.clone(), mem).into_concrete().ok_or_else(|| analysis::Error::UnconstrainedMemory(op_ptr))? as i8 as i16 as u16;
-    let target = p.contextualize(p.as_pointer().clone() + 2 + offset);
-
-    match condcode {
-        None => Ok(target),
-        Some(condcode) => {
-            let flag = match condcode {
-                0 => (state.get_register(Register::F) & reg::Symbolic::new(0x80)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? != 0, //NZ
-                1 => (state.get_register(Register::F) & reg::Symbolic::new(0x80)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? == 0, //Z
-                2 => (state.get_register(Register::F) & reg::Symbolic::new(0x10)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? != 0, //NC
-                3 => (state.get_register(Register::F) & reg::Symbolic::new(0x10)).into_concrete().ok_or(analysis::Error::UnconstrainedRegister)? == 0, //C
-                _ => return Err(analysis::Error::Misinterpretation(2, false))
-            };
-
-            if flag {
-                Ok(target)
-            } else {
-                Ok(p.clone()+2)
-            }
-        }
-    }
 }
 
 fn trace_regpair_set(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetpair: u8) -> sm83::Result<State> {
@@ -593,8 +597,8 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
         Some(0xC3) => Ok((state, trace_jump(p, mem)?)), //jp u16
         Some(0xCD) => trace_call(p, mem, state),
 
-        Some(0xC9) => trace_return(p, mem, state), //ret
-        Some(0xD9) => trace_return(p, mem, state), //reti
+        Some(0xC9) => trace_return(None, p, mem, state), //ret
+        Some(0xD9) => trace_return(None, p, mem, state), //reti
         Some(0xE9) => {
             let target = trace_jump_dynamic(p, &state)?;
             Ok((state, target))
@@ -645,7 +649,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                 (0, _, _, 7) => Err(analysis::Error::NotYetImplemented), //old bitops
                 (1, _, _, _) => Ok((trace_targetreg_copy(p, mem, state, targetreg, targetreg2)?, p.clone()+1)), //ld targetreg2, targetreg
                 (2, _, _, _) => Err(analysis::Error::NotYetImplemented), //(aluop) a, targetreg2
-                (3, 0, _, 0) => Err(analysis::Error::NotYetImplemented), //ret cond
+                (3, 0, _, 0) => trace_return(Some(condcode), p, mem, state), //ret cond
                 (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
                 (3, _, 0, 1) => Err(analysis::Error::NotYetImplemented), //pop stackpair
                 (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
