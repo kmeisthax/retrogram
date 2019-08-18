@@ -103,6 +103,65 @@ fn write_value_to_targetpair(state: &mut State, targetpair: u8, value: reg::Symb
     Ok(())
 }
 
+/// Trace a pop from the stack, yielding the new value.
+/// 
+/// This routine also writes back the new SP to the state. If your instruction
+/// is conditional, make sure to test the condition before retrieving [SP].
+/// 
+/// Will fail if SP isn't set. No support currently exists for tracing relative
+/// registers yet.
+fn pop_value_from_sp(ptr: &memory::Pointer<Pointer>, mem: &Bus, state: &mut State) -> sm83::Result<(Pointer)> {
+    match (state.get_register(Register::S).into_concrete(), state.get_register(Register::P).into_concrete()) {
+        (Some(s), Some(p)) => {
+            let sp = (s as u16) << 8 | p as u16;
+
+            match (state.get_memory(ptr.contextualize(sp), mem).into_concrete(), state.get_memory(ptr.contextualize(sp + 1), mem).into_concrete()) {
+                (Some(lo), Some(hi)) => {
+                    let next_sp = sp + 2;
+
+                    state.set_register(Register::S, reg::Symbolic::new((next_sp >> 8) as u8));
+                    state.set_register(Register::P, reg::Symbolic::new((next_sp & 0xFF) as u8));
+
+                    let next_pc = (hi as u16) << 8 | (lo as u16);
+
+                    Ok(next_pc)
+                },
+                _ => return Err(analysis::Error::UnconstrainedMemory(ptr.contextualize(sp)))
+            }
+        },
+        _ => return Err(analysis::Error::UnconstrainedRegister)
+    }
+}
+
+/// Trace a push to the stack.
+/// 
+/// This routine writes both the value to the current stack and the new stack
+/// pointer. If your instruction is conditional, make sure to test the condition
+/// before writing [SP].
+/// 
+/// Will fail if SP isn't set. No support currently exists for tracing relative
+/// registers yet.
+fn push_value_to_sp(ptr: &memory::Pointer<Pointer>, state: &mut State, value: reg::Symbolic<Pointer>) -> sm83::Result<()> {
+    match (state.get_register(Register::S).into_concrete(), state.get_register(Register::P).into_concrete()) {
+        (Some(s), Some(p)) => {
+            let sp = (s as u16) << 8 | p as u16;
+            let lo_value = reg::Symbolic::try_convert_from(value & reg::Symbolic::new(0xFF)).map_err(|_| analysis::Error::BlockSizeOverflow)?;
+            let hi_value = reg::Symbolic::try_convert_from(value >> 8).map_err(|_| analysis::Error::BlockSizeOverflow)?;
+
+            state.set_memory(ptr.contextualize(sp), lo_value);
+            state.set_memory(ptr.contextualize(sp + 1), hi_value);
+
+            let next_sp = sp - 2;
+
+            state.set_register(Register::S, reg::Symbolic::new((next_sp >> 8) as u8));
+            state.set_register(Register::P, reg::Symbolic::new((next_sp & 0xFF) as u8));
+
+            Ok(())
+        },
+        _ => Err(analysis::Error::UnconstrainedRegister)
+    }
+}
+
 /// Given a symbolic value, compute the zero flag that it would generate in the
 /// F register if it were the result of a computation.
 /// 
@@ -211,49 +270,21 @@ fn trace_jump(p: &memory::Pointer<Pointer>, mem: &Bus) -> analysis::Result<memor
 fn trace_call(ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<(State, memory::Pointer<Pointer>), Pointer, Offset> {
     let op_ptr = ptr.contextualize(ptr.as_pointer().clone()+1);
     let target = mem.read_leword::<u16>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
+    let ret_pc = ptr.as_pointer().clone() + 3;
 
-    match (state.get_register(Register::S).into_concrete(), state.get_register(Register::P).into_concrete()) {
-        (Some(s), Some(p)) => {
-            let sp = (s as u16) << 8 | p as u16;
-            let ret_pc = ptr.as_pointer().clone() + 3;
-
-            state.set_memory(ptr.contextualize(sp), reg::Symbolic::new(ret_pc as u8));
-            state.set_memory(ptr.contextualize(sp + 1), reg::Symbolic::new((ret_pc >> 8) as u8));
-
-            let next_sp = sp - 2;
-
-            state.set_register(Register::S, reg::Symbolic::new((next_sp >> 8) as u8));
-            state.set_register(Register::P, reg::Symbolic::new((next_sp & 0xFF) as u8));
-        },
-        _ => return Err(analysis::Error::UnconstrainedRegister)
-    };
+    push_value_to_sp(ptr, &mut state, reg::Symbolic::new(ret_pc))?;
 
     Ok((state, ptr.contextualize(target)))
 }
 
 /// Trace return
-fn trace_return(condcode: Option<u8>, ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> analysis::Result<(State, memory::Pointer<Pointer>), Pointer, Offset> {
-    let is_branch_taken = flag_test(condcode, state.get_register(Register::F))?;
+fn trace_return(condcode: Option<u8>, ptr: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
+    if flag_test(condcode, state.get_register(Register::F))? {
+        let new_ptr = ptr.contextualize(pop_value_from_sp(ptr, mem, &mut state)?);
 
-    match (state.get_register(Register::S).into_concrete(), state.get_register(Register::P).into_concrete()) {
-        (Some(s), Some(p)) => {
-            let sp = (s as u16) << 8 | p as u16;
-
-            match (state.get_memory(ptr.contextualize(sp), mem).into_concrete(), state.get_memory(ptr.contextualize(sp + 1), mem).into_concrete()) {
-                (Some(lo), Some(hi)) => {
-                    let next_sp = sp + 2;
-
-                    state.set_register(Register::S, reg::Symbolic::new((next_sp >> 8) as u8));
-                    state.set_register(Register::P, reg::Symbolic::new((next_sp & 0xFF) as u8));
-
-                    let next_pc = (hi as u16) << 8 | (lo as u16);
-
-                    Ok((state, ptr.contextualize(next_pc)))
-                },
-                _ => return Err(analysis::Error::UnconstrainedMemory(ptr.contextualize(sp)))
-            }
-        },
-        _ => return Err(analysis::Error::UnconstrainedRegister)
+        Ok((state, new_ptr))
+    } else {
+        Ok((state, ptr.clone() + 1))
     }
 }
 
