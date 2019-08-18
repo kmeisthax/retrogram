@@ -530,6 +530,14 @@ fn trace_targetreg_dec(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State
     Ok(state)
 }
 
+fn trace_targetreg_set(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State, targetreg: u8) -> sm83::Result<State> {
+    let op_ptr = p.clone() + 1;
+    let operand = state.get_memory(op_ptr, mem);
+    write_value_to_targetreg(p, mem, &mut state, targetreg, operand)?;
+
+    Ok(state)
+}
+
 /// Trace the current instruction state into a new one.
 /// 
 /// This function yields None if the current memory model and execution state
@@ -626,7 +634,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                 (0, _, 1, 3) => Ok((trace_targetpair_dec(state, targetpair)?, p.clone()+1)), //dec targetpair
                 (0, _, _, 4) => Ok((trace_targetreg_inc(p, mem, state, targetreg)?, p.clone()+1)), //inc targetreg
                 (0, _, _, 5) => Ok((trace_targetreg_dec(p, mem, state, targetreg)?, p.clone()+1)), //dec targetreg
-                (0, _, _, 6) => Err(analysis::Error::NotYetImplemented), //ld targetreg, u8
+                (0, _, _, 6) => Ok((trace_targetreg_set(p, mem, state, targetreg)?, p.clone()+2)), //ld targetreg, u8
                 (0, _, _, 7) => Err(analysis::Error::NotYetImplemented), //old bitops
                 (1, _, _, _) => Err(analysis::Error::NotYetImplemented), //ld targetreg2, targetreg
                 (2, _, _, _) => Err(analysis::Error::NotYetImplemented), //(aluop) a, targetreg2
