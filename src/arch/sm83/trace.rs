@@ -696,6 +696,15 @@ fn trace_oldbitops(mut state: State, op: u8) -> sm83::Result<State> {
     Ok(state)
 }
 
+fn trace_rst(ptr: &memory::Pointer<Pointer>, mut state: State, op: u8) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
+    let target = (op & 0x38) as u16;
+    let ret_pc = ptr.as_pointer().clone() + 3;
+
+    push_value_to_sp(ptr, &mut state, reg::Symbolic::new(ret_pc))?;
+
+    Ok((state, ptr.contextualize(target)))
+}
+
 /// Trace the current instruction state into a new one.
 /// 
 /// This function yields None if the current memory model and execution state
@@ -799,7 +808,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                 (3, _, 0, 5) => Ok((trace_stackpair_push(p, state, stackpair)?, p.clone()+1)), //push stackpair
                 (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction),
                 (3, _, _, 6) => Ok((trace_aluop_immediate(p, mem, state, aluop)?, p.clone()+2)), //(aluop) a, u8
-                (3, _, _, 7) => Err(analysis::Error::NotYetImplemented), //rst op& 0x38
+                (3, _, _, 7) => trace_rst(p, state, op), //rst op& 0x38
 
                 _ => Err(analysis::Error::InvalidInstruction),
             }
