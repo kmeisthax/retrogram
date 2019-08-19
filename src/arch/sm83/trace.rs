@@ -212,25 +212,27 @@ fn flag_test(condcode: Option<u8>, value: reg::Symbolic<Value>) -> sm83::Result<
 /// Given an ALU opcode, accumulator, operand, and flags, compute the new
 /// accumulator and flag values.
 fn aluop(aluop: u8, a: reg::Symbolic<u8>, operand: reg::Symbolic<u8>, flags: reg::Symbolic<u8>) -> sm83::Result<(reg::Symbolic<u8>, reg::Symbolic<u8>)> {
-    let old_carry : reg::Symbolic<u8> = flags & reg::Symbolic::new(0x10 as u8) >> 4;
+    let old_carry : reg::Symbolic<u8> = flags & (reg::Symbolic::new(0x10 as u8) >> 4);
+    let old_halfcarry : reg::Symbolic<u8> = flags & (reg::Symbolic::new(0x20 as u8) >> 5);
+    let old_nflag : reg::Symbolic<u8> = flags & (reg::Symbolic::new(0x40 as u8) >> 6);
     let wide_carry : reg::Symbolic<u16> = reg::Symbolic::convert_from(old_carry);
     let wide_a : reg::Symbolic<u16> = reg::Symbolic::convert_from(a);
     let wide_op : reg::Symbolic<u16> = reg::Symbolic::convert_from(operand);
     
-    let wide_result = match aluop {
-        0 => wide_a + wide_op, //add
-        1 => wide_a + wide_op + wide_carry, //adc
-        2 => wide_a + !(wide_op + reg::Symbolic::new(1)), //sub
-        3 => wide_a + !((wide_op + wide_carry) + reg::Symbolic::new(1)), //sbc
-        4 => wide_a & wide_op, //and
-        5 => wide_a ^ wide_op, //xor
-        6 => wide_a | wide_op, //or
-        7 => wide_a + !(wide_op + reg::Symbolic::new(1)), //cp
+    let (new_halfcarry, new_nflag, wide_result) = match aluop {
+        0 => (reg::Symbolic::new(0 as u8), old_halfcarry, wide_a + wide_op), //add
+        1 => (reg::Symbolic::new(0 as u8), old_halfcarry, wide_a + wide_op + wide_carry), //adc
+        2 => (reg::Symbolic::new(1 as u8), old_halfcarry, wide_a + !(wide_op + reg::Symbolic::new(1))), //sub
+        3 => (reg::Symbolic::new(1 as u8), old_halfcarry, wide_a + !((wide_op + wide_carry) + reg::Symbolic::new(1))), //sbc
+        4 => (reg::Symbolic::new(0 as u8), reg::Symbolic::new(1 as u8), wide_a & wide_op), //and
+        5 => (reg::Symbolic::new(0 as u8), reg::Symbolic::new(0 as u8), wide_a ^ wide_op), //xor
+        6 => (reg::Symbolic::new(0 as u8), reg::Symbolic::new(0 as u8), wide_a | wide_op), //or
+        7 => (reg::Symbolic::new(1 as u8), old_halfcarry, wide_a + !(wide_op + reg::Symbolic::new(1))), //cp
         _ => return Err(analysis::Error::Misinterpretation(1, false))
     };
 
     let new_a : reg::Symbolic<u8> = reg::Symbolic::try_convert_from(wide_result & reg::Symbolic::new(0xFF)).map_err(|_| analysis::Error::BlockSizeOverflow)?;
-    let new_flags = (flags & reg::Symbolic::new(0x60)) | zero_flag(new_a) | carry_flag_u9(wide_result);
+    let new_flags = zero_flag(new_a) | carry_flag_u9(wide_result) | new_nflag << 6 | new_halfcarry << 5;
 
     if aluop != 7 {
         Ok((new_a, new_flags))
