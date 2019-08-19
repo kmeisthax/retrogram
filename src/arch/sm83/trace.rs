@@ -672,6 +672,30 @@ fn trace_aluop_immediate(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: Sta
     Ok(state)
 }
 
+fn trace_oldbitops(mut state: State, op: u8) -> sm83::Result<State> {
+    let old_carry = (state.get_register(Register::F) & reg::Symbolic::new(0x10)) >> 4;
+    let old_a = state.get_register(Register::A);
+
+    let (new_a, new_carry) = match op {
+        0 => ((old_a << 1 | (old_a & reg::Symbolic::new(0x80)) >> 7), (old_a & reg::Symbolic::new(0x80)) >> 7), //RLCA
+        1 => ((old_a >> 1 | (old_a & reg::Symbolic::new(0x01)) << 7), (old_a & reg::Symbolic::new(0x01))), //RRCA
+        2 => ((old_a << 1 | old_carry), (old_a & reg::Symbolic::new(0x80)) >> 7), //RLA
+        3 => ((old_a >> 1 | old_carry), (old_a & reg::Symbolic::new(0x01))), //RRA
+        4 => return Err(analysis::Error::NotYetImplemented), //DAA
+        5 => (!old_a, old_carry), //CPL
+        6 => (old_a, reg::Symbolic::new(0x01)), //SCF
+        7 => (old_a, reg::Symbolic::new(0x00)), //CCF
+        _ => return Err(analysis::Error::Misinterpretation(1, false))
+    };
+
+    let new_flags = ((state.get_register(Register::F)) & reg::Symbolic::new(0xEF)) | new_carry << 4;
+
+    state.set_register(Register::F, new_flags);
+    state.set_register(Register::A, new_a);
+
+    Ok(state)
+}
+
 /// Trace the current instruction state into a new one.
 /// 
 /// This function yields None if the current memory model and execution state
@@ -760,7 +784,7 @@ pub fn trace(p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Res
                 (0, _, _, 4) => Ok((trace_targetreg_inc(p, mem, state, targetreg)?, p.clone()+1)), //inc targetreg
                 (0, _, _, 5) => Ok((trace_targetreg_dec(p, mem, state, targetreg)?, p.clone()+1)), //dec targetreg
                 (0, _, _, 6) => Ok((trace_targetreg_set(p, mem, state, targetreg)?, p.clone()+2)), //ld targetreg, u8
-                (0, _, _, 7) => Err(analysis::Error::NotYetImplemented), //old bitops
+                (0, _, _, 7) => Ok((trace_oldbitops(state, bitop)?, p.clone()+1)), //old bitops
                 (1, _, _, _) => Ok((trace_targetreg_copy(p, mem, state, targetreg, targetreg2)?, p.clone()+1)), //ld targetreg2, targetreg
                 (2, _, _, _) => Ok((trace_aluop_register(p, mem, state, aluop, targetreg2)?, p.clone()+1)), //(aluop) a, targetreg2
                 (3, 0, _, 0) => trace_return(Some(condcode), p, mem, state), //ret cond
