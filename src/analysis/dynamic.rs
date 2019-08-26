@@ -9,10 +9,11 @@ use crate::{reg, analysis, memory};
 /// instruction which requires parallel tracing and cannot be executed
 /// symbolically.
 fn trace_until_fork<RK, I, SI, F, P, MV, S, IO>(pc: &memory::Pointer<P>,
+    mut trace: analysis::Trace<P>,
     bus: &memory::Memory<P, MV, S, IO>, pre_state: &reg::State<RK, I, P, MV>,
     prereq: &dyn analysis::PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
     tracer: &dyn analysis::Tracer<RK, I, P, MV, S, IO>)
-        -> analysis::Result<(memory::Pointer<P>, reg::State<RK, I, P, MV>), P, S>
+        -> analysis::Result<(memory::Pointer<P>, analysis::Trace<P>, reg::State<RK, I, P, MV>), P, S>
     where RK: analysis::Mappable,
         P: analysis::Mappable,
         memory::Pointer<P>: Clone,
@@ -32,8 +33,9 @@ fn trace_until_fork<RK, I, SI, F, P, MV, S, IO>(pc: &memory::Pointer<P>,
         let (next_state, next_pc) = tracer(&new_pc, bus, new_state)?;
 
         new_state = next_state;
+        trace.traced_to(next_pc.clone());
         new_pc = next_pc;
     }
 
-    Ok((new_pc, new_state))
+    Ok((new_pc, trace, new_state))
 }

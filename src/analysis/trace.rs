@@ -25,6 +25,12 @@ impl<P> Trace<P> {
             pc_path: vec![start_pc]
         }
     }
+
+    /// Add a PC value to the trace.
+    pub fn traced_to(&mut self, next_pc: Pointer<P>) -> &mut Self {
+        self.pc_path.push(next_pc);
+        self
+    }
 }
 
 impl<P> Trace<P> where P: PartialEq {
