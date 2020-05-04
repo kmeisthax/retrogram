@@ -150,7 +150,7 @@ impl Program {
             platform: other.platform.or(self.platform),
             arch: other.arch.or(self.arch),
             assembler: other.assembler.or(self.assembler),
-            name: other.name.clone().or(self.name.clone()),
+            name: other.name.clone().or_else(|| self.name.clone()),
             images: match other.images.len() {
                 0 => self.images.clone(),
                 _ => other.images.clone(),
@@ -242,7 +242,7 @@ impl DataSource {
     /// Anonymous data sources do not have a list of valid programs and thus are
     /// valid for all possible programs.
     pub fn is_prog_valid(&self, program_name: &str) -> bool {
-        if self.programs.len() == 0 {
+        if self.programs.is_empty() {
             return true;
         }
 
@@ -350,6 +350,15 @@ where
                 format!("Encoding database failed with error: {}", e),
             )
         })
+    }
+}
+
+impl<P, S> Default for ProjectDatabase<P, S>
+where
+    P: analysis::Mappable,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 

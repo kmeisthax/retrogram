@@ -170,36 +170,34 @@ pub fn main() -> io::Result<()> {
         match command {
             cli::Command::Scan => cli::scan(
                 &prog,
-                &start_pc.ok_or(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Did not provide a start PC",
-                ))?,
+                &start_pc.ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC")
+                })?,
             )?,
             cli::Command::Disassemble => cli::dis(
                 &prog,
-                &start_pc.ok_or(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Did not provide a start PC",
-                ))?,
+                &start_pc.ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC")
+                })?,
             )?,
             cli::Command::Import => cli::import(&prog, &source)?,
             cli::Command::Backreference => cli::backref(
                 &prog,
-                &start_pc.ok_or(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Did not provide a start PC",
-                ))?,
+                &start_pc.ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC")
+                })?,
             )?,
             cli::Command::Rename => cli::rename(
                 &prog,
-                &start_pc.ok_or(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Did not provide a start PC",
-                ))?,
-                &end_pc.ok_or(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Did not provide a target label",
-                ))?,
+                &start_pc.ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC")
+                })?,
+                &end_pc.ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Did not provide a target label",
+                    )
+                })?,
             )?,
         };
     } else {

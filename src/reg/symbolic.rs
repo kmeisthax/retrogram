@@ -120,8 +120,8 @@ where
 
     fn try_convert_from(v: Symbolic<R>) -> Result<Self, Self::Error> {
         let conv_width = min(T::bound_width(), R::bound_width());
-        let mask = !(!R::zero()).checked_shl(conv_width).unwrap_or(R::zero());
-        let zero_extension = (!T::zero()).checked_shl(conv_width).unwrap_or(T::zero());
+        let mask = !(!R::zero()).checked_shl(conv_width).unwrap_or_else(R::zero);
+        let zero_extension = (!T::zero()).checked_shl(conv_width).unwrap_or_else(T::zero);
 
         Ok(Symbolic {
             bits_set: T::try_from(v.bits_set)?,
@@ -226,7 +226,7 @@ where
     /// value.
     pub fn upper_bound(&self) -> Option<T> {
         if !self.is_unsatisfiable() {
-            Some(T::from(self.bits_set.clone() | self.not_cares()))
+            Some(self.bits_set.clone() | self.not_cares())
         } else {
             None
         }
@@ -285,9 +285,10 @@ where
                         if nc.clone() & mask.clone() != T::zero() {
                             let vbit = v.clone() & mask.clone();
                             let carrybit = carry << bit;
-                            let newcarry = match vbit == T::zero() {
-                                true => T::zero(),
-                                false => T::one(),
+                            let newcarry = if vbit == T::zero() {
+                                T::zero()
+                            } else {
+                                T::one()
                             };
                             let vcut = v & !mask;
 
@@ -295,7 +296,7 @@ where
                             carry = newcarry;
                         }
 
-                        bit = bit + 1;
+                        bit += 1;
                     }
 
                     if carry == T::zero() {
@@ -311,9 +312,10 @@ where
 
         SymbolicValueIterator {
             not_cares: self.not_cares(),
-            next: match self.is_unsatisfiable() {
-                true => None,
-                false => Some(self.bits_set.clone()),
+            next: if self.is_unsatisfiable() {
+                None
+            } else {
+                Some(self.bits_set.clone())
             },
         }
     }
@@ -429,7 +431,7 @@ where
 
         Symbolic {
             bits_set: self.bits_set >> rhs.clone(),
-            bits_cleared: self.bits_cleared >> rhs.clone() | extension,
+            bits_cleared: self.bits_cleared >> rhs | extension,
         }
     }
 }
@@ -478,6 +480,7 @@ where
 {
     type Output = Symbolic<<T as Add<R>>::Output>;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn add(self, rhs: Symbolic<R>) -> Self::Output {
         //Implementation notes:
         //
@@ -492,10 +495,11 @@ where
         // 4. We never call `add` so we technically don't need that trait here.
         //    I want the output types to match the concrete types, however, so
         //    we need this trait that we don't use.
+        // 3. Clippy really hates that we're using binary operations in `Add`.
 
         let bits: usize = XOROut::<T, R>::bound_width();
         let half_adds = self.clone() ^ rhs.clone();
-        let half_carries = self.clone() & rhs.clone();
+        let half_carries = self & rhs;
         let zero: XOROut<T, R> = XOROut::<T, R>::zero();
         let mut carry = Symbolic::new(zero);
         let mut sum = carry.clone();
@@ -534,6 +538,7 @@ where
 {
     type Output = Symbolic<<T as Sub<R>>::Output>;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self, rhs: Symbolic<R>) -> Self::Output {
         //Further implementation notes:
         //
@@ -543,10 +548,11 @@ where
         // 2. If you implement an exotic signed type which emulates one's
         //    compliment or sign-and-magnitude or whatever, that becomes a
         //    standard numerical type symbolically.
+        // 3. Clippy really hates that we're using binary operations in `Sub`.
 
         let bits: usize = XOROut::<T, R>::bound_width();
         let half_adds = self.clone() ^ !rhs.clone();
-        let half_carries = self.clone() & !rhs.clone();
+        let half_carries = self & !rhs;
         let zero: XOROut<T, R> = XOROut::<T, R>::zero();
         let mut sum = Symbolic::new(zero);
         let one: XOROut<T, R> = XOROut::<T, R>::one();

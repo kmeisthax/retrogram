@@ -303,7 +303,7 @@ where
             },
         );
         reg::Symbolic::<EV>::from_segments(&data, Endianness::LittleEndian)
-            .unwrap_or(reg::Symbolic::<EV>::default())
+            .unwrap_or_else(|| reg::Symbolic::<EV>::default())
     }
 
     /// Read an arbitary big-endian integer type from memory.
@@ -326,7 +326,7 @@ where
             },
         );
         reg::Symbolic::<EV>::from_segments(&data, Endianness::BigEndian)
-            .unwrap_or(reg::Symbolic::<EV>::default())
+            .unwrap_or_else(|| reg::Symbolic::<EV>::default())
     }
 }
 

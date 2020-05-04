@@ -53,21 +53,25 @@ where
 }
 
 pub fn rename(prog: &project::Program, from_spec: &str, to_spec: &str) -> io::Result<()> {
-    let platform = prog.platform().ok_or(io::Error::new(
-        io::ErrorKind::InvalidInput,
-        "Unspecified platform, analysis cannot continue.",
-    ))?;
+    let platform = prog.platform().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Unspecified platform, analysis cannot continue.",
+        )
+    })?;
     let arch = prog
         .arch()
         .or_else(|| platform.default_arch())
-        .ok_or(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Unspecified architecture, analysis cannot continue.",
-        ))?;
-    let image = prog.iter_images().next().ok_or(io::Error::new(
-        io::ErrorKind::Other,
-        "Did not specify an image",
-    ))?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Unspecified architecture, analysis cannot continue.",
+            )
+        })?;
+    let image = prog
+        .iter_images()
+        .next()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
     match (arch, platform) {

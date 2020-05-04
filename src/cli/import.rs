@@ -50,21 +50,27 @@ where
 }
 
 pub fn import(prog: &project::Program, datasrc: &project::DataSource) -> io::Result<()> {
-    let platform = prog.platform().ok_or(io::Error::new(
-        io::ErrorKind::InvalidInput,
-        "Unspecified platform, analysis cannot continue.",
-    ))?;
+    let platform = prog.platform().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Unspecified platform, analysis cannot continue.",
+        )
+    })?;
     let arch = prog
         .arch()
         .or_else(|| platform.default_arch())
-        .ok_or(io::Error::new(
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Unspecified architecture, analysis cannot continue.",
+            )
+        })?;
+    let format = datasrc.format().ok_or_else(|| {
+        io::Error::new(
             io::ErrorKind::InvalidInput,
-            "Unspecified architecture, analysis cannot continue.",
-        ))?;
-    let format = datasrc.format().ok_or(io::Error::new(
-        io::ErrorKind::InvalidInput,
-        "Unspecified data source format",
-    ))?;
+            "Unspecified data source format",
+        )
+    })?;
 
     match (arch, platform, format) {
         (

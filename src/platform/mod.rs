@@ -24,7 +24,7 @@ impl PlatformName {
     ///
     /// Some platforms can support multiple architectures, so this lookup may
     /// fail.
-    pub fn default_arch(&self) -> Option<arch::ArchName> {
+    pub fn default_arch(self) -> Option<arch::ArchName> {
         match self {
             PlatformName::GB => Some(arch::ArchName::SM83),
             PlatformName::AGB => Some(arch::ArchName::AARCH32),

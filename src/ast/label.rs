@@ -54,7 +54,7 @@ impl str::FromStr for Label {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut split = s.split(".");
+        let mut split = s.split('.');
         let maybe_parent = split.next();
         let maybe_child = split.next();
         let maybe_autogen_flag = s.get(0..2);

@@ -64,7 +64,7 @@ where
         let inner_name = format!("A{}", context_name);
         self.context
             .remove(&inner_name)
-            .unwrap_or(reg::Symbolic::default())
+            .unwrap_or_else(|| reg::Symbolic::default())
     }
 
     /// Get a context specific to a given platform.
@@ -96,7 +96,7 @@ where
         let inner_name = format!("P{}", context_name);
         self.context
             .remove(&inner_name)
-            .unwrap_or(reg::Symbolic::default())
+            .unwrap_or_else(|| reg::Symbolic::default())
     }
 
     /// List all the contexts a given pointer has.
@@ -441,8 +441,8 @@ where
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut contexts = HashMap::new();
 
-        for kv_str in s.split("!") {
-            let mut kv_iter = kv_str.split("_");
+        for kv_str in s.split('!') {
+            let mut kv_iter = kv_str.split('_');
             let k = kv_iter.next();
             let v = kv_iter.next();
 

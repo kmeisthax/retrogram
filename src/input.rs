@@ -61,11 +61,11 @@ where
 
     let mut v = Vec::new();
 
-    for piece in text_str.split(":") {
+    for piece in text_str.split(':') {
         v.push(piece);
     }
 
-    if let Some(pival) = v.get(v.len() - 1) {
+    if let Some(pival) = v.last() {
         let pval = P::from_str_radix(pival, 16).ok()?;
         let mut ptr = memory::Pointer::from(pval);
         let mut context_slice = &v[..v.len() - 1];

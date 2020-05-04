@@ -88,6 +88,15 @@ where
     xref_target_index: BTreeMap<memory::Pointer<P>, HashSet<usize>>,
 }
 
+impl<P, S> Default for Database<P, S>
+where
+    P: analysis::Mappable,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<P, S> Database<P, S>
 where
     P: analysis::Mappable,
@@ -120,7 +129,7 @@ where
                 let source_bukkit = self
                     .xref_source_index
                     .entry(source.clone())
-                    .or_insert_with(|| HashSet::new());
+                    .or_insert_with(HashSet::new);
 
                 source_bukkit.insert(id);
 
@@ -129,7 +138,7 @@ where
                     let target_bukkit = self
                         .xref_target_index
                         .entry(target.clone())
-                        .or_insert_with(|| HashSet::new());
+                        .or_insert_with(HashSet::new);
 
                     target_bukkit.insert(id);
                 }
@@ -144,7 +153,7 @@ where
         let id = self.symbols.len();
 
         self.symbols.push(Symbol(label.clone(), ptr.clone()));
-        self.label_symbols.insert(label.clone(), id);
+        self.label_symbols.insert(label, id);
         self.pointer_symbols.insert(ptr, id);
     }
 
@@ -236,7 +245,7 @@ where
         let source_bucket = self
             .xref_source_index
             .entry(myref.as_source().clone())
-            .or_insert_with(|| HashSet::new());
+            .or_insert_with(HashSet::new);
 
         for other_id in source_bucket.iter() {
             if let Some(other) = self.xrefs.get(*other_id) {
@@ -251,7 +260,7 @@ where
         if let Some(target) = myref.as_target() {
             self.xref_target_index
                 .entry(target.clone())
-                .or_insert_with(|| HashSet::new())
+                .or_insert_with(HashSet::new)
                 .insert(id);
         }
 
@@ -259,11 +268,11 @@ where
     }
 
     pub fn pointer_symbol(&self, ptr: &memory::Pointer<P>) -> Option<usize> {
-        self.pointer_symbols.get(ptr).map(|v| *v)
+        self.pointer_symbols.get(ptr).copied()
     }
 
     pub fn label_symbol(&self, label: &ast::Label) -> Option<usize> {
-        self.label_symbols.get(label).map(|v| *v)
+        self.label_symbols.get(label).copied()
     }
 
     pub fn insert_block(&mut self, block: analysis::Block<P, S>) {
@@ -314,9 +323,9 @@ where
                 let remaining_size = block.as_length().clone() - new_size.clone();
 
                 if let Ok(remaining_size) = S::try_from(remaining_size) {
-                    let new_block_start = block.as_start().contextualize(P::from(
-                        block.as_start().as_pointer().clone() + new_size.clone(),
-                    ));
+                    let new_block_start = block
+                        .as_start()
+                        .contextualize(block.as_start().as_pointer().clone() + new_size.clone());
 
                     *block = analysis::Block::from_parts(block.as_start().clone(), new_size);
                     let new_block = analysis::Block::from_parts(new_block_start, remaining_size);
@@ -342,14 +351,14 @@ where
     where
         <P as Add<S>>::Output: Into<P>,
     {
-        let from_end = from_start.clone() + from_length.clone();
+        let from_end = from_start.clone() + from_length;
 
         return self
             .xref_source_index
             .range(from_start..&from_end.into_ptr())
             .map(|(_, v)| v)
             .flatten()
-            .map(|v| *v);
+            .copied();
     }
 
     /// Given a contextualized memory range, return all xref IDs targeting that
@@ -362,14 +371,14 @@ where
     where
         <P as Add<S>>::Output: Into<P>,
     {
-        let to_end = to_start.clone() + to_length.clone();
+        let to_end = to_start.clone() + to_length;
 
         return self
             .xref_target_index
             .range(to_start..&to_end.into_ptr())
             .map(|(_, v)| v)
             .flatten()
-            .map(|v| *v);
+            .copied();
     }
 
     /// Search for all crossreferences whose static target has not yet been

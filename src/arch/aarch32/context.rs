@@ -55,7 +55,7 @@ pub fn architectural_ctxt_parse<P>(
         *context_slice = &context_slice[1..];
     }
 
-    while context_slice.len() > 0 {
+    while !context_slice.is_empty() {
         let ctxt_str = context_slice
             .get(context_slice.len() - 1)
             .expect("I already checked the length");

@@ -595,7 +595,7 @@ fn msr(
     data_immed: u32,
     rm: A32Reg,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
-    let c = match (rn_val & 0x1) >> 0 != 0 {
+    let c = match (rn_val & 0x1) != 0 {
         true => "c",
         false => "",
     };
@@ -654,7 +654,7 @@ fn bx(
     rm: A32Reg,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
     //BX PC is completely valid! And also dumb.
-    let target_pc = p.contextualize(p.as_pointer().clone() + 8);
+    let target_pc = p.contextualize(*p.as_pointer() + 8);
     let jumpref = match rm {
         A32Reg::R15 => refr::new_static_ref(p.clone(), target_pc, refkind::Code),
         _ => refr::new_dyn_ref(p.clone(), refkind::Code),
@@ -712,7 +712,7 @@ fn blx_register(
     rm: A32Reg,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
     //BX PC is completely valid! And also dumb.
-    let target_pc = p.contextualize(p.as_pointer().clone() + 8);
+    let target_pc = p.contextualize(*p.as_pointer() + 8);
     let jumpref = match rm {
         A32Reg::R15 => refr::new_static_ref(p.clone(), target_pc, refkind::Code),
         _ => refr::new_dyn_ref(p.clone(), refkind::Code),
@@ -756,7 +756,7 @@ fn blx_immediate(
 
 fn bkpt(instr: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     let high_immed = (instr & 0x000FFF00) >> 4;
-    let low_immed = (instr & 0x0000000F) >> 0;
+    let low_immed = instr & 0x0000000F;
     let immed = high_immed | low_immed;
 
     Ok(Disasm::new(
@@ -872,7 +872,7 @@ fn cps(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     let abit = (lsimmed & 0x100) >> 8;
     let ibit = (lsimmed & 0x080) >> 7;
     let fbit = (lsimmed & 0x040) >> 6;
-    let mode = (lsimmed & 0x01F) >> 0;
+    let mode = lsimmed & 0x01F;
 
     let effect = match immod {
         2 => "IE",
@@ -943,7 +943,7 @@ fn ldstmisc(
     rm: A32Reg,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
     let sbit = (shiftop & 0x2) >> 1;
-    let hbit = (shiftop & 0x1) >> 0;
+    let hbit = shiftop & 0x1;
 
     let is_preindex = pbit != 0;
     let is_offsetadd = ubit != 0;
@@ -1106,11 +1106,7 @@ fn ldst_coproc(
     let is_preindex = preindex != 0;
 
     let rn_operand = op::sym(&rn.to_string());
-    let offset = uoffset as i32
-        * match is_offsetadd {
-            true => 1,
-            false => -1,
-        };
+    let offset = uoffset as i32 * if is_offsetadd { 1 } else { -1 };
 
     let crd_op = op::sym(&format!("CR{}", crd));
     let cp_op = op::sym(&format!("p{}", cp_num));
@@ -1144,13 +1140,13 @@ fn ldst_coproc(
     };
 
     let opcode_str = match (is_load, is_nbit, cond) {
-        (false, false, 15) => format!("STC2"),
+        (false, false, 15) => "STC2".to_string(),
         (false, false, cond) => format!("STC{}", condcode(cond)?),
-        (false, true, 15) => format!("STC2L"),
+        (false, true, 15) => "STC2L".to_string(),
         (false, true, cond) => format!("STC{}L", condcode(cond)?),
-        (true, false, 15) => format!("LDC2"),
+        (true, false, 15) => "LDC2".to_string(),
         (true, false, cond) => format!("LDC{}", condcode(cond)?),
-        (true, true, 15) => format!("LDC2L"),
+        (true, true, 15) => "LDC2L".to_string(),
         (true, true, cond) => format!("LDC{}L", condcode(cond)?),
     };
 
@@ -1171,21 +1167,23 @@ pub fn ldstrex(
     rm: A32Reg,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
     let is_load = l != 0;
-    let opname = match is_load {
-        true => format!("LDREX{}", condcode(cond)?),
-        false => format!("STREX{}", condcode(cond)?),
+    let opname = if is_load {
+        format!("LDREX{}", condcode(cond)?)
+    } else {
+        format!("STREX{}", condcode(cond)?)
     };
 
-    let operands = match is_load {
-        true => vec![
+    let operands = if is_load {
+        vec![
             op::sym(&rd.to_string()),
             op::wrap("[", vec![op::sym(&rn.to_string())], "]"),
-        ],
-        false => vec![
+        ]
+    } else {
+        vec![
             op::sym(&rd.to_string()),
             op::sym(&rm.to_string()),
             op::wrap("[", vec![op::sym(&rn.to_string())], "]"),
-        ],
+        ]
     };
 
     //TODO: Data references
@@ -1241,15 +1239,17 @@ pub fn pld(
     let is_shifted = shift_imm != 0 || shift != 0;
     let is_offsetadd = offsetadd != 0;
 
-    let offset12 = match is_offsetadd {
-        true => (address_operand & 0xFFF) as i32,
-        false => (address_operand & 0xFFF) as i32 * -1,
+    let offset12 = if is_offsetadd {
+        (address_operand & 0xFFF) as i32
+    } else {
+        -((address_operand & 0xFFF) as i32)
     };
 
     let rn_operand = op::sym(&rn.to_string());
-    let rm_operand = match is_offsetadd {
-        true => op::sym(&rm.to_string()),
-        false => op::pref("-", op::sym(&rm.to_string())),
+    let rm_operand = if is_offsetadd {
+        op::sym(&rm.to_string())
+    } else {
+        op::pref("-", op::sym(&rm.to_string()))
     };
 
     let address_operand = match (immediate_bit, is_shifted) {
@@ -1314,15 +1314,15 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> aarch32::Result<D
         let shiftop = (instr & 0x00000060) >> 5;
         let copcode2 = (instr & 0x000000E0) >> 5;
         let regshift = (instr & 0x00000010) >> 4;
-        let rm_val = (instr & 0x0000000F) >> 0;
-        let data_immed = (instr & 0x000000FF) >> 0;
+        let rm_val = instr & 0x0000000F;
+        let data_immed = instr & 0x000000FF;
         let rn = A32Reg::from_instr(rn_val)
             .expect("What the heck? The register definitely should have parsed");
         let rd = A32Reg::from_instr(rd_val)
             .expect("What the heck? The register definitely should have parsed");
         let rs = A32Reg::from_instr(rs_val).expect("Could not parse RS... somehow?!");
         let rm = A32Reg::from_instr(rm_val).expect("Could not parse RM... somehow?!");
-        let lsimmed = (instr & 0x00000FFF) >> 0; //Load-Store Immediate (12bit)
+        let lsimmed = instr & 0x00000FFF; //Load-Store Immediate (12bit)
 
         #[allow(unused_variables)]
         match (

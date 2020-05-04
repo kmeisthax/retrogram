@@ -18,7 +18,7 @@ fn cond_branch(
     // signed_offset = (target - base + 4) / 2
     // therefore target = signed_offset * 2 - 4 + base
     let signed_offset = (((offset as u8) as i8) as i32) << 1;
-    let target = p.contextualize((signed_offset - 4 + p.as_pointer().clone() as i32) as Pointer);
+    let target = p.contextualize((signed_offset - 4 + *p.as_pointer() as i32) as Pointer);
     let mut swi_target = p.contextualize(0x00000008);
 
     swi_target.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
@@ -56,12 +56,9 @@ fn uncond_branch(
 ) -> analysis::Result<Disasm, Pointer, Offset> {
     // signed_offset = (target - base + 4) / 2
     // therefore target = signed_offset * 2 - 4 + base
-    let sign_extend = match offset & 0x0400 != 0 {
-        true => 0xF800,
-        false => 0x0000,
-    };
+    let sign_extend = if offset & 0x0400 != 0 { 0xF800 } else { 0x0000 };
     let signed_offset = (((offset | sign_extend) as i16) as i32) << 1;
-    let target = p.contextualize((signed_offset - 4 + p.as_pointer().clone() as i32) as Pointer);
+    let target = p.contextualize((signed_offset - 4 + *p.as_pointer() as i32) as Pointer);
 
     Ok(Disasm::new(
         Instruction::new("B", vec![op::cptr(target.clone())]),
@@ -92,9 +89,10 @@ fn special_data(
         A32Reg::R15 => vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
         _ => vec![],
     };
-    let flow = match rd_reg == A32Reg::R15 {
-        true => analysis::Flow::Branching(false),
-        false => analysis::Flow::Normal,
+    let flow = if rd_reg == A32Reg::R15 {
+        analysis::Flow::Branching(false)
+    } else {
+        analysis::Flow::Normal
     };
 
     match (opcode, l) {
@@ -385,8 +383,7 @@ fn load_pool_constant(
 ) -> analysis::Result<Disasm, Pointer, Offset> {
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
-    let target_ptr =
-        p.contextualize((p.as_pointer().clone() & 0xFFFFFFFC) + 4 + (immed as u32 * 4));
+    let target_ptr = p.contextualize((*p.as_pointer() & 0xFFFFFFFC) + 4 + (immed as u32 * 4));
     let immed_operand = op::int(immed as u32 * 4);
     let ast = Instruction::new(
         "LDR",
@@ -601,9 +598,9 @@ fn uncond_branch_link(
             };
 
             let offset: u32 = sign | (high_offset as u32) << 12 | (low_offset as u32) << 1;
-            let target = p.contextualize((p.as_pointer().clone() as i32 + offset as i32) as u32);
-            let mut arm_target = p
-                .contextualize((p.as_pointer().clone() as i32 + offset as i32) as u32 & 0xFFFFFFFC);
+            let target = p.contextualize((*p.as_pointer() as i32 + offset as i32) as u32);
+            let mut arm_target =
+                p.contextualize((*p.as_pointer() as i32 + offset as i32) as u32 & 0xFFFFFFFC);
             arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
 
             match h {
@@ -747,9 +744,10 @@ fn push_pop(l: u16, r: u16, register_list: u16) -> analysis::Result<Disasm, Poin
         }
     }
 
-    let flow = match is_callret {
-        true => analysis::Flow::Returning,
-        false => analysis::Flow::Normal,
+    let flow = if is_callret {
+        analysis::Flow::Returning
+    } else {
+        analysis::Flow::Normal
     };
 
     match l {

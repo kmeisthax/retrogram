@@ -52,14 +52,14 @@ pub fn parse_symbol_file(
     for file in files {
         for line in file.lines() {
             let line = line?;
-            let mut split = line.split(" ");
+            let mut split = line.split(' ');
 
             if let Some(ptr_str) = split.next() {
-                if ptr_str.chars().next() == Some(';') {
+                if ptr_str.starts_with(';') {
                     continue;
                 }
 
-                let mut ptr_split = ptr_str.split(":");
+                let mut ptr_split = ptr_str.split(':');
                 let mut bank_addr: u16 = 0;
                 let mut ptr_addr: u16 = 0;
                 if let Some(bank_part) = ptr_split.next() {
@@ -70,9 +70,9 @@ pub fn parse_symbol_file(
                     ptr_addr = str2hex(ptr_part).unwrap_or(0);
                 }
 
-                if let Some(ctxt_ptr) = gb::create_context(&vec![bank_addr, ptr_addr]) {
+                if let Some(ctxt_ptr) = gb::create_context(&[bank_addr, ptr_addr]) {
                     if let Some(label_str) = split.next() {
-                        let mut name_split = label_str.split(".");
+                        let mut name_split = label_str.split('.');
 
                         if let Some(global_part) = name_split.next() {
                             if let Some(local_part) = name_split.next() {

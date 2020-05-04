@@ -70,6 +70,7 @@ macro_rules! binary_op_masked_impl {
         impl $trait_name for $type {
             type Output = $type;
 
+            #[allow(clippy::suspicious_arithmetic_impl)]
             fn $method_name(self, rhs: Self) -> Self {
                 $type {
                     v: (self.v.$method_name(rhs.v)) & $mask,
@@ -128,6 +129,7 @@ macro_rules! binary_op_masked_impl_notype {
 macro_rules! assign_binary_op_masked_impl {
     ($type:ident, $trait_name:ident, $method_name:ident, $mask:expr) => {
         impl $trait_name for $type {
+            #[allow(clippy::suspicious_op_assign_impl)]
             fn $method_name(&mut self, rhs: Self) {
                 self.v.$method_name(rhs.v & $mask);
                 self.v &= $mask;

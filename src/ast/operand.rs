@@ -93,7 +93,7 @@ impl<I, S, F, P> Operand<I, S, F, P> {
         Operand::Indirect(Box::new(op))
     }
 
-    pub fn add(op1: Self, op2: Self) -> Self {
+    pub fn addop(op1: Self, op2: Self) -> Self {
         Operand::Infix(Box::new(op1), "+".to_string(), Box::new(op2))
     }
 

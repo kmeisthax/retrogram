@@ -50,7 +50,7 @@ impl ArchName {
     ///
     /// Some architectures don't have an assembler implemented yet, so this
     /// lookup may fail.
-    pub fn default_asm(&self) -> Option<asm::AssemblerName> {
+    pub fn default_asm(self) -> Option<asm::AssemblerName> {
         match self {
             ArchName::SM83 => Some(asm::AssemblerName::RGBDS),
             ArchName::AARCH32 => None,

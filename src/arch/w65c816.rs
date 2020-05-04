@@ -176,7 +176,7 @@ fn op_fullptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_leword::<u24>(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
-            vec![op::dptr(p.contextualize(u24::from(litval)))],
+            vec![op::dptr(p.contextualize(litval))],
             "",
         ))],
         None => vec![op::indir(op::wrap("", vec![op::miss()], ""))],
@@ -187,7 +187,7 @@ fn op_fullptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_leword::<u24>(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
-            vec![op::dptr(p.contextualize(u24::from(litval))), op::sym("X")],
+            vec![op::dptr(p.contextualize(litval)), op::sym("X")],
             "",
         ))],
         None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("X")], ""))],
@@ -198,7 +198,7 @@ fn op_fullptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     match bus.read_leword::<u24>(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
-            vec![op::dptr(p.contextualize(u24::from(litval))), op::sym("Y")],
+            vec![op::dptr(p.contextualize(litval)), op::sym("Y")],
             "",
         ))],
         None => vec![op::indir(op::wrap("", vec![op::miss(), op::sym("Y")], ""))],

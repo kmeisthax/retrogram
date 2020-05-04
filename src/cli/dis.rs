@@ -1,6 +1,7 @@
 //! High-level CLI routines
 
 use crate::{analysis, arch, asm, ast, cli, input, maths, memory, platform, project};
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::{fs, io};
 
@@ -82,22 +83,21 @@ where
                     )
                 })?;
 
-                match (xref.kind(), xref.as_target()) {
-                    (analysis::ReferenceKind::Code, Some(target)) => {
-                        let target_block_id = db.find_block_membership(target).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The given memory location has not yet been successfully analyzed. Please scan it first."))?;
-                        let target_block = db.block(target_block_id).ok_or_else(|| {
-                            io::Error::new(
-                                io::ErrorKind::NotFound,
-                                "LOGIC ERROR: The given PC returned a block ID that doesn't exist.",
-                            )
-                        })?;
+                if let (analysis::ReferenceKind::Code, Some(target)) =
+                    (xref.kind(), xref.as_target())
+                {
+                    let target_block_id = db.find_block_membership(target).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The given memory location has not yet been successfully analyzed. Please scan it first."))?;
+                    let target_block = db.block(target_block_id).ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::NotFound,
+                            "LOGIC ERROR: The given PC returned a block ID that doesn't exist.",
+                        )
+                    })?;
 
-                        if !disassembly_blocks.contains(target_block) {
-                            found_targets = true;
-                            target_blocks.insert(target_block);
-                        }
+                    if !disassembly_blocks.contains(target_block) {
+                        found_targets = true;
+                        target_blocks.insert(target_block);
                     }
-                    _ => {}
                 }
             }
         }
@@ -111,26 +111,30 @@ where
         let (orig_asm, _xrefs, pc_offset, _blocks, terminating_error) =
             analysis::disassemble_block(block.as_start().clone(), bus, &disassemble);
         if let Some(pc_offset) = pc_offset {
-            if pc_offset > block.as_length().clone() {
-                if let Ok(too_big) = MS::try_from(pc_offset - block.as_length().clone()) {
-                    eprintln!(
-                        "WARN: Block at {} is too large by {}",
-                        block.as_start(),
-                        too_big
-                    );
+            match pc_offset.cmp(&block.as_length()) {
+                Ordering::Greater => {
+                    if let Ok(too_big) = MS::try_from(pc_offset - block.as_length().clone()) {
+                        eprintln!(
+                            "WARN: Block at {} is too large by {}",
+                            block.as_start(),
+                            too_big
+                        );
+                    }
                 }
-            } else if pc_offset < block.as_length().clone() {
-                if let Ok(too_small) = MS::try_from(block.as_length().clone() - pc_offset) {
-                    eprintln!(
-                        "WARN: Block at {} is too small by {}",
-                        block.as_start(),
-                        too_small
-                    );
+                Ordering::Less => {
+                    if let Ok(too_small) = MS::try_from(block.as_length().clone() - pc_offset) {
+                        eprintln!(
+                            "WARN: Block at {} is too small by {}",
+                            block.as_start(),
+                            too_small
+                        );
+                    }
                 }
+                Ordering::Equal => {}
             }
         }
 
-        if let Some(_) = terminating_error {
+        if terminating_error.is_some() {
             eprintln!(
                 "WARN: Block at {} terminates at an invalid instruction",
                 block.as_start()
@@ -147,28 +151,34 @@ where
 }
 
 pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
-    let platform = prog.platform().ok_or(io::Error::new(
-        io::ErrorKind::InvalidInput,
-        "Unspecified platform, analysis cannot continue.",
-    ))?;
+    let platform = prog.platform().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Unspecified platform, analysis cannot continue.",
+        )
+    })?;
     let arch = prog
         .arch()
         .or_else(|| platform.default_arch())
-        .ok_or(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Unspecified architecture, analysis cannot continue.",
-        ))?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Unspecified architecture, analysis cannot continue.",
+            )
+        })?;
     let asm = prog
         .assembler()
         .or_else(|| arch.default_asm())
-        .ok_or(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Unspecified assembler for architecture, analysis cannot continue.",
-        ))?;
-    let image = prog.iter_images().next().ok_or(io::Error::new(
-        io::ErrorKind::Other,
-        "Did not specify an image",
-    ))?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Unspecified assembler for architecture, analysis cannot continue.",
+            )
+        })?;
+    let image = prog
+        .iter_images()
+        .next()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
     match (arch, platform, asm) {

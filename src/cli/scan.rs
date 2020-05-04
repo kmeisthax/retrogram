@@ -30,8 +30,8 @@ where
             (Some(pc_offset), analysis::Error::Misinterpretation(size, true)) => {
                 let mut values = String::new();
                 let bad_pc = start_pc.clone() + pc_offset.clone();
-                let mut iv_offset = start_pc.clone() + pc_offset.clone();
-                let end_offset = iv_offset.clone() + size.clone();
+                let mut iv_offset = start_pc.clone() + pc_offset;
+                let end_offset = iv_offset.clone() + size;
 
                 while iv_offset < end_offset {
                     //TODO: This generates incorrect results if MV::bound_width is not divisible by four
@@ -50,8 +50,8 @@ where
             (Some(pc_offset), analysis::Error::Misinterpretation(size, false)) => { //Little-endian
                 let mut values = String::new();
                 let bad_pc = start_pc.clone() + pc_offset.clone();
-                let mut iv_offset = start_pc.clone() + pc_offset.clone();
-                let end_offset = iv_offset.clone() + size.clone();
+                let mut iv_offset = start_pc.clone() + pc_offset;
+                let end_offset = iv_offset.clone() + size;
 
                 while iv_offset < end_offset {
                     //TODO: This generates incorrect results if MV::bound_width is not divisible by four
@@ -79,7 +79,7 @@ where
 
     for xref in xrefs {
         if let Some(target) = xref.as_target() {
-            if let None = db.pointer_symbol(&target) {
+            if db.pointer_symbol(&target).is_none() {
                 db.insert_placeholder_label(target.clone(), xref.kind());
             }
 
@@ -90,7 +90,7 @@ where
                     xref_offset = S::try_from(
                         target.as_pointer().clone() - block.as_start().as_pointer().clone(),
                     )
-                    .unwrap_or(S::zero());
+                    .unwrap_or_else(|_| S::zero());
                 }
 
                 if xref_offset > S::zero() {
@@ -103,12 +103,9 @@ where
     }
 
     //TODO: This seems to be polluting the symbol table for no reason.
-    match orig_asm.iter_directives().next() {
-        Some((_dir, loc)) => {
-            db.insert_placeholder_label(loc.clone(), analysis::ReferenceKind::Unknown);
-        }
-        _ => {}
-    };
+    if let Some((_dir, loc)) = orig_asm.iter_directives().next() {
+        db.insert_placeholder_label(loc.clone(), analysis::ReferenceKind::Unknown);
+    }
 
     Ok(())
 }
@@ -214,21 +211,25 @@ where
 
 /// Scan a given program for control flow, symbols, and so on.
 pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
-    let platform = prog.platform().ok_or(io::Error::new(
-        io::ErrorKind::InvalidInput,
-        "Unspecified platform, analysis cannot continue.",
-    ))?;
+    let platform = prog.platform().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Unspecified platform, analysis cannot continue.",
+        )
+    })?;
     let arch = prog
         .arch()
         .or_else(|| platform.default_arch())
-        .ok_or(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Unspecified architecture, analysis cannot continue.",
-        ))?;
-    let image = prog.iter_images().next().ok_or(io::Error::new(
-        io::ErrorKind::Other,
-        "Did not specify an image",
-    ))?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Unspecified architecture, analysis cannot continue.",
+            )
+        })?;
+    let image = prog
+        .iter_images()
+        .next()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
     match (arch, platform) {

@@ -277,7 +277,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> sm83::Result<Disa
                 "ld",
                 vec![
                     op::sym("hl"),
-                    op::add(op::sym("sp"), int_op8(&(p.clone() + 1), mem)),
+                    op::addop(op::sym("sp"), int_op8(&(p.clone() + 1), mem)),
                 ],
             ),
             2,

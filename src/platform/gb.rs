@@ -165,7 +165,7 @@ where
         ptr: memory::Pointer<Self::Pointer>,
     ) -> memory::Pointer<Self::Pointer> {
         let my_ctxt = ptr.get_platform_context("R");
-        let mut stripped_ptr = memory::Pointer::from(ptr.as_pointer().clone());
+        let mut stripped_ptr = memory::Pointer::from(*ptr.as_pointer());
 
         if *stripped_ptr.as_pointer() > 0x4000 {
             stripped_ptr.set_platform_context("R", my_ctxt);
@@ -180,12 +180,10 @@ where
         ctxts: &[&str],
     ) -> memory::Pointer<Self::Pointer> {
         if *ptr.as_pointer() > 0x4000 {
-            match ctxts.get(0) {
-                Some(ctxt) => match u64::from_str_radix(ctxt, 16) {
-                    Ok(cval) => ptr.set_platform_context("R", reg::Symbolic::new(cval)),
-                    _ => {}
-                },
-                _ => {}
+            if let Some(ctxt) = ctxts.get(0) {
+                if let Ok(cval) = u64::from_str_radix(ctxt, 16) {
+                    ptr.set_platform_context("R", reg::Symbolic::new(cval));
+                }
             }
         }
 
@@ -208,7 +206,7 @@ impl Default for PlatformVariant {
     }
 }
 
-pub fn create_context<V>(values: &Vec<V>) -> Option<memory::Pointer<sm83::Pointer>>
+pub fn create_context<V>(values: &[V]) -> Option<memory::Pointer<sm83::Pointer>>
 where
     V: Clone + PartialOrd + From<sm83::Pointer>,
     sm83::Pointer: From<V>,
@@ -241,7 +239,7 @@ where
         }
     }
 
-    if values.len() > 0 {
+    if !values.is_empty() {
         Some(context)
     } else {
         None
@@ -266,7 +264,7 @@ where
             file.seek(io::SeekFrom::Start(0x147))?;
 
             let mut romtype: [u8; 1] = [0];
-            file.read(&mut romtype)?;
+            file.read_exact(&mut romtype)?;
             file.seek(io::SeekFrom::Start(orig_pos))?;
 
             match romtype {
