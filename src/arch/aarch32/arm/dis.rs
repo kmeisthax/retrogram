@@ -701,6 +701,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> aarch32::Result<D
         let rm = A32Reg::from_instr(rm_val).expect("Could not parse RM... somehow?!");
         let lsimmed = (instr & 0x00000FFF) >> 0; //Load-Store Immediate (12bit)
         
+        #[allow(unused_variables)]
         match (cond, opcat, immed_mode, pbit, u, b, w, l, special, shiftop, regshift) {
             (15, 0, 0, 1, 0, 0, 0, 0, _, _, _) => cps(rn_val, lsimmed), //Change Processor State / Set Endianness
             (15, 1, x, 1, u, 1, 0, 1, _, _, _) => pld(x, u, rn, shift_imm, regshift, rm, lsimmed), //Cache Preload
