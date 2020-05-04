@@ -55,7 +55,7 @@ fn write_value_to_targetreg(p: &memory::Pointer<Pointer>, mem: &Bus, state: &mut
     }
 }
 
-fn read_value_from_targetpair(state: &State, targetpair: u8, is_stackpair: bool) -> sm83::Result<(reg::Symbolic<Pointer>)> {
+fn read_value_from_targetpair(state: &State, targetpair: u8, is_stackpair: bool) -> sm83::Result<reg::Symbolic<Pointer>> {
     let hival : reg::Symbolic<u16> = reg::Symbolic::convert_from(match (targetpair, is_stackpair) {
         (0, _) => state.get_register(Register::B),
         (1, _) => state.get_register(Register::D),
@@ -214,7 +214,7 @@ fn flag_test(condcode: Option<u8>, value: reg::Symbolic<Value>) -> sm83::Result<
 fn aluop(aluop: u8, a: reg::Symbolic<u8>, operand: reg::Symbolic<u8>, flags: reg::Symbolic<u8>) -> sm83::Result<(reg::Symbolic<u8>, reg::Symbolic<u8>)> {
     let old_carry : reg::Symbolic<u8> = flags & (reg::Symbolic::new(0x10 as u8) >> 4);
     let old_halfcarry : reg::Symbolic<u8> = flags & (reg::Symbolic::new(0x20 as u8) >> 5);
-    let old_nflag : reg::Symbolic<u8> = flags & (reg::Symbolic::new(0x40 as u8) >> 6);
+    let _old_nflag : reg::Symbolic<u8> = flags & (reg::Symbolic::new(0x40 as u8) >> 6);
     let wide_carry : reg::Symbolic<u16> = reg::Symbolic::convert_from(old_carry);
     let wide_a : reg::Symbolic<u16> = reg::Symbolic::convert_from(a);
     let wide_op : reg::Symbolic<u16> = reg::Symbolic::convert_from(operand);
@@ -309,7 +309,7 @@ fn trace_sp_storage(p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -
 }
 
 /// Trace full jumps
-fn trace_jump(condcode: Option<u8>, p: &memory::Pointer<Pointer>, mem: &Bus, mut state: State) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
+fn trace_jump(condcode: Option<u8>, p: &memory::Pointer<Pointer>, mem: &Bus, state: State) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
     if flag_test(condcode, state.get_register(Register::F))? {
         let op_ptr = p.contextualize(p.as_pointer().clone()+1);
         let target = mem.read_leword::<u16>(&op_ptr).into_concrete().ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
