@@ -21,5 +21,5 @@ pub enum Literal<I, S, F, P = I> {
     String(String),
 
     /// A literal that could not be disassembled from a given image
-    Missing
+    Missing,
 }

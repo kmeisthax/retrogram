@@ -1,12 +1,15 @@
 //! Implementation of core database type
 
-use std::ops::Add;
-use std::collections::{HashSet, HashMap, BTreeMap};
+use crate::{analysis, ast, memory};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::UpperHex;
-use serde::{Serialize, Deserialize};
-use crate::{ast, memory, analysis};
+use std::ops::Add;
 
-fn gimme_a_ptr<P>() -> HashMap<memory::Pointer<P>, usize> where P: analysis::Mappable {
+fn gimme_a_ptr<P>() -> HashMap<memory::Pointer<P>, usize>
+where
+    P: analysis::Mappable,
+{
     HashMap::new()
 }
 
@@ -14,7 +17,10 @@ fn gimme_a_lbl() -> HashMap<ast::Label, usize> {
     HashMap::new()
 }
 
-fn gimme_xref<P>() -> BTreeMap<P, HashSet<usize>> where P: analysis::Mappable {
+fn gimme_xref<P>() -> BTreeMap<P, HashSet<usize>>
+where
+    P: analysis::Mappable,
+{
     BTreeMap::new()
 }
 
@@ -23,9 +29,14 @@ fn im_stale() -> bool {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Symbol<P>(ast::Label, memory::Pointer<P>) where P: analysis::Mappable;
+pub struct Symbol<P>(ast::Label, memory::Pointer<P>)
+where
+    P: analysis::Mappable;
 
-impl<P> Symbol<P> where P: analysis::Mappable {
+impl<P> Symbol<P>
+where
+    P: analysis::Mappable,
+{
     pub fn as_label(&self) -> &ast::Label {
         &self.0
     }
@@ -45,10 +56,13 @@ impl<P> Symbol<P> where P: analysis::Mappable {
 
 /// A repository of information obtained from the program under analysis.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Database<P, S> where P: analysis::Mappable {
+pub struct Database<P, S>
+where
+    P: analysis::Mappable,
+{
     symbols: Vec<Symbol<P>>,
 
-    #[serde(skip, default="im_stale")]
+    #[serde(skip, default = "im_stale")]
     was_deserialized: bool,
 
     /// A list of program regions.
@@ -58,23 +72,26 @@ pub struct Database<P, S> where P: analysis::Mappable {
     xrefs: Vec<analysis::Reference<P>>,
 
     /// A list of all labels in the program.
-    #[serde(skip, default="gimme_a_lbl")]
+    #[serde(skip, default = "gimme_a_lbl")]
     label_symbols: HashMap<ast::Label, usize>,
-    
+
     /// A list of all pointer values in the program which have a label.
-    #[serde(skip, default="gimme_a_ptr")]
+    #[serde(skip, default = "gimme_a_ptr")]
     pointer_symbols: HashMap<memory::Pointer<P>, usize>,
 
     /// A list of crossreferences sorted by source address.
-    #[serde(skip, default="gimme_xref")]
+    #[serde(skip, default = "gimme_xref")]
     xref_source_index: BTreeMap<memory::Pointer<P>, HashSet<usize>>,
 
     /// A list of crossreferences sorted by target address.
-    #[serde(skip, default="gimme_xref")]
+    #[serde(skip, default = "gimme_xref")]
     xref_target_index: BTreeMap<memory::Pointer<P>, HashSet<usize>>,
 }
 
-impl<P, S> Database<P, S> where P: analysis::Mappable {
+impl<P, S> Database<P, S>
+where
+    P: analysis::Mappable,
+{
     pub fn new() -> Self {
         Database {
             symbols: Vec::new(),
@@ -84,12 +101,12 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
             label_symbols: HashMap::new(),
             pointer_symbols: HashMap::new(),
             xref_source_index: BTreeMap::new(),
-            xref_target_index: BTreeMap::new()
+            xref_target_index: BTreeMap::new(),
         }
     }
 
     /// Regenerate internal indexes that aren't serialized to disk
-    /// 
+    ///
     /// TODO: Find a way to get rid of this and do it alongside deserialization
     pub fn update_indexes(&mut self) {
         if self.was_deserialized {
@@ -100,13 +117,19 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
 
             for (id, xref) in self.xrefs.iter().enumerate() {
                 let source = xref.as_source();
-                let source_bukkit = self.xref_source_index.entry(source.clone()).or_insert_with(|| HashSet::new());
+                let source_bukkit = self
+                    .xref_source_index
+                    .entry(source.clone())
+                    .or_insert_with(|| HashSet::new());
 
                 source_bukkit.insert(id);
-                
+
                 let target = xref.as_target();
                 if let Some(target) = target {
-                    let target_bukkit = self.xref_target_index.entry(target.clone()).or_insert_with(|| HashSet::new());
+                    let target_bukkit = self
+                        .xref_target_index
+                        .entry(target.clone())
+                        .or_insert_with(|| HashSet::new());
 
                     target_bukkit.insert(id);
                 }
@@ -126,9 +149,14 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
     }
 
     /// Change a given symbol record's label or pointer association.
-    /// 
+    ///
     /// Fields provided as None will be left as it is.
-    pub fn update_symbol(&mut self, sym_id: usize, new_label: Option<ast::Label>, new_pointer: Option<memory::Pointer<P>>) {
+    pub fn update_symbol(
+        &mut self,
+        sym_id: usize,
+        new_label: Option<ast::Label>,
+        new_pointer: Option<memory::Pointer<P>>,
+    ) {
         if let Some(sym) = self.symbols.get_mut(sym_id) {
             if let Some(new_label) = new_label {
                 self.label_symbols.remove(sym.as_label());
@@ -146,7 +174,7 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
 
     /// Ensure a symbol exists within the database with a given label and
     /// pointer.
-    /// 
+    ///
     /// This function takes some precautions to avoid inserting duplicate labels
     /// into the symbol table. Specifically, if the label already exists, we
     /// repoint it to the new pointer. Furthermore, if a placeholder label
@@ -179,14 +207,20 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
     }
 
     /// Create a label for a location that is not named in the database.
-    pub fn insert_placeholder_label(&mut self, ptr: memory::Pointer<P>, kind: analysis::ReferenceKind) -> ast::Label
-        where P: UpperHex {
+    pub fn insert_placeholder_label(
+        &mut self,
+        ptr: memory::Pointer<P>,
+        kind: analysis::ReferenceKind,
+    ) -> ast::Label
+    where
+        P: UpperHex,
+    {
         let mut name = format!("{}", kind);
 
         for (_, key, cval) in ptr.iter_contexts() {
             name = match cval.into_concrete() {
                 Some(cval) => format!("{}_{:X}", name, cval),
-                _ => format!("{}_{}??", name, key)
+                _ => format!("{}_{}??", name, key),
             };
         }
 
@@ -199,11 +233,15 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
 
     pub fn insert_crossreference(&mut self, myref: analysis::Reference<P>) {
         let id = self.xrefs.len();
-        let source_bucket = self.xref_source_index.entry(myref.as_source().clone()).or_insert_with(|| HashSet::new());
+        let source_bucket = self
+            .xref_source_index
+            .entry(myref.as_source().clone())
+            .or_insert_with(|| HashSet::new());
 
         for other_id in source_bucket.iter() {
             if let Some(other) = self.xrefs.get(*other_id) {
-                if other.as_source() == myref.as_source() && other.as_target() == myref.as_target() {
+                if other.as_source() == myref.as_source() && other.as_target() == myref.as_target()
+                {
                     return;
                 }
             }
@@ -211,7 +249,10 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
 
         source_bucket.insert(id);
         if let Some(target) = myref.as_target() {
-            self.xref_target_index.entry(target.clone()).or_insert_with(|| HashSet::new()).insert(id);
+            self.xref_target_index
+                .entry(target.clone())
+                .or_insert_with(|| HashSet::new())
+                .insert(id);
         }
 
         self.xrefs.push(myref);
@@ -242,7 +283,11 @@ impl<P, S> Database<P, S> where P: analysis::Mappable {
     }
 }
 
-impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: memory::Offset<P> {
+impl<P, S> Database<P, S>
+where
+    P: analysis::Mappable + memory::PtrNum<S>,
+    S: memory::Offset<P>,
+{
     pub fn find_block_membership(&self, ptr: &memory::Pointer<P>) -> Option<usize> {
         //TODO: This needs to be way higher performance than a linear scan
         for (i, ref block) in self.blocks.iter().enumerate() {
@@ -256,10 +301,10 @@ impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: me
 
     /// Given a block number and a split point, split the block and return the
     /// second block's location.
-    /// 
+    ///
     /// If the new block size would cause the current block to shrink, a new
     /// block is created and it's id is returned. Otherwise, None is returned.
-    /// 
+    ///
     /// If an invalid block ID is given, this function also returns None.
     pub fn split_block(&mut self, block_id: usize, new_size: S) -> Option<usize> {
         let block = self.blocks.get_mut(block_id);
@@ -269,7 +314,9 @@ impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: me
                 let remaining_size = block.as_length().clone() - new_size.clone();
 
                 if let Ok(remaining_size) = S::try_from(remaining_size) {
-                    let new_block_start = block.as_start().contextualize(P::from(block.as_start().as_pointer().clone() + new_size.clone()));
+                    let new_block_start = block.as_start().contextualize(P::from(
+                        block.as_start().as_pointer().clone() + new_size.clone(),
+                    ));
 
                     *block = analysis::Block::from_parts(block.as_start().clone(), new_size);
                     let new_block = analysis::Block::from_parts(new_block_start, remaining_size);
@@ -287,20 +334,42 @@ impl<P, S> Database<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: me
 
     /// Given a contextualized memory range, return all xref IDs originating
     /// from that memory range.
-    pub fn find_xrefs_from<'a>(&'a self, from_start: &memory::Pointer<P>, from_length: S) -> impl Iterator<Item = usize> + 'a
-        where <P as Add<S>>::Output: Into<P> {
+    pub fn find_xrefs_from<'a>(
+        &'a self,
+        from_start: &memory::Pointer<P>,
+        from_length: S,
+    ) -> impl Iterator<Item = usize> + 'a
+    where
+        <P as Add<S>>::Output: Into<P>,
+    {
         let from_end = from_start.clone() + from_length.clone();
-        
-        return self.xref_source_index.range(from_start..&from_end.into_ptr()).map(|(_,v)| v).flatten().map(|v| *v);
+
+        return self
+            .xref_source_index
+            .range(from_start..&from_end.into_ptr())
+            .map(|(_, v)| v)
+            .flatten()
+            .map(|v| *v);
     }
 
     /// Given a contextualized memory range, return all xref IDs targeting that
     /// memory range.
-    pub fn find_xrefs_to<'a>(&'a self, to_start: &memory::Pointer<P>, to_length: S) -> impl Iterator<Item = usize> + 'a
-        where <P as Add<S>>::Output: Into<P> {
+    pub fn find_xrefs_to<'a>(
+        &'a self,
+        to_start: &memory::Pointer<P>,
+        to_length: S,
+    ) -> impl Iterator<Item = usize> + 'a
+    where
+        <P as Add<S>>::Output: Into<P>,
+    {
         let to_end = to_start.clone() + to_length.clone();
-        
-        return self.xref_target_index.range(to_start..&to_end.into_ptr()).map(|(_,v)| v).flatten().map(|v| *v);
+
+        return self
+            .xref_target_index
+            .range(to_start..&to_end.into_ptr())
+            .map(|(_, v)| v)
+            .flatten()
+            .map(|v| *v);
     }
 
     /// Search for all crossreferences whose static target has not yet been

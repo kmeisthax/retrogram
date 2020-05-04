@@ -1,8 +1,8 @@
 //! Operand AST type
 
-use std::str;
+use crate::ast::{Label, Literal};
 use crate::memory;
-use crate::ast::{Literal, Label};
+use std::str;
 
 #[derive(Clone, Debug)]
 pub enum Operand<I, S, F, P> {
@@ -34,7 +34,7 @@ pub enum Operand<I, S, F, P> {
 
     ///A symbol suffixed to an operand
     SuffixSymbol(Box<Operand<I, S, F, P>>, String),
-    
+
     ///A symbol that wraps an operand
     WrapperSymbol(String, Vec<Operand<I, S, F, P>>, String),
 }
@@ -44,15 +44,24 @@ impl<I, S, F, P> Operand<I, S, F, P> {
         Operand::Symbol(sym.to_string())
     }
 
-    pub fn int<MI>(int: MI) -> Self where I: From<MI> {
+    pub fn int<MI>(int: MI) -> Self
+    where
+        I: From<MI>,
+    {
         Operand::Literal(Literal::Integer(I::from(int)))
     }
 
-    pub fn sint<MI>(int: MI) -> Self where S: From<MI> {
+    pub fn sint<MI>(int: MI) -> Self
+    where
+        S: From<MI>,
+    {
         Operand::Literal(Literal::SignedInteger(S::from(int)))
     }
 
-    pub fn float<MF>(flot: MF) -> Self where F: From<MF> {
+    pub fn float<MF>(flot: MF) -> Self
+    where
+        F: From<MF>,
+    {
         Operand::Literal(Literal::Float(F::from(flot)))
     }
 

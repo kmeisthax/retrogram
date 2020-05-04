@@ -1,20 +1,26 @@
 //! ROM binary dump image types
 
-use std::marker::PhantomData;
+use crate::maths::CheckedSub;
+use crate::memory::{Image, Offset, Pointer};
 use std::convert::TryFrom;
 use std::io;
-use crate::maths::CheckedSub;
-use crate::memory::{Pointer, Image, Offset};
+use std::marker::PhantomData;
 
 pub struct ROMBinaryImage<P, MV> {
     data: Vec<MV>,
-    pdata: PhantomData<P>
+    pdata: PhantomData<P>,
 }
 
-impl<P, MV> ROMBinaryImage<P, MV> where MV: From<u8> {
+impl<P, MV> ROMBinaryImage<P, MV>
+where
+    MV: From<u8>,
+{
     /// Read a ROM image procured from a ROM whose data width is 8 bits or
     /// smaller.
-    pub fn read_bytes<F>(file: &mut F) -> io::Result<ROMBinaryImage<P, MV>> where F: io::Read {
+    pub fn read_bytes<F>(file: &mut F) -> io::Result<ROMBinaryImage<P, MV>>
+    where
+        F: io::Read,
+    {
         let mut data = Vec::new();
         file.read_to_end(&mut data)?;
 
@@ -25,12 +31,16 @@ impl<P, MV> ROMBinaryImage<P, MV> where MV: From<u8> {
 
         Ok(ROMBinaryImage {
             data: conv_data,
-            pdata: PhantomData
+            pdata: PhantomData,
         })
     }
 }
 
-impl<P, MV> Image for ROMBinaryImage<P, MV> where P: Clone + CheckedSub, usize: Offset<P> {
+impl<P, MV> Image for ROMBinaryImage<P, MV>
+where
+    P: Clone + CheckedSub,
+    usize: Offset<P>,
+{
     type Pointer = P;
     type Offset = usize;
     type Data = MV;
@@ -39,10 +49,14 @@ impl<P, MV> Image for ROMBinaryImage<P, MV> where P: Clone + CheckedSub, usize: 
         self.data.get(offset..offset + count)
     }
 
-    fn decode_addr(&self, ptr: &Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset> {
+    fn decode_addr(
+        &self,
+        ptr: &Pointer<Self::Pointer>,
+        base: Self::Pointer,
+    ) -> Option<Self::Offset> {
         match ptr.as_pointer().clone().checked_sub(base) {
             Some(p) => usize::try_from(p).ok(),
-            None => None
+            None => None,
         }
     }
 

@@ -1,19 +1,19 @@
 //! CLI commands
 
+mod backref;
 mod common;
 mod dis;
-mod scan;
 mod import;
-mod backref;
-mod rename;
-mod traits;
 mod main;
+mod rename;
+mod scan;
+mod traits;
 
+pub use backref::backref;
 pub use common::Command;
 pub use dis::dis;
-pub use scan::scan;
 pub use import::import;
-pub use backref::backref;
-pub use rename::rename;
-pub use traits::*;
 pub use main::main;
+pub use rename::rename;
+pub use scan::scan;
+pub use traits::*;

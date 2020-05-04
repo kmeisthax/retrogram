@@ -1,22 +1,22 @@
 //! My number traits
 
-use std::ops::{Shl, Add, Sub, Mul};
 use std::num::ParseIntError;
+use std::ops::{Add, Mul, Shl, Sub};
 
 /// A trait which indicates the number of left shifts of the given type's
 /// smallest value (1) are required in order to overflow that type.
-/// 
+///
 /// It only makes sense to implement BoundWidth on types which can meaningfully
 /// be assembled and disassembled from a wordstream of differently sized types
 /// by shifting and adding the words together (see `read_manywords_*` on
 /// `memory::Memory`).
-/// 
+///
 /// The `RHS` of a `BoundWidth` impl must match the `RHS` of a valid `Shl` impl
 /// on the same type. The resulting value of `bound_width` is thus the
 /// overflowing shift count when shifted by something of that type.
-/// 
+///
 /// #The limits of BoundWidth semantics
-/// 
+///
 /// If you are implementing a numeral system with a different base or other
 /// exotic requirements, you too can leverage BoundWidth to explain how to
 /// read your type from smaller segments of the same type. For example, if you
@@ -25,7 +25,7 @@ use std::num::ParseIntError;
 /// would thus indicate how many *digits* wide your type was (instead of bits)
 /// and it would be possible to segment and join these decimal values into a
 /// decimally-valued memory and processor architecture for analysis.
-pub trait BoundWidth<RHS = Self> : Shl<RHS> {
+pub trait BoundWidth<RHS = Self>: Shl<RHS> {
     fn bound_width() -> RHS;
 }
 
@@ -152,7 +152,7 @@ boundwidth_impl!(i128, isize, 128);
 
 /// Reimplementation of the num_traits `CheckedSub` trait, except with the
 /// ability to specify a different RHS and Output type.
-/// 
+///
 /// num_traits doesn't support this behavior because Rust itself doesn't define
 /// checked maths with different types of operands and output parameters.
 pub trait CheckedSub<RHS = Self>: Sized + Sub<RHS> {
@@ -175,7 +175,7 @@ wrap_existing_impl!(CheckedSub, checked_sub, isize, isize, Option<isize>);
 
 /// Reimplementation of the num_traits `CheckedAdd` trait, except with the
 /// ability to specify a different RHS and Output type.
-/// 
+///
 /// num_traits doesn't support this behavior because Rust itself doesn't define
 /// checked maths with different types of operands and output parameters.
 pub trait CheckedAdd<RHS = Self>: Sized + Add<RHS> {
@@ -214,7 +214,10 @@ wrap_existing_impl!(WrappingMul, wrapping_mul, i64, i64, i64);
 wrap_existing_impl!(WrappingMul, wrapping_mul, i128, i128, i128);
 wrap_existing_impl!(WrappingMul, wrapping_mul, isize, isize, isize);
 
-pub trait FromStrRadix where Self: Sized {
+pub trait FromStrRadix
+where
+    Self: Sized,
+{
     fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError>;
 }
 

@@ -1,13 +1,13 @@
 //! Population count / Hamming Weight / number of 1s and 0s
 
+use crate::maths::{u24, WrappingMul};
 use std::convert::TryFrom;
-use crate::maths::{WrappingMul, u24};
 
 /// Count the number of symbols in a bitwise value.
 pub trait Popcount {
     /// The resulting output of a successful population count.
-    /// 
-    /// Usually, this is an integer, though population counts on 
+    ///
+    /// Usually, this is an integer, though population counts on
     type Output;
 
     /// Count the number of one symbols in the binary representation of an integer.
@@ -51,7 +51,8 @@ impl Popcount for u24 {
 
     fn pop_count(mut self) -> Self::Output {
         self -= (self >> 1) & u24::try_from(0x555555 as u32).unwrap();
-        self = (self & u24::try_from(0x333333 as u32).unwrap()) + ((self >> 2) & u24::try_from(0x333333 as u32).unwrap());
+        self = (self & u24::try_from(0x333333 as u32).unwrap())
+            + ((self >> 2) & u24::try_from(0x333333 as u32).unwrap());
         self = (self + (self >> 4)) & u24::try_from(0x0F0F0F as u32).unwrap();
         self.wrapping_mul(u24::try_from(0x010101 as u32).unwrap()) >> 16
     }
@@ -96,7 +97,8 @@ impl Popcount for u128 {
 
     fn pop_count(mut self) -> Self::Output {
         self -= (self >> 1) & 0x55555555555555555555555555555555;
-        self = (self & 0x33333333333333333333333333333333) + ((self >> 2) & 0x33333333333333333333333333333333);
+        self = (self & 0x33333333333333333333333333333333)
+            + ((self >> 2) & 0x33333333333333333333333333333333);
         self = (self + (self >> 4)) & 0x0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F;
         self.wrapping_mul(0x01010101010101010101010101010101) >> 120
     }

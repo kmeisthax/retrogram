@@ -1,28 +1,37 @@
 //! Top-level AST type which represents a single section.
 
-use std::slice;
-use crate::memory;
 use crate::ast::Directive;
+use crate::memory;
+use std::slice;
 
 #[derive(Clone, Debug)]
 pub struct Section<I, SI, F, P, MV, S> {
     name: String,
-    directives: Vec<(Directive<I, SI, F, P, MV, S>, memory::Pointer<P>)>
+    directives: Vec<(Directive<I, SI, F, P, MV, S>, memory::Pointer<P>)>,
 }
 
-impl<I, SI, F, P, MV, S> Section<I, SI, F, P, MV, S> where P: Clone {
+impl<I, SI, F, P, MV, S> Section<I, SI, F, P, MV, S>
+where
+    P: Clone,
+{
     pub fn new(name: &str) -> Self {
         Section {
             name: name.to_string(),
-            directives: Vec::new()
+            directives: Vec::new(),
         }
     }
 
-    pub fn iter_directives(&self) -> slice::Iter<(Directive<I, SI, F, P, MV, S>, memory::Pointer<P>)> {
+    pub fn iter_directives(
+        &self,
+    ) -> slice::Iter<(Directive<I, SI, F, P, MV, S>, memory::Pointer<P>)> {
         self.directives.iter()
     }
 
-    pub fn append_directive(&mut self, dir: Directive<I, SI, F, P, MV, S>, loc: memory::Pointer<P>) {
+    pub fn append_directive(
+        &mut self,
+        dir: Directive<I, SI, F, P, MV, S>,
+        loc: memory::Pointer<P>,
+    ) {
         self.directives.push((dir, loc));
     }
 

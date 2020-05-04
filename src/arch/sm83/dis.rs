@@ -1,8 +1,8 @@
-use crate::{analysis, memory};
-use crate::ast::Operand as op;
-use crate::ast::Instruction as inst;
 use crate::arch::sm83;
-use crate::arch::sm83::{Pointer, Bus, Operand, Disasm};
+use crate::arch::sm83::{Bus, Disasm, Operand, Pointer};
+use crate::ast::Instruction as inst;
+use crate::ast::Operand as op;
+use crate::{analysis, memory};
 
 fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
@@ -20,18 +20,22 @@ fn dptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     op::miss()
 }
 
-fn cptr_target(p: &memory::Pointer<Pointer>, mem: &Bus, kind: analysis::ReferenceKind) -> analysis::Reference<Pointer> {
+fn cptr_target(
+    p: &memory::Pointer<Pointer>,
+    mem: &Bus,
+    kind: analysis::ReferenceKind,
+) -> analysis::Reference<Pointer> {
     if let Some(lobit) = mem.read_leword::<u16>(p).into_concrete() {
         return analysis::Reference::new_static_ref(p.clone() - 1, p.contextualize(lobit), kind);
     }
 
-    return analysis::Reference::new_dyn_ref(p.clone() - 1, kind)
+    return analysis::Reference::new_dyn_ref(p.clone() - 1, kind);
 }
 
 fn cptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     match mem.read_leword::<u16>(p).into_concrete() {
         Some(target) => op::cptr(p.contextualize(target)),
-        None => op::miss()
+        None => op::miss(),
     }
 }
 
@@ -43,19 +47,25 @@ fn int_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     op::miss()
 }
 
-fn pcrel_target(p: &memory::Pointer<Pointer>, mem: &Bus, kind: analysis::ReferenceKind) -> analysis::Reference<Pointer> {
+fn pcrel_target(
+    p: &memory::Pointer<Pointer>,
+    mem: &Bus,
+    kind: analysis::ReferenceKind,
+) -> analysis::Reference<Pointer> {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         let target = ((p.as_pointer() + 1) as i16 + (lobit as i8) as i16) as u16;
         return analysis::Reference::new_static_ref(p.clone() - 1, p.contextualize(target), kind);
     }
 
-    return analysis::Reference::new_dyn_ref(p.clone() - 1, kind)
+    return analysis::Reference::new_dyn_ref(p.clone() - 1, kind);
 }
 
 fn pcrel_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     match mem.read_unit(p).into_concrete() {
-        Some(target) => op::cptr(p.contextualize(((p.as_pointer() + 1) as i16 + (target as i8) as i16) as u16)),
-        None => op::miss()
+        Some(target) => {
+            op::cptr(p.contextualize(((p.as_pointer() + 1) as i16 + (target as i8) as i16) as u16))
+        }
+        None => op::miss(),
     }
 }
 
@@ -100,9 +110,9 @@ static ALU_BITOPS: [&str; 8] = ["rlca", "rrca", "rla", "rra", "daa", "cpl", "scf
 static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swap", "srl"];
 
 /// Disassemble the instruction at `p` in `mem`.
-/// 
+///
 /// This function returns:
-/// 
+///
 ///  * A string representation of the instruction encountered, if there is a
 ///    valid instruction at P; otherwise `None`
 ///  * The offset to the next instruction, usually also the size of the current
@@ -117,51 +127,207 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///    if is_nonfinal is returned as True and does not need to be provided here.
 pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> sm83::Result<Disasm> {
     match mem.read_unit(p).into_concrete() {
-        Some(0xCB) => {
-            match mem.read_unit(&(p.clone()+1)).into_concrete() {
-                Some(subop) => {
-                    let targetreg = ALU_TARGET_REGS[(subop & 0x07) as usize].clone();
-                    let new_bitop = NEW_ALU_BITOPS[((subop >> 3) & 0x07) as usize];
+        Some(0xCB) => match mem.read_unit(&(p.clone() + 1)).into_concrete() {
+            Some(subop) => {
+                let targetreg = ALU_TARGET_REGS[(subop & 0x07) as usize].clone();
+                let new_bitop = NEW_ALU_BITOPS[((subop >> 3) & 0x07) as usize];
 
-                    match ((subop >> 6) & 0x03, (subop >> 3) & 0x07, subop & 0x07) {
-                        (0, _, _) => Ok(Disasm::new(inst::new(new_bitop, vec![targetreg]), 2, analysis::Flow::Normal, vec![])),
-                        (1, bit, _) => Ok(Disasm::new(inst::new("bit", vec![op::int(bit), targetreg]), 2, analysis::Flow::Normal, vec![])),
-                        (2, bit, _) => Ok(Disasm::new(inst::new("res", vec![op::int(bit), targetreg]), 2, analysis::Flow::Normal, vec![])),
-                        (3, bit, _) => Ok(Disasm::new(inst::new("set", vec![op::int(bit), targetreg]), 2, analysis::Flow::Normal, vec![])),
-                        _ => Err(analysis::Error::InvalidInstruction)
-                    }
-                },
-                _ => Err(analysis::Error::UnconstrainedMemory(p.clone() + 1))
+                match ((subop >> 6) & 0x03, (subop >> 3) & 0x07, subop & 0x07) {
+                    (0, _, _) => Ok(Disasm::new(
+                        inst::new(new_bitop, vec![targetreg]),
+                        2,
+                        analysis::Flow::Normal,
+                        vec![],
+                    )),
+                    (1, bit, _) => Ok(Disasm::new(
+                        inst::new("bit", vec![op::int(bit), targetreg]),
+                        2,
+                        analysis::Flow::Normal,
+                        vec![],
+                    )),
+                    (2, bit, _) => Ok(Disasm::new(
+                        inst::new("res", vec![op::int(bit), targetreg]),
+                        2,
+                        analysis::Flow::Normal,
+                        vec![],
+                    )),
+                    (3, bit, _) => Ok(Disasm::new(
+                        inst::new("set", vec![op::int(bit), targetreg]),
+                        2,
+                        analysis::Flow::Normal,
+                        vec![],
+                    )),
+                    _ => Err(analysis::Error::InvalidInstruction),
+                }
             }
-        }
+            _ => Err(analysis::Error::UnconstrainedMemory(p.clone() + 1)),
+        },
 
         //Z80 instructions that don't fit the pattern decoder below
-        Some(0x00) => Ok(Disasm::new(inst::new("nop", vec![]), 1, analysis::Flow::Normal, vec![])),
-        Some(0x08) => Ok(Disasm::new(inst::new("ld", vec![op::indir(dptr_op16(p, mem)), op::sym("sp")]), 3, analysis::Flow::Normal, vec![])),
-        Some(0x10) => Ok(Disasm::new(inst::new("stop", vec![]), 1, analysis::Flow::Normal, vec![])),
-        Some(0x18) => Ok(Disasm::new(inst::new("jr", vec![pcrel_op8(&(p.clone()+1), mem)]), 2, analysis::Flow::Branching(false), vec![pcrel_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)])),
-        Some(0x76) => Ok(Disasm::new(inst::new("halt", vec![]), 1, analysis::Flow::Normal, vec![])), //encoded as ld [hl], [hl]
+        Some(0x00) => Ok(Disasm::new(
+            inst::new("nop", vec![]),
+            1,
+            analysis::Flow::Normal,
+            vec![],
+        )),
+        Some(0x08) => Ok(Disasm::new(
+            inst::new("ld", vec![op::indir(dptr_op16(p, mem)), op::sym("sp")]),
+            3,
+            analysis::Flow::Normal,
+            vec![],
+        )),
+        Some(0x10) => Ok(Disasm::new(
+            inst::new("stop", vec![]),
+            1,
+            analysis::Flow::Normal,
+            vec![],
+        )),
+        Some(0x18) => Ok(Disasm::new(
+            inst::new("jr", vec![pcrel_op8(&(p.clone() + 1), mem)]),
+            2,
+            analysis::Flow::Branching(false),
+            vec![pcrel_target(
+                &(p.clone() + 1),
+                mem,
+                analysis::ReferenceKind::Code,
+            )],
+        )),
+        Some(0x76) => Ok(Disasm::new(
+            inst::new("halt", vec![]),
+            1,
+            analysis::Flow::Normal,
+            vec![],
+        )), //encoded as ld [hl], [hl]
 
-        Some(0xC3) => Ok(Disasm::new(inst::new("jp", vec![cptr_op16(&(p.clone()+1), mem)]), 3, analysis::Flow::Branching(false), vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)])),
-        Some(0xCD) => Ok(Disasm::new(inst::new("call", vec![cptr_op16(&(p.clone()+1), mem)]), 3, analysis::Flow::Normal, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Subroutine)])),
+        Some(0xC3) => Ok(Disasm::new(
+            inst::new("jp", vec![cptr_op16(&(p.clone() + 1), mem)]),
+            3,
+            analysis::Flow::Branching(false),
+            vec![cptr_target(
+                &(p.clone() + 1),
+                mem,
+                analysis::ReferenceKind::Code,
+            )],
+        )),
+        Some(0xCD) => Ok(Disasm::new(
+            inst::new("call", vec![cptr_op16(&(p.clone() + 1), mem)]),
+            3,
+            analysis::Flow::Normal,
+            vec![cptr_target(
+                &(p.clone() + 1),
+                mem,
+                analysis::ReferenceKind::Subroutine,
+            )],
+        )),
 
-        Some(0xC9) => Ok(Disasm::new(inst::new("ret", vec![]), 1, analysis::Flow::Returning, vec![])),
-        Some(0xD9) => Ok(Disasm::new(inst::new("reti", vec![]), 1, analysis::Flow::Returning, vec![])),
-        Some(0xE9) => Ok(Disasm::new(inst::new("jp", vec![op::indir(op::sym("hl"))]), 1, analysis::Flow::Branching(false), vec![analysis::Reference::new_dyn_ref(p.clone(), analysis::ReferenceKind::Code)])),
-        Some(0xF9) => Ok(Disasm::new(inst::new("ld", vec![op::sym("sp"), op::sym("hl")]), 1, analysis::Flow::Normal, vec![])),
+        Some(0xC9) => Ok(Disasm::new(
+            inst::new("ret", vec![]),
+            1,
+            analysis::Flow::Returning,
+            vec![],
+        )),
+        Some(0xD9) => Ok(Disasm::new(
+            inst::new("reti", vec![]),
+            1,
+            analysis::Flow::Returning,
+            vec![],
+        )),
+        Some(0xE9) => Ok(Disasm::new(
+            inst::new("jp", vec![op::indir(op::sym("hl"))]),
+            1,
+            analysis::Flow::Branching(false),
+            vec![analysis::Reference::new_dyn_ref(
+                p.clone(),
+                analysis::ReferenceKind::Code,
+            )],
+        )),
+        Some(0xF9) => Ok(Disasm::new(
+            inst::new("ld", vec![op::sym("sp"), op::sym("hl")]),
+            1,
+            analysis::Flow::Normal,
+            vec![],
+        )),
 
-        Some(0xE0) => Ok(Disasm::new(inst::new("ldh", vec![op::indir(hram_op8(&(p.clone()+1), mem)), op::sym("a")]), 2, analysis::Flow::Normal, vec![])),
-        Some(0xE8) => Ok(Disasm::new(inst::new("add", vec![op::sym("sp"), int_op8(&(p.clone()+1), mem)]), 2, analysis::Flow::Normal, vec![])),
-        Some(0xF0) => Ok(Disasm::new(inst::new("ldh", vec![op::sym("a"), op::indir(hram_op8(&(p.clone()+1), mem))]), 2, analysis::Flow::Normal, vec![])),
-        Some(0xF8) => Ok(Disasm::new(inst::new("ld", vec![op::sym("hl"), op::add(op::sym("sp"), int_op8(&(p.clone()+1), mem))]), 2, analysis::Flow::Normal, vec![])),
+        Some(0xE0) => Ok(Disasm::new(
+            inst::new(
+                "ldh",
+                vec![op::indir(hram_op8(&(p.clone() + 1), mem)), op::sym("a")],
+            ),
+            2,
+            analysis::Flow::Normal,
+            vec![],
+        )),
+        Some(0xE8) => Ok(Disasm::new(
+            inst::new("add", vec![op::sym("sp"), int_op8(&(p.clone() + 1), mem)]),
+            2,
+            analysis::Flow::Normal,
+            vec![],
+        )),
+        Some(0xF0) => Ok(Disasm::new(
+            inst::new(
+                "ldh",
+                vec![op::sym("a"), op::indir(hram_op8(&(p.clone() + 1), mem))],
+            ),
+            2,
+            analysis::Flow::Normal,
+            vec![],
+        )),
+        Some(0xF8) => Ok(Disasm::new(
+            inst::new(
+                "ld",
+                vec![
+                    op::sym("hl"),
+                    op::add(op::sym("sp"), int_op8(&(p.clone() + 1), mem)),
+                ],
+            ),
+            2,
+            analysis::Flow::Normal,
+            vec![],
+        )),
 
-        Some(0xE2) => Ok(Disasm::new(inst::new("ld", vec![op::indir(op::sym("c")), op::sym("a")]), 1, analysis::Flow::Normal, vec![])),
-        Some(0xEA) => Ok(Disasm::new(inst::new("ld", vec![op::indir(dptr_op16(&(p.clone()+1), mem)), op::sym("a")]), 3, analysis::Flow::Normal, vec![])),
-        Some(0xF2) => Ok(Disasm::new(inst::new("ld", vec![op::sym("a"), op::indir(op::sym("c"))]), 1, analysis::Flow::Normal, vec![])),
-        Some(0xFA) => Ok(Disasm::new(inst::new("ld", vec![op::sym("a"), op::indir(dptr_op16(&(p.clone()+1), mem))]), 3, analysis::Flow::Normal, vec![])),
+        Some(0xE2) => Ok(Disasm::new(
+            inst::new("ld", vec![op::indir(op::sym("c")), op::sym("a")]),
+            1,
+            analysis::Flow::Normal,
+            vec![],
+        )),
+        Some(0xEA) => Ok(Disasm::new(
+            inst::new(
+                "ld",
+                vec![op::indir(dptr_op16(&(p.clone() + 1), mem)), op::sym("a")],
+            ),
+            3,
+            analysis::Flow::Normal,
+            vec![],
+        )),
+        Some(0xF2) => Ok(Disasm::new(
+            inst::new("ld", vec![op::sym("a"), op::indir(op::sym("c"))]),
+            1,
+            analysis::Flow::Normal,
+            vec![],
+        )),
+        Some(0xFA) => Ok(Disasm::new(
+            inst::new(
+                "ld",
+                vec![op::sym("a"), op::indir(dptr_op16(&(p.clone() + 1), mem))],
+            ),
+            3,
+            analysis::Flow::Normal,
+            vec![],
+        )),
 
-        Some(0xF3) => Ok(Disasm::new(inst::new("di", vec![]), 1, analysis::Flow::Normal, vec![])),
-        Some(0xFB) => Ok(Disasm::new(inst::new("ei", vec![]), 1, analysis::Flow::Normal, vec![])),
+        Some(0xF3) => Ok(Disasm::new(
+            inst::new("di", vec![]),
+            1,
+            analysis::Flow::Normal,
+            vec![],
+        )),
+        Some(0xFB) => Ok(Disasm::new(
+            inst::new("ei", vec![]),
+            1,
+            analysis::Flow::Normal,
+            vec![],
+        )),
 
         //Z80 instructions that follow a particular pattern
         Some(op) => {
@@ -176,38 +342,174 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> sm83::Result<Disa
 
             //decode `op` into aab?cddd. This creates a nice visual table for
             //the Z80's semiperiodic instruction encoding
-            match ((op >> 6) & 0x03, (op >> 5) & 0x01, (op >> 3) & 0x01, op & 0x07) {
+            match (
+                (op >> 6) & 0x03,
+                (op >> 5) & 0x01,
+                (op >> 3) & 0x01,
+                op & 0x07,
+            ) {
                 (0, 0, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* 00, 08, 10, 18 */
-                (0, 1, _, 0) => Ok(Disasm::new(inst::new("jr", vec![op::sym(condcode), pcrel_op8(&(p.clone()+1), mem)]), 2, analysis::Flow::Branching(true), vec![pcrel_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)])),
-                (0, _, 0, 1) => Ok(Disasm::new(inst::new("ld", vec![op::sym(targetpair), int_op16(&(p.clone()+1), mem)]), 3, analysis::Flow::Normal, vec![])),
-                (0, _, 1, 1) => Ok(Disasm::new(inst::new("add", vec![op::sym("hl"), op::sym(targetpair)]), 1, analysis::Flow::Normal, vec![])),
-                (0, _, 0, 2) => Ok(Disasm::new(inst::new("ld", vec![op::indir(op::sym(targetmem)), op::sym("a")]), 1, analysis::Flow::Normal, vec![])),
-                (0, _, 1, 2) => Ok(Disasm::new(inst::new("ld", vec![op::sym("a"), op::indir(op::sym(targetmem))]), 1, analysis::Flow::Normal, vec![])),
-                (0, _, 0, 3) => Ok(Disasm::new(inst::new("inc", vec![op::sym(targetpair)]), 1, analysis::Flow::Normal, vec![])),
-                (0, _, 1, 3) => Ok(Disasm::new(inst::new("dec", vec![op::sym(targetpair)]), 1, analysis::Flow::Normal, vec![])),
-                (0, _, _, 4) => Ok(Disasm::new(inst::new("inc", vec![targetreg]), 1, analysis::Flow::Normal, vec![])),
-                (0, _, _, 5) => Ok(Disasm::new(inst::new("dec", vec![targetreg]), 1, analysis::Flow::Normal, vec![])),
-                (0, _, _, 6) => Ok(Disasm::new(inst::new("ld", vec![targetreg, int_op8(&(p.clone()+1), mem)]), 2, analysis::Flow::Normal, vec![])),
-                (0, _, _, 7) => Ok(Disasm::new(inst::new(bitop, vec![]), 1, analysis::Flow::Normal, vec![])),
-                (1, _, _, _) => Ok(Disasm::new(inst::new("ld", vec![targetreg2, targetreg]), 1, analysis::Flow::Normal, vec![])),
-                (2, _, _, _) => Ok(Disasm::new(inst::new(aluop, vec![op::sym("a"), targetreg2]), 1, analysis::Flow::Normal, vec![])),
-                (3, 0, _, 0) => Ok(Disasm::new(inst::new("ret", vec![op::sym(condcode)]), 1, analysis::Flow::Branching(true), vec![])),
+                (0, 1, _, 0) => Ok(Disasm::new(
+                    inst::new(
+                        "jr",
+                        vec![op::sym(condcode), pcrel_op8(&(p.clone() + 1), mem)],
+                    ),
+                    2,
+                    analysis::Flow::Branching(true),
+                    vec![pcrel_target(
+                        &(p.clone() + 1),
+                        mem,
+                        analysis::ReferenceKind::Code,
+                    )],
+                )),
+                (0, _, 0, 1) => Ok(Disasm::new(
+                    inst::new(
+                        "ld",
+                        vec![op::sym(targetpair), int_op16(&(p.clone() + 1), mem)],
+                    ),
+                    3,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (0, _, 1, 1) => Ok(Disasm::new(
+                    inst::new("add", vec![op::sym("hl"), op::sym(targetpair)]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (0, _, 0, 2) => Ok(Disasm::new(
+                    inst::new("ld", vec![op::indir(op::sym(targetmem)), op::sym("a")]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (0, _, 1, 2) => Ok(Disasm::new(
+                    inst::new("ld", vec![op::sym("a"), op::indir(op::sym(targetmem))]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (0, _, 0, 3) => Ok(Disasm::new(
+                    inst::new("inc", vec![op::sym(targetpair)]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (0, _, 1, 3) => Ok(Disasm::new(
+                    inst::new("dec", vec![op::sym(targetpair)]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (0, _, _, 4) => Ok(Disasm::new(
+                    inst::new("inc", vec![targetreg]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (0, _, _, 5) => Ok(Disasm::new(
+                    inst::new("dec", vec![targetreg]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (0, _, _, 6) => Ok(Disasm::new(
+                    inst::new("ld", vec![targetreg, int_op8(&(p.clone() + 1), mem)]),
+                    2,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (0, _, _, 7) => Ok(Disasm::new(
+                    inst::new(bitop, vec![]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (1, _, _, _) => Ok(Disasm::new(
+                    inst::new("ld", vec![targetreg2, targetreg]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (2, _, _, _) => Ok(Disasm::new(
+                    inst::new(aluop, vec![op::sym("a"), targetreg2]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (3, 0, _, 0) => Ok(Disasm::new(
+                    inst::new("ret", vec![op::sym(condcode)]),
+                    1,
+                    analysis::Flow::Branching(true),
+                    vec![],
+                )),
                 (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
-                (3, _, 0, 1) => Ok(Disasm::new(inst::new("pop", vec![op::sym(stackpair)]), 1, analysis::Flow::Normal, vec![])),
+                (3, _, 0, 1) => Ok(Disasm::new(
+                    inst::new("pop", vec![op::sym(stackpair)]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
                 (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
-                (3, 0, _, 2) => Ok(Disasm::new(inst::new("jp", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)]), 3, analysis::Flow::Branching(true), vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Code)])),
+                (3, 0, _, 2) => Ok(Disasm::new(
+                    inst::new(
+                        "jp",
+                        vec![op::sym(condcode), cptr_op16(&(p.clone() + 1), mem)],
+                    ),
+                    3,
+                    analysis::Flow::Branching(true),
+                    vec![cptr_target(
+                        &(p.clone() + 1),
+                        mem,
+                        analysis::ReferenceKind::Code,
+                    )],
+                )),
                 (3, 1, _, 2) => Err(analysis::Error::Misinterpretation(1, false)), /* E2, EA, F2, FA */
                 (3, _, _, 3) => Err(analysis::Error::InvalidInstruction),
-                (3, 0, _, 4) => Ok(Disasm::new(inst::new("call", vec![op::sym(condcode), cptr_op16(&(p.clone()+1), mem)]), 3, analysis::Flow::Normal, vec![cptr_target(&(p.clone()+1), mem, analysis::ReferenceKind::Subroutine)])),
+                (3, 0, _, 4) => Ok(Disasm::new(
+                    inst::new(
+                        "call",
+                        vec![op::sym(condcode), cptr_op16(&(p.clone() + 1), mem)],
+                    ),
+                    3,
+                    analysis::Flow::Normal,
+                    vec![cptr_target(
+                        &(p.clone() + 1),
+                        mem,
+                        analysis::ReferenceKind::Subroutine,
+                    )],
+                )),
                 (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction),
-                (3, _, 0, 5) => Ok(Disasm::new(inst::new("push", vec![op::sym(stackpair)]), 1, analysis::Flow::Normal, vec![])),
+                (3, _, 0, 5) => Ok(Disasm::new(
+                    inst::new("push", vec![op::sym(stackpair)]),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
                 (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction),
-                (3, _, _, 6) => Ok(Disasm::new(inst::new(aluop, vec![op::sym("a"), int_op8(&(p.clone()+1), mem)]), 2, analysis::Flow::Normal, vec![])),
-                (3, _, _, 7) => Ok(Disasm::new(inst::new("rst", vec![op::cptr(p.contextualize((op & 0x38) as Pointer))]), 1, analysis::Flow::Normal, vec![analysis::Reference::new_static_ref(p.clone(), p.contextualize((op & 0x38) as u16), analysis::ReferenceKind::Subroutine)])),
+                (3, _, _, 6) => Ok(Disasm::new(
+                    inst::new(aluop, vec![op::sym("a"), int_op8(&(p.clone() + 1), mem)]),
+                    2,
+                    analysis::Flow::Normal,
+                    vec![],
+                )),
+                (3, _, _, 7) => Ok(Disasm::new(
+                    inst::new(
+                        "rst",
+                        vec![op::cptr(p.contextualize((op & 0x38) as Pointer))],
+                    ),
+                    1,
+                    analysis::Flow::Normal,
+                    vec![analysis::Reference::new_static_ref(
+                        p.clone(),
+                        p.contextualize((op & 0x38) as u16),
+                        analysis::ReferenceKind::Subroutine,
+                    )],
+                )),
 
-                _ => Err(analysis::Error::InvalidInstruction)
+                _ => Err(analysis::Error::InvalidInstruction),
             }
-        },
-        _ => Err(analysis::Error::UnconstrainedMemory(p.clone()))
+        }
+        _ => Err(analysis::Error::UnconstrainedMemory(p.clone())),
     }
 }

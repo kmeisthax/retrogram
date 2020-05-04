@@ -1,15 +1,15 @@
 //! Types needed to analyze references
 
-use std::fmt::{Display, Formatter, Result};
-use serde::{Serialize, Deserialize};
 use crate::{analysis, memory};
+use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter, Result};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ReferenceKind {
     Unknown,
     Data,
     Code,
-    Subroutine
+    Subroutine,
 }
 
 impl Display for ReferenceKind {
@@ -19,24 +19,34 @@ impl Display for ReferenceKind {
             ReferenceKind::Unknown => write!(f, "UNK"),
             ReferenceKind::Data => write!(f, "DAT"),
             ReferenceKind::Code => write!(f, "LOC"),
-            ReferenceKind::Subroutine => write!(f, "FUN")
+            ReferenceKind::Subroutine => write!(f, "FUN"),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Reference<P> where P: analysis::Mappable {
+pub struct Reference<P>
+where
+    P: analysis::Mappable,
+{
     from: memory::Pointer<P>,
     to: Option<memory::Pointer<P>>,
-    reftype: ReferenceKind
+    reftype: ReferenceKind,
 }
 
-impl<P> Reference<P> where P: analysis::Mappable {
-    pub fn new_static_ref(from: memory::Pointer<P>, to: memory::Pointer<P>, kind: ReferenceKind) -> Self {
+impl<P> Reference<P>
+where
+    P: analysis::Mappable,
+{
+    pub fn new_static_ref(
+        from: memory::Pointer<P>,
+        to: memory::Pointer<P>,
+        kind: ReferenceKind,
+    ) -> Self {
         Reference {
             from: from,
             to: Some(to),
-            reftype: kind
+            reftype: kind,
         }
     }
 
@@ -44,7 +54,7 @@ impl<P> Reference<P> where P: analysis::Mappable {
         Reference {
             from: from,
             to: None,
-            reftype: kind
+            reftype: kind,
         }
     }
 

@@ -3,7 +3,7 @@
 use crate::memory::Pointer;
 
 /// An Image is the contents of a given memory Region, if known.
-/// 
+///
 /// An Image's contents may originate from an executable file, a ROM chip, or a
 /// memory dump. The source is not important; but the data retrieved from an
 /// image must match what the actual program under analysis would see if it had
@@ -24,30 +24,38 @@ pub trait Image {
     fn retrieve(&self, offset: Self::Offset, count: Self::Offset) -> Option<&[Self::Data]>;
 
     /// Decode an architectural pointer to an image offset.
-    /// 
+    ///
     /// The given pointer must have a positive offset from the base pointer.
     /// If the offset is negative, or the pointer does not resolve to this
     /// particular image, then this function yields None.
-    /// 
+    ///
     /// Images can determine the current banking in use by querying the context
     /// for the appropriately named banking value.
-    fn decode_addr(&self, ptr: &Pointer<Self::Pointer>, base: Self::Pointer) -> Option<Self::Offset>;
+    fn decode_addr(
+        &self,
+        ptr: &Pointer<Self::Pointer>,
+        base: Self::Pointer,
+    ) -> Option<Self::Offset>;
 
     /// Given a pointer, remove all contexts from the pointer that are not
     /// necessary to decode it to an image offset.
     fn minimize_context(&self, ptr: Pointer<Self::Pointer>) -> Pointer<Self::Pointer> {
         ptr
     }
-    
+
     /// Given a pointer, insert any additional user-specified contexts into the
     /// pointer.
-    /// 
+    ///
     /// This function is used to parse user input. How many contexts are used,
     /// if any, and in what order, is wholly dependent on the Image type in
     /// question. Images are not required to implement this method, the default
     /// merely does not alter the pointer. Platforms should document their use
     /// of contexts as appropriate.
-    fn insert_user_context(&self, ptr: Pointer<Self::Pointer>, _ctxts: &[&str]) -> Pointer<Self::Pointer> {
+    fn insert_user_context(
+        &self,
+        ptr: Pointer<Self::Pointer>,
+        _ctxts: &[&str],
+    ) -> Pointer<Self::Pointer> {
         ptr
     }
 }

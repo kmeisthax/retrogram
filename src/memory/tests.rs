@@ -1,10 +1,10 @@
-use std::cmp::Ordering;
 use crate::memory::Pointer;
 use crate::reg::{New, Symbolic};
+use std::cmp::Ordering;
 
 #[test]
 fn pointer_contextless() {
-    let ptr1 : Pointer<u32> = Pointer::from(0x150);
+    let ptr1: Pointer<u32> = Pointer::from(0x150);
     let ptr2 = Pointer::from(0x250);
 
     assert_eq!(ptr1.partial_cmp(&ptr2), Some(Ordering::Less));
@@ -18,7 +18,7 @@ fn pointer_contextless() {
 
 #[test]
 fn pointer_same_context() {
-    let mut ptr1 : Pointer<u32> = Pointer::from(0x150);
+    let mut ptr1: Pointer<u32> = Pointer::from(0x150);
     let mut ptr2 = Pointer::from(0x250);
 
     ptr1.set_arch_context("R", Symbolic::new(1));
@@ -35,7 +35,7 @@ fn pointer_same_context() {
 
 #[test]
 fn pointer_different_context() {
-    let mut ptr1 : Pointer<u32> = Pointer::from(0x150);
+    let mut ptr1: Pointer<u32> = Pointer::from(0x150);
     let mut ptr2 = Pointer::from(0x150);
 
     ptr1.set_arch_context("R", Symbolic::new(2));
@@ -52,7 +52,7 @@ fn pointer_different_context() {
 
 #[test]
 fn pointer_unspecified_context() {
-    let ptr1 : Pointer<u32> = Pointer::from(0x150);
+    let ptr1: Pointer<u32> = Pointer::from(0x150);
     let mut ptr2 = Pointer::from(0x150);
 
     ptr2.set_arch_context("R", Symbolic::new(1));
@@ -68,7 +68,7 @@ fn pointer_unspecified_context() {
 
 #[test]
 fn pointer_symbolic_context() {
-    let mut ptr1 : Pointer<u32> = Pointer::from(0x150);
+    let mut ptr1: Pointer<u32> = Pointer::from(0x150);
     let mut ptr2 = Pointer::from(0x150);
 
     ptr1.set_arch_context("R", Symbolic::default());
@@ -85,7 +85,7 @@ fn pointer_symbolic_context() {
 
 #[test]
 fn pointer_multiple_context() {
-    let mut ptr1 : Pointer<u32> = Pointer::from(0x150);
+    let mut ptr1: Pointer<u32> = Pointer::from(0x150);
     let mut ptr2 = Pointer::from(0x150);
 
     ptr1.set_arch_context("R", Symbolic::new(1));
@@ -105,7 +105,7 @@ fn pointer_multiple_context() {
 
 #[test]
 fn pointer_multiple_eq_context() {
-    let mut ptr1 : Pointer<u32> = Pointer::from(0x150);
+    let mut ptr1: Pointer<u32> = Pointer::from(0x150);
     let mut ptr2 = Pointer::from(0x150);
 
     ptr1.set_arch_context("R", Symbolic::new(1));

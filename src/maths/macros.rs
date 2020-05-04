@@ -7,11 +7,11 @@ macro_rules! masked_conv_impl {
         impl From<$from_type> for $type {
             fn from(t: $from_type) -> Self {
                 $type {
-                    v: $wrap_type::from(t) & $mask
+                    v: $wrap_type::from(t) & $mask,
                 }
             }
         }
-    }
+    };
 }
 
 /// Allows falliable conversions into a given masked wrapper type from some
@@ -25,18 +25,16 @@ macro_rules! masked_tryconv_impl {
 
             fn try_from(t: $from_type) -> Result<Self, Self::Error> {
                 if t > $mask {
-                    return Err(None)
+                    return Err(None);
                 }
 
                 match $wrap_type::try_from(t) {
-                    Ok(v) => Ok($type {
-                        v: v & $mask
-                    }),
-                    Err(e) => Err(Some(e))
+                    Ok(v) => Ok($type { v: v & $mask }),
+                    Err(e) => Err(Some(e)),
                 }
             }
         }
-    }
+    };
 }
 
 macro_rules! unwrap_impl {
@@ -62,7 +60,7 @@ macro_rules! try_unwrap_impl {
 }
 
 /// Allows implementing binary operations on a wrapped type.
-/// 
+///
 /// All implementations are forwarded to the implementation provided by the
 /// target primitive, which is assumed to be `self.v`. If an RHS type is
 /// provided then the RHS is assumed to be primitive. Otherwise, we attempt to
@@ -74,7 +72,7 @@ macro_rules! binary_op_masked_impl {
 
             fn $method_name(self, rhs: Self) -> Self {
                 $type {
-                    v: (self.v.$method_name(rhs.v)) & $mask
+                    v: (self.v.$method_name(rhs.v)) & $mask,
                 }
             }
         }
@@ -85,7 +83,7 @@ macro_rules! binary_op_masked_impl {
 
             fn $method_name(self, rhs: $rhs_type) -> Self {
                 $type {
-                    v: (self.v.$method_name(rhs)) & $mask
+                    v: (self.v.$method_name(rhs)) & $mask,
                 }
             }
         }
@@ -93,19 +91,19 @@ macro_rules! binary_op_masked_impl {
 }
 
 /// Allows implementing binary operations on a wrapped type.
-/// 
+///
 /// All implementations are forwarded to the implementation provided by the
 /// target primitive, which is assumed to be `self.v`. If an RHS type is
 /// provided then the RHS is assumed to be primitive. Otherwise, we attempt to
 /// access `rhs.v` to unwrap a second primitive.
-/// 
+///
 /// This variant of the macro does not declare an Output type.
 macro_rules! binary_op_masked_impl_notype {
     ($type:ident, $trait_name:ident, $method_name:ident, $mask:expr) => {
         impl $trait_name for $type {
             fn $method_name(self, rhs: Self) -> Self {
                 $type {
-                    v: (self.v.$method_name(rhs.v)) & $mask
+                    v: (self.v.$method_name(rhs.v)) & $mask,
                 }
             }
         }
@@ -114,7 +112,7 @@ macro_rules! binary_op_masked_impl_notype {
         impl $trait_name<$rhs_type> for $type {
             fn $method_name(self, rhs: $rhs_type) -> Self {
                 $type {
-                    v: (self.v.$method_name(rhs)) & $mask
+                    v: (self.v.$method_name(rhs)) & $mask,
                 }
             }
         }
@@ -122,7 +120,7 @@ macro_rules! binary_op_masked_impl_notype {
 }
 
 /// Allows implementing binary operations on a wrapped type.
-/// 
+///
 /// All implementations are forwarded to the implementation provided by the
 /// target primitive, which is assumed to be `self.v`. If an RHS type is
 /// provided then the RHS is assumed to be primitive. Otherwise, we attempt to
@@ -147,7 +145,7 @@ macro_rules! assign_binary_op_masked_impl {
 }
 
 /// Declares the bit width of a particular type.
-/// 
+///
 /// The RHS parameter, as explained for `BoundWidth`, corresponds to the RHS of
 /// a given `Shl` implementation. Normally, the bound width is the same for all
 /// types.
@@ -159,7 +157,7 @@ macro_rules! boundwidth_impl {
                 $shifts
             }
         }
-    }
+    };
 }
 
 /// Wraps a given non-trait method in a trait for a type.
@@ -171,7 +169,7 @@ macro_rules! wrap_existing_impl {
                 <$t>::$method(self, v)
             }
         }
-    }
+    };
 }
 
 /// Wraps a given non-trait method in a trait for a type.
@@ -183,5 +181,5 @@ macro_rules! wrap_from_str_radix_impl {
                 <$t>::$method(v, radix)
             }
         }
-    }
+    };
 }

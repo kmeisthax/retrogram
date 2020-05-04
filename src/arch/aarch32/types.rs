@@ -1,13 +1,25 @@
 //! Types used by aarch32
 
-use crate::{memory, ast, analysis};
+use crate::{analysis, ast, memory};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Aarch32Register {
-    R0, R1, R2, R3,
-    R4, R5, R6, R7,
-    R8, R9, R10, R11,
-    R12, R13, R14, R15,
+    R0,
+    R1,
+    R2,
+    R3,
+    R4,
+    R5,
+    R6,
+    R7,
+    R8,
+    R9,
+    R10,
+    R11,
+    R12,
+    R13,
+    R14,
+    R15,
 }
 
 impl Aarch32Register {
@@ -31,7 +43,7 @@ impl Aarch32Register {
             13 => Some(R13),
             14 => Some(R14),
             15 => Some(R15),
-            _ => None
+            _ => None,
         }
     }
 
@@ -54,7 +66,7 @@ impl Aarch32Register {
             R12 => 12,
             R13 => 13,
             R14 => 14,
-            R15 => 15
+            R15 => 15,
         }
     }
 }
@@ -62,7 +74,7 @@ impl Aarch32Register {
 impl ToString for Aarch32Register {
     fn to_string(&self) -> String {
         use Aarch32Register::*;
-        
+
         match self {
             R0 => "R0".to_string(),
             R1 => "R1".to_string(),
@@ -79,7 +91,7 @@ impl ToString for Aarch32Register {
             R12 => "R12".to_string(),
             R13 => "R13".to_string(),
             R14 => "R14".to_string(),
-            R15 => "PC".to_string()
+            R15 => "PC".to_string(),
         }
     }
 }

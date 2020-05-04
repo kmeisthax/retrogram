@@ -2,9 +2,9 @@
 
 #[macro_use]
 mod macros;
-mod traits;
 mod num24bit;
 mod popcount;
+mod traits;
 
 pub use num24bit::u24;
 pub use popcount::Popcount;

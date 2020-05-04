@@ -1,18 +1,27 @@
 //! Types used in modeling the SM83
 
+use crate::{analysis, ast, memory, reg};
 use std::str;
-use crate::{memory, ast, reg, analysis};
 
 /// Enumeration of all architectural GBZ80 registers.
-/// 
+///
 /// Couple things to note:
-/// 
+///
 ///  * We don't consider register pairs (e.g. BC, DE, HL)
 ///  * F isn't considered special here
 ///  * SP has been treated as a register pair and split into S and P.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Register {
-    A, B, C, D, E, H, L, F, S, P
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+    F,
+    S,
+    P,
 }
 
 impl Register {
@@ -32,7 +41,7 @@ impl Register {
             "hld" => vec![Register::H, Register::L],
             "hli" => vec![Register::H, Register::L],
             "sp" => vec![Register::S, Register::P],
-            _ => vec![]
+            _ => vec![],
         }
     }
 }
@@ -56,17 +65,17 @@ pub type Data = u8;
 pub type Bus = memory::Memory<Pointer, Data, Offset>;
 
 /// The AST type which represents a disassembled operand.
-/// 
+///
 /// TODO: When ! is stable, replace the floating-point type with !.
 pub type Operand = ast::Operand<Offset, SignedValue, f32, Pointer>;
 
 /// The AST type which represents a disassembled instruction.
-/// 
+///
 /// TODO: When ! is stable, replace the floating-point type with !.
 pub type Instruction = ast::Instruction<Offset, SignedValue, f32, Pointer>;
 
 /// The AST type which represents disassembled code.
-/// 
+///
 /// TODO: When ! is stable, replace the floating-point type with !.
 pub type Section = ast::Section<Offset, SignedValue, f32, Pointer, Data, Offset>;
 

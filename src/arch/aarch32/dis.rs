@@ -1,15 +1,15 @@
 //! Disassembly of all AArch32 code
 
-use crate::{memory, analysis};
 use crate::arch::aarch32;
-use crate::arch::aarch32::{Pointer, Bus, Disasm, THUMB_STATE};
 use crate::arch::aarch32::arm::disassemble as armdis;
 use crate::arch::aarch32::thumb::disassemble as thumbdis;
+use crate::arch::aarch32::{Bus, Disasm, Pointer, THUMB_STATE};
+use crate::{analysis, memory};
 
 /// Disassemble the instruction at `p` in `mem`.
-/// 
+///
 /// This function returns:
-/// 
+///
 ///  * A string representation of the instruction encountered, if there is a
 ///    valid instruction at P; otherwise `None`
 ///  * The offset to the next instruction, usually also the size of the current
@@ -26,6 +26,6 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> aarch32::Result<D
     match p.get_arch_context(THUMB_STATE).into_concrete() {
         Some(0) => armdis(p, mem),
         Some(1) => thumbdis(p, mem),
-        _ => Err(analysis::Error::UnconstrainedMemory(p.clone()))
+        _ => Err(analysis::Error::UnconstrainedMemory(p.clone())),
     }
 }

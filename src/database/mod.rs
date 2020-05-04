@@ -9,14 +9,14 @@ mod tests;
 
 pub use db::Database;
 
-use std::str;
 use serde::Serialize;
+use std::str;
 
 /// Enum listing all of the external data formats we can add to a retrogram
 /// database.
 #[derive(Copy, Clone, Serialize, Debug)]
 pub enum ExternalFormat {
-    RGBDSSymbolFile
+    RGBDSSymbolFile,
 }
 
 impl str::FromStr for ExternalFormat {
@@ -25,7 +25,7 @@ impl str::FromStr for ExternalFormat {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_ref() {
             "rgbds_symbols" => Ok(ExternalFormat::RGBDSSymbolFile),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }

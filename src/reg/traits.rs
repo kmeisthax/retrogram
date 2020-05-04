@@ -1,9 +1,9 @@
 //! Traits used by reg types
 
-use std::ops::{Not, BitAnd, BitOr, BitXor};
-use num::traits::{Zero, CheckedShl};
-use crate::reg;
 use crate::maths::BoundWidth;
+use crate::reg;
+use num::traits::{CheckedShl, Zero};
+use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 /// Interim trait to replace From<T> as a way to construct Symbolic<T>
 pub trait New<T> {
@@ -31,25 +31,39 @@ pub trait TryConvertable<R>: Sized {
 }
 
 /// Guard trait for bitwise operations on a type.
-/// 
+///
 /// This is similar to `Concretizable` but stipulates the output type of all
 /// operations is identical to the implementing type. This is because `Symbolic`
 /// cannot make use of `From` conversions (which is why we have `Convertable`).
 /// In practice any good numerical type implementation that supports bitwise
 /// operators will also return it's own types, so this excludes pathological
 /// cases like redefining shifts to mean input and output (looking at you C++).
-/// 
+///
 /// In short: concrete values can satisfy both traits; symbolic ones only
 /// satisfy this one.
-/// 
+///
 /// Bitwise also requires the ability to shift by a `usize` count for programmer
 /// convenience.
-pub trait Bitwise: Clone + Zero + BoundWidth<u32> + CheckedShl + BitAnd<Output=Self> + BitXor<Output=Self>
-    + BitOr<Output=Self> + Not<Output=Self> {
-
+pub trait Bitwise:
+    Clone
+    + Zero
+    + BoundWidth<u32>
+    + CheckedShl
+    + BitAnd<Output = Self>
+    + BitXor<Output = Self>
+    + BitOr<Output = Self>
+    + Not<Output = Self>
+{
 }
 
-impl<T> Bitwise for T where T: Clone + Zero + BoundWidth<u32> + CheckedShl + BitAnd<Output=Self> + BitXor<Output=Self>
-    + BitOr<Output=Self> + Not<Output=Self> {
-
+impl<T> Bitwise for T where
+    T: Clone
+        + Zero
+        + BoundWidth<u32>
+        + CheckedShl
+        + BitAnd<Output = Self>
+        + BitXor<Output = Self>
+        + BitOr<Output = Self>
+        + Not<Output = Self>
+{
 }

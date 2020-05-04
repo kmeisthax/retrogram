@@ -8,7 +8,7 @@ fn block_splitting() {
     let start_ptr = Pointer::from(0x150);
 
     db.insert_block(Block::from_parts(start_ptr.clone(), 0x10));
-    
+
     let middle_ptr = Pointer::from(0x155);
     let target_block = db.find_block_membership(&middle_ptr);
 

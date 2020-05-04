@@ -1,10 +1,10 @@
 //! Implementations of processor architectures that Retrogram can analyze.
-//! 
+//!
 //! Each architecture is implemented as a child module to this one. At a bare
 //! minimum, the architectures must implement at least one function, called
 //! "disassemble", and a series of seven types that interact with various parts
 //! of retrogram's machinery:
-//! 
+//!
 //!  * `I`, or `Value` - The type of a valid integer register value. Should be
 //!    wide enough to hold any single register's value.
 //!  * `SI`, or `SignedValue` - The `I` type, but signed.
@@ -25,17 +25,17 @@
 //!    than a byte.
 //!  * `IO` - The type used to represent offsets into a single image. Defaults
 //!    to usize and should almost never be anything else.
-//! 
+//!
 //! To determine what the disassemble function should do, please consult the
 //! documenation of an existing disassembler implementation.
 
-pub mod sm83;
 pub mod aarch32;
+pub mod sm83;
 pub mod w65c816;
 
-use std::str;
-use serde::Serialize;
 use crate::asm;
+use serde::Serialize;
+use std::str;
 
 /// Enumeration of all architectures that ship with Retrogram.
 #[derive(Copy, Clone, Serialize, Debug)]
@@ -47,7 +47,7 @@ pub enum ArchName {
 
 impl ArchName {
     /// Determine the default assembler syntax for a given platform.
-    /// 
+    ///
     /// Some architectures don't have an assembler implemented yet, so this
     /// lookup may fail.
     pub fn default_asm(&self) -> Option<asm::AssemblerName> {
@@ -72,7 +72,7 @@ impl str::FromStr for ArchName {
             "aarch32" => Ok(ArchName::AARCH32),
             "65c816" => Ok(ArchName::W65C816),
             "w65c816" => Ok(ArchName::W65C816),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }

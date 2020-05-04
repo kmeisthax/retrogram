@@ -10,7 +10,7 @@ pub enum Command {
     Disassemble,
     Import,
     Backreference,
-    Rename
+    Rename,
 }
 
 impl FromStr for Command {
@@ -25,7 +25,7 @@ impl FromStr for Command {
             "backrefs" => Ok(Command::Backreference),
             "name" => Ok(Command::Rename),
             "rename" => Ok(Command::Rename),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }

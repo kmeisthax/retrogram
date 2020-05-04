@@ -9,17 +9,17 @@ extern crate clap;
 
 #[macro_use]
 pub mod memory;
-pub mod reg;
-pub mod ast;
-pub mod arch;
-pub mod platform;
 pub mod analysis;
-pub mod database;
+pub mod arch;
 pub mod asm;
-pub mod project;
-pub mod input;
+pub mod ast;
 pub mod cli;
+pub mod database;
+pub mod input;
 mod maths;
+pub mod platform;
+pub mod project;
+pub mod reg;
 
 use std::io;
 

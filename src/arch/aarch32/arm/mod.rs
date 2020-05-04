@@ -25,6 +25,6 @@ pub fn condcode(instr: u32) -> aarch32::Result<&'static str> {
         13 => Ok("LE"),
         14 => Ok(""),
         15 => Err(analysis::Error::Misinterpretation(4, false)),
-        _ => Err(analysis::Error::Misinterpretation(4, false))
+        _ => Err(analysis::Error::Misinterpretation(4, false)),
     }
 }

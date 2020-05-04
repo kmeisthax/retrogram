@@ -1,19 +1,21 @@
 //! 24-bit arithmetic
 
-use std::ops::{Add, Sub, Mul, Div, BitAnd, BitOr, BitXor, Shl, Shr, Not, AddAssign, SubAssign, MulAssign, DivAssign,
-    BitAndAssign, BitOrAssign, BitXorAssign, ShlAssign, ShrAssign};
-use std::fmt;
-use std::fmt::{Formatter, Display};
-use std::str::FromStr;
+use crate::maths::{CheckedAdd, CheckedSub, FromStrRadix, WrappingMul};
+use num_traits::{Bounded, CheckedShl, One, Zero};
 use std::convert::{TryFrom, TryInto};
+use std::fmt;
+use std::fmt::{Display, Formatter};
 use std::num::ParseIntError;
-use num_traits::{Zero, One, Bounded, CheckedShl};
-use crate::maths::{CheckedAdd, CheckedSub, WrappingMul, FromStrRadix};
+use std::ops::{
+    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign,
+    Mul, MulAssign, Not, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
+};
+use std::str::FromStr;
 
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct u24 {
-    v: u32
+    v: u32,
 }
 
 impl Display for u24 {
@@ -27,24 +29,20 @@ impl FromStr for u24 {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(u24 {
-            v: u32::from_str(s)?
+            v: u32::from_str(s)?,
         })
     }
 }
 
 impl FromStrRadix for u24 {
     fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
-        u32::from_str_radix(src, radix).map(|v| u24 {
-            v: v & 0xFFFFFF
-        })
+        u32::from_str_radix(src, radix).map(|v| u24 { v: v & 0xFFFFFF })
     }
 }
 
 impl Zero for u24 {
     fn zero() -> Self {
-        u24 {
-            v: 0
-        }
+        u24 { v: 0 }
     }
 
     fn is_zero(&self) -> bool {
@@ -54,9 +52,7 @@ impl Zero for u24 {
 
 impl One for u24 {
     fn one() -> Self {
-        u24 {
-            v: 1
-        }
+        u24 { v: 1 }
     }
 
     fn is_one(&self) -> bool {
@@ -66,22 +62,18 @@ impl One for u24 {
 
 impl Bounded for u24 {
     fn min_value() -> Self {
-        u24 {
-            v: 0
-        }
+        u24 { v: 0 }
     }
 
     fn max_value() -> Self {
-        u24 {
-            v: 0xFFFFFF
-        }
+        u24 { v: 0xFFFFFF }
     }
 }
 
 impl CheckedAdd for u24 {
     fn checked_add(self, rhs: Self) -> Option<<Self as Add>::Output> {
         Some(u24 {
-            v: self.v.checked_add(rhs.v)? & 0xFFFFFF
+            v: self.v.checked_add(rhs.v)? & 0xFFFFFF,
         })
     }
 }
@@ -89,7 +81,7 @@ impl CheckedAdd for u24 {
 impl CheckedSub for u24 {
     fn checked_sub(self, rhs: Self) -> Option<<Self as Sub>::Output> {
         Some(u24 {
-            v: self.v.checked_sub(rhs.v)? & 0xFFFFFF
+            v: self.v.checked_sub(rhs.v)? & 0xFFFFFF,
         })
     }
 }
@@ -101,7 +93,7 @@ impl CheckedShl for u24 {
         }
 
         Some(u24 {
-            v: self.v.checked_shl(rhs)? & 0xFFFFFF
+            v: self.v.checked_shl(rhs)? & 0xFFFFFF,
         })
     }
 }
@@ -111,7 +103,7 @@ impl Not for u24 {
 
     fn not(self) -> Self {
         u24 {
-            v: !self.v & 0xFFFFFF
+            v: !self.v & 0xFFFFFF,
         }
     }
 }

@@ -1,6 +1,6 @@
 //! Label AST type
 
-use std::{str, fmt};
+use std::{fmt, str};
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Label {
@@ -21,7 +21,7 @@ impl Label {
         Label {
             name: name.to_string(),
             parent_name: parent_name.map(|s| s.to_string()),
-            is_autogen: false
+            is_autogen: false,
         }
     }
 
@@ -29,7 +29,7 @@ impl Label {
         Label {
             name: name.to_string(),
             parent_name: parent_name.map(|s| s.to_string()),
-            is_autogen: true
+            is_autogen: true,
         }
     }
 

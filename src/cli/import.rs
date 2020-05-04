@@ -1,24 +1,39 @@
 //! Import command: Copies data from an external data source into the Retrogram
 //! analysis database
 
-use std::{io, fs};
-use crate::{project, database, arch, platform, analysis};
+use crate::{analysis, arch, database, platform, project};
+use std::{fs, io};
 
-pub fn import_for_arch<P, S, IMP>(prog: &project::Program, datasrc: &project::DataSource, imp: IMP) -> io::Result<()>
-    where for <'dw> P: analysis::Mappable + serde::Deserialize<'dw>,
-        for <'dw> S: serde::Deserialize<'dw>,
-        IMP: Fn(&project::Program, &project::DataSource, &mut [io::BufReader<fs::File>], &mut database::Database<P, S>) -> io::Result<()> {
-    
+pub fn import_for_arch<P, S, IMP>(
+    prog: &project::Program,
+    datasrc: &project::DataSource,
+    imp: IMP,
+) -> io::Result<()>
+where
+    for<'dw> P: analysis::Mappable + serde::Deserialize<'dw>,
+    for<'dw> S: serde::Deserialize<'dw>,
+    IMP: Fn(
+        &project::Program,
+        &project::DataSource,
+        &mut [io::BufReader<fs::File>],
+        &mut database::Database<P, S>,
+    ) -> io::Result<()>,
+{
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
         Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
             eprintln!("Creating new database for project");
             project::ProjectDatabase::new()
-        },
-        Err(e) => return Err(e)
+        }
+        Err(e) => return Err(e),
     };
 
-    let mut db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "You did not specify a name for the program to disassemble."))?);
+    let mut db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "You did not specify a name for the program to disassemble.",
+        )
+    })?);
     db.update_indexes();
 
     let mut files = Vec::new();
@@ -26,17 +41,41 @@ pub fn import_for_arch<P, S, IMP>(prog: &project::Program, datasrc: &project::Da
         files.push(io::BufReader::new(fs::File::open(filename)?));
     }
 
-    imp(prog, datasrc, files.get_mut(..).expect("No files to import"), &mut db)
+    imp(
+        prog,
+        datasrc,
+        files.get_mut(..).expect("No files to import"),
+        &mut db,
+    )
 }
 
 pub fn import(prog: &project::Program, datasrc: &project::DataSource) -> io::Result<()> {
-    let platform = prog.platform().ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified platform, analysis cannot continue."))?;
-    let arch = prog.arch().or_else(|| platform.default_arch()).ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified architecture, analysis cannot continue."))?;
-    let format = datasrc.format().ok_or(io::Error::new(io::ErrorKind::InvalidInput, "Unspecified data source format"))?;
+    let platform = prog.platform().ok_or(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        "Unspecified platform, analysis cannot continue.",
+    ))?;
+    let arch = prog
+        .arch()
+        .or_else(|| platform.default_arch())
+        .ok_or(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Unspecified architecture, analysis cannot continue.",
+        ))?;
+    let format = datasrc.format().ok_or(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        "Unspecified data source format",
+    ))?;
 
     match (arch, platform, format) {
-        (arch::ArchName::SM83, platform::PlatformName::GB, database::ExternalFormat::RGBDSSymbolFile) => import_for_arch(prog, datasrc, &database::rgbds::parse_symbol_file),
+        (
+            arch::ArchName::SM83,
+            platform::PlatformName::GB,
+            database::ExternalFormat::RGBDSSymbolFile,
+        ) => import_for_arch(prog, datasrc, &database::rgbds::parse_symbol_file),
         //(arch::ArchName::AARCH32, platform::PlatformName::AGB) => scan_for_arch(prog, start_spec, &arch::aarch32::disassemble, &platform::agb::construct_platform(&mut file)?),
-        _ => return Err(io::Error::new(io::ErrorKind::Other, "The given combination of architecture, platform, and/or assembler are not compatible."))
+        _ => return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "The given combination of architecture, platform, and/or assembler are not compatible.",
+        )),
     }
 }

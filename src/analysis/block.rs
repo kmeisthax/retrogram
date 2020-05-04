@@ -1,27 +1,33 @@
 //! Analysis sections (e.g. blocks, subroutines, etc)
 
-use serde::{Serialize, Deserialize};
 use crate::{analysis, memory};
+use serde::{Deserialize, Serialize};
 
 /// Represents a sequence of instructions with the following properties:
-/// 
+///
 /// 1. The sequence of instructions are executed in sequence.
 /// 2. Control flow does not diverge within the block.
 /// 3. At the end of a block, execution diverges to zero or more other
 ///    locations, one of which may be the next instruction in sequence.
-/// 
+///
 /// Effectively, it is a run of instructions with no jumps.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Block<P, S> where P: analysis::Mappable {
+pub struct Block<P, S>
+where
+    P: analysis::Mappable,
+{
     start: memory::Pointer<P>,
-    length: S
+    length: S,
 }
 
-impl<P, S> Block<P, S> where P: analysis::Mappable {
+impl<P, S> Block<P, S>
+where
+    P: analysis::Mappable,
+{
     pub fn from_parts(start: memory::Pointer<P>, length: S) -> Self {
         Block {
             start: start,
-            length: length
+            length: length,
         }
     }
 
@@ -34,11 +40,15 @@ impl<P, S> Block<P, S> where P: analysis::Mappable {
     }
 }
 
-impl<P, S> Block<P, S> where P: analysis::Mappable + memory::PtrNum<S>, S: memory::Offset<P> {
+impl<P, S> Block<P, S>
+where
+    P: analysis::Mappable + memory::PtrNum<S>,
+    S: memory::Offset<P>,
+{
     pub fn is_ptr_within_block(&self, ptr: &memory::Pointer<P>) -> bool {
         if self.start.as_pointer() <= ptr.as_pointer() {
             let diff = ptr.as_pointer().clone() - self.start.as_pointer().clone();
-            
+
             if let Ok(diff) = S::try_from(diff) {
                 if diff < self.length.clone() {
                     if self.start.is_context_eq(ptr) {

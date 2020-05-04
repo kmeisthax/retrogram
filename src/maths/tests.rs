@@ -1,6 +1,6 @@
 //! Math trait testing
 
-use crate::maths::{Popcount, u24};
+use crate::maths::{u24, Popcount};
 use std::convert::TryFrom;
 
 #[test]
@@ -20,7 +20,10 @@ fn popcount_u32() {
 
 #[test]
 fn popcount_u24() {
-    assert_eq!(u24::try_from(0x9F0F21 as u32).unwrap().pop_count(), u24::try_from(12 as u32).unwrap());
+    assert_eq!(
+        u24::try_from(0x9F0F21 as u32).unwrap().pop_count(),
+        u24::try_from(12 as u32).unwrap()
+    );
 }
 
 #[test]
