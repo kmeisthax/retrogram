@@ -10,7 +10,7 @@ pub struct OperandFmtWrap<'a, I, S, F, P> {
 
 impl<'a, I, S, F, P> OperandFmtWrap<'a, I, S, F, P> {
     pub fn wrap(tree: &'a ast::Operand<I, S, F, P>) -> Self {
-        OperandFmtWrap { tree: tree }
+        OperandFmtWrap { tree }
     }
 }
 
@@ -96,7 +96,7 @@ pub struct InstrFmtWrap<'a, I, S, F, P> {
 
 impl<'a, I, S, F, P> InstrFmtWrap<'a, I, S, F, P> {
     pub fn wrap(tree: &'a ast::Instruction<I, S, F, P>) -> Self {
-        InstrFmtWrap { tree: tree }
+        InstrFmtWrap { tree }
     }
 }
 
@@ -132,7 +132,7 @@ pub struct SectionFmtWrap<'a, I, SI, F, P, MV, S> {
 
 impl<'a, I, SI, F, P, MV, S> SectionFmtWrap<'a, I, SI, F, P, MV, S> {
     pub fn wrap(tree: &'a ast::Section<I, SI, F, P, MV, S>) -> Self {
-        SectionFmtWrap { tree: tree }
+        SectionFmtWrap { tree }
     }
 }
 
@@ -151,98 +151,98 @@ where
                 ast::Directive::DeclareComment(comment) => write!(f, ";{}", comment)?,
                 ast::Directive::DeclareLabel(label) => {
                     if let Some(_parent_label) = label.parent_name() {
-                        write!(f, ".{}:\n", label.name())?;
+                        writeln!(f, ".{}:", label.name())?;
                     } else {
-                        write!(f, "{}:\n", label.name())?;
+                        writeln!(f, "{}:", label.name())?;
                     }
                 }
                 ast::Directive::DeclareOrg(loc) => {
                     if *loc.as_pointer() < P::from(0x4000 as u16) {
-                        write!(
+                        writeln!(
                             f,
-                            "SECTION \"{}\", ROM0[${:X}]\n",
+                            "SECTION \"{}\", ROM0[${:X}]",
                             self.tree.section_name(),
                             loc.as_pointer()
                         )?;
                     } else if *loc.as_pointer() < P::from(0x8000 as u16) {
                         if let Some(bank) = loc.get_platform_context("R").into_concrete() {
-                            write!(
+                            writeln!(
                                 f,
-                                "SECTION \"{}\", ROMX[${:X}], BANK[${:X}]\n",
+                                "SECTION \"{}\", ROMX[${:X}], BANK[${:X}]",
                                 self.tree.section_name(),
                                 loc.as_pointer(),
                                 bank
                             )?;
                         } else {
-                            write!(
+                            writeln!(
                                 f,
-                                "SECTION \"{}\", ROMX[${:X}]\n",
+                                "SECTION \"{}\", ROMX[${:X}]",
                                 self.tree.section_name(),
                                 loc.as_pointer()
                             )?;
                         }
                     } else if *loc.as_pointer() < P::from(0xA000 as u16) {
                         if let Some(bank) = loc.get_platform_context("V").into_concrete() {
-                            write!(
+                            writeln!(
                                 f,
-                                "SECTION \"{}\", VRAM[${:X}], BANK[${:X}]\n",
+                                "SECTION \"{}\", VRAM[${:X}], BANK[${:X}]",
                                 self.tree.section_name(),
                                 loc.as_pointer(),
                                 bank
                             )?;
                         } else {
-                            write!(
+                            writeln!(
                                 f,
-                                "SECTION \"{}\", VRAM[${:X}]\n",
+                                "SECTION \"{}\", VRAM[${:X}]",
                                 self.tree.section_name(),
                                 loc.as_pointer()
                             )?;
                         }
                     } else if *loc.as_pointer() < P::from(0xC000 as u16) {
                         if let Some(bank) = loc.get_platform_context("S").into_concrete() {
-                            write!(
+                            writeln!(
                                 f,
-                                "SECTION \"{}\", SRAM[${:X}], BANK[${:X}]\n",
+                                "SECTION \"{}\", SRAM[${:X}], BANK[${:X}]",
                                 self.tree.section_name(),
                                 loc.as_pointer(),
                                 bank
                             )?;
                         } else {
-                            write!(
+                            writeln!(
                                 f,
-                                "SECTION \"{}\", SRAM[${:X}]\n",
+                                "SECTION \"{}\", SRAM[${:X}]",
                                 self.tree.section_name(),
                                 loc.as_pointer()
                             )?;
                         }
                     } else if *loc.as_pointer() < P::from(0xD000 as u16) {
-                        write!(
+                        writeln!(
                             f,
-                            "SECTION \"{}\", WRAM0[${:X}]\n",
+                            "SECTION \"{}\", WRAM0[${:X}]",
                             self.tree.section_name(),
                             loc.as_pointer()
                         )?;
                     } else if *loc.as_pointer() < P::from(0xE000 as u16) {
                         if let Some(bank) = loc.get_platform_context("W").into_concrete() {
-                            write!(
+                            writeln!(
                                 f,
-                                "SECTION \"{}\", WRAMX[${:X}], BANK[${:X}]\n",
+                                "SECTION \"{}\", WRAMX[${:X}], BANK[${:X}]",
                                 self.tree.section_name(),
                                 loc.as_pointer(),
                                 bank
                             )?;
                         } else {
-                            write!(
+                            writeln!(
                                 f,
-                                "SECTION \"{}\", WRAMX[${:X}]\n",
+                                "SECTION \"{}\", WRAMX[${:X}]",
                                 self.tree.section_name(),
                                 loc.as_pointer()
                             )?;
                         }
                     } else {
-                        write!(
+                        writeln!(
                             f,
-                            "SECTION \"{}\", HRAM[${:X}]\n",
+                            "SECTION \"{}\", HRAM[${:X}]",
                             self.tree.section_name(),
                             loc.as_pointer()
                         )?;
@@ -256,11 +256,11 @@ where
                             write!(f, "${:X}", byte)?;
                         }
 
-                        write!(f, "\n")?;
+                        writeln!(f)?;
                     }
                 }
                 ast::Directive::EmitInstr(instr, _) => {
-                    write!(f, "    {}\n", InstrFmtWrap::wrap(instr))?
+                    writeln!(f, "    {}", InstrFmtWrap::wrap(instr))?
                 }
                 ast::Directive::EmitSpace(offset) => write!(f, "    ds {}", offset)?,
             }

@@ -137,6 +137,6 @@ pub fn backref(prog: &project::Program, start_spec: &str) -> io::Result<()> {
                 arch::aarch32::architectural_ctxt_parse,
             )
         }
-        _ => return Err(io::Error::new(io::ErrorKind::Other, "oops")),
+        _ => Err(io::Error::new(io::ErrorKind::Other, "oops")),
     }
 }

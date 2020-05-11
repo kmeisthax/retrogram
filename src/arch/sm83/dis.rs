@@ -29,7 +29,7 @@ fn cptr_target(
         return analysis::Reference::new_static_ref(p.clone() - 1, p.contextualize(lobit), kind);
     }
 
-    return analysis::Reference::new_dyn_ref(p.clone() - 1, kind);
+    analysis::Reference::new_dyn_ref(p.clone() - 1, kind)
 }
 
 fn cptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
@@ -57,7 +57,7 @@ fn pcrel_target(
         return analysis::Reference::new_static_ref(p.clone() - 1, p.contextualize(target), kind);
     }
 
-    return analysis::Reference::new_dyn_ref(p.clone() - 1, kind);
+    analysis::Reference::new_dyn_ref(p.clone() - 1, kind)
 }
 
 fn pcrel_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {

@@ -250,7 +250,7 @@ pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
             &platform::agb::construct_platform(&mut file)?,
             arch::aarch32::architectural_ctxt_parse,
         ),
-        _ => return Err(io::Error::new(
+        _ => Err(io::Error::new(
             io::ErrorKind::Other,
             "The given combination of architecture, platform, and/or assembler are not compatible.",
         )),

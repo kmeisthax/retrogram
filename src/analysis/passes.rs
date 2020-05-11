@@ -105,19 +105,16 @@ where
     }
 
     if cur_blk_size > S::zero() {
-        blocks.push(analysis::Block::from_parts(
-            cur_block_pc.clone(),
-            cur_blk_size,
-        ));
+        blocks.push(analysis::Block::from_parts(cur_block_pc, cur_blk_size));
     }
 
-    return (
+    (
         asm,
         targets,
         S::try_from(pc.as_pointer().clone() - start_pc.as_pointer().clone()).ok(),
         blocks,
         error,
-    );
+    )
 }
 
 /// Given an operand, replace all Pointer literals with Label operands obtained

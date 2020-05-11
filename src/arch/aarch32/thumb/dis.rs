@@ -19,7 +19,7 @@ fn cond_branch(
     // therefore target = signed_offset * 2 - 4 + base
     let signed_offset = (((offset as u8) as i8) as i32) << 1;
     let target = p.contextualize((signed_offset - 4 + *p.as_pointer() as i32) as Pointer);
-    let mut swi_target = p.contextualize(0x00000008);
+    let mut swi_target = p.contextualize(0x0000_0008);
 
     swi_target.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
 
@@ -383,7 +383,7 @@ fn load_pool_constant(
 ) -> analysis::Result<Disasm, Pointer, Offset> {
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
-    let target_ptr = p.contextualize((*p.as_pointer() & 0xFFFFFFFC) + 4 + (immed as u32 * 4));
+    let target_ptr = p.contextualize((*p.as_pointer() & 0xFFFF_FFFC) + 4 + (immed as u32 * 4));
     let immed_operand = op::int(immed as u32 * 4);
     let ast = Instruction::new(
         "LDR",
@@ -594,13 +594,13 @@ fn uncond_branch_link(
             let low_offset = low_instr & 0x07FF;
             let sign = match high_offset & 0x0400 {
                 0 => 0,
-                _ => 0xFF800000,
+                _ => 0xFF80_0000,
             };
 
             let offset: u32 = sign | (high_offset as u32) << 12 | (low_offset as u32) << 1;
             let target = p.contextualize((*p.as_pointer() as i32 + offset as i32) as u32);
             let mut arm_target =
-                p.contextualize((*p.as_pointer() as i32 + offset as i32) as u32 & 0xFFFFFFFC);
+                p.contextualize((*p.as_pointer() as i32 + offset as i32) as u32 & 0xFFFF_FFFC);
             arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
 
             match h {
@@ -771,7 +771,7 @@ fn breakpoint(
     p: &memory::Pointer<Pointer>,
     immed: u16,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
-    let mut bkpt_target = p.contextualize(0x0000000C);
+    let mut bkpt_target = p.contextualize(0x0000_000C);
     bkpt_target.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
 
     let targets = vec![refr::new_static_ref(
@@ -804,6 +804,7 @@ fn breakpoint(
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
+#[allow(clippy::many_single_char_names)]
 pub fn disassemble(
     p: &memory::Pointer<Pointer>,
     mem: &Bus,

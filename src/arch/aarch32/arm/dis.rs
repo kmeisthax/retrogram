@@ -1,5 +1,7 @@
 //! Static disassembler for AArch32
 
+#![allow(clippy::too_many_arguments)]
+
 use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32;
@@ -32,7 +34,7 @@ fn shifter_operand(
     rs: A32Reg,
     immed_8: u32,
 ) -> analysis::Result<Vec<Operand>, Pointer, Offset> {
-    let rotate_imm = shift_imm & 0xFFFFFFFE;
+    let rotate_imm = shift_imm & 0xFFFF_FFFE;
 
     Ok(match (immediate_bit, shift_imm, regshift) {
         (1, _, _) => vec![
@@ -171,16 +173,18 @@ fn ldst(
     let is_offsetadd = offsetadd != 0;
     let is_preindex = preindex != 0;
 
-    let offset12 = match is_offsetadd {
-        true => (address_operand & 0xFFF) as i32,
-        false => (address_operand & 0xFFF) as i32 * -1,
+    let offset12 = if is_offsetadd {
+        (address_operand & 0xFFF) as i32
+    } else {
+        -((address_operand & 0xFFF) as i32)
     };
 
     let rd_operand = op::sym(&rd.to_string());
     let rn_operand = op::sym(&rn.to_string());
-    let rm_operand = match is_offsetadd {
-        true => op::sym(&rm.to_string()),
-        false => op::pref("-", op::sym(&rm.to_string())),
+    let rm_operand = if is_offsetadd {
+        op::sym(&rm.to_string())
+    } else {
+        op::pref("-", op::sym(&rm.to_string()))
     };
 
     let lsw_opcode = match (is_load, is_byte, is_preindex, is_wbit) {
@@ -285,6 +289,7 @@ fn ldst(
 }
 
 /// Decode an instruction in the LDM/STM instruction space.
+#[allow(clippy::many_single_char_names)]
 fn ldmstm(
     p: &memory::Pointer<Pointer>,
     cond: u32,
@@ -297,24 +302,16 @@ fn ldmstm(
     reglist: u32,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
     //TODO: This got refactored, ensure these are still valid
-    let op = match load == 1 {
-        false => "STM",
-        true => "LDM",
-    };
+    let op = if load == 1 { "LDM" } else { "STM" };
 
-    let p_string = match q == 1 {
-        false => "A",
-        true => "B",
-    };
+    let p_string = if q == 1 { "B" } else { "A" };
 
-    let u_string = match u == 1 {
-        false => "D",
-        true => "I",
-    };
+    let u_string = if u == 1 { "I" } else { "D" };
 
-    let rn_operand = match w == 1 {
-        false => op::sym(&rn.to_string()),
-        true => op::suff(op::sym(&rn.to_string()), "!"),
+    let rn_operand = if w == 1 {
+        op::suff(op::sym(&rn.to_string()), "!")
+    } else {
+        op::sym(&rn.to_string())
     };
 
     let mut reglist_operand = Vec::new();
@@ -337,14 +334,16 @@ fn ldmstm(
         }
     }
 
-    let flow = match writes_pc {
-        true => analysis::Flow::Branching(cond != 14),
-        false => analysis::Flow::Normal,
+    let flow = if writes_pc {
+        analysis::Flow::Branching(cond != 14)
+    } else {
+        analysis::Flow::Normal
     };
 
-    let reglist_operand = match s == 1 {
-        false => op::wrap("{", reglist_operand, "}"),
-        true => op::suff(op::wrap("{", reglist_operand, "}"), "^"),
+    let reglist_operand = if s == 1 {
+        op::suff(op::wrap("{", reglist_operand, "}"), "^")
+    } else {
+        op::wrap("{", reglist_operand, "}")
     };
 
     Ok(Disasm::new(
@@ -365,22 +364,23 @@ fn bl(
     offset: u32,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
     let is_link = l != 0;
-    let signbit = if ((offset & 0x00800000) >> 23) != 0 {
-        0xFF800000
+    let signbit = if ((offset & 0x0080_0000) >> 23) != 0 {
+        0xFF80_0000
     } else {
         0
     };
     let target = pc.contextualize(
         pc.as_pointer()
-            .wrapping_add(((offset & 0x007FFFFF) | signbit) << 2),
+            .wrapping_add(((offset & 0x007F_FFFF) | signbit) << 2),
     );
-    let flow = match is_link {
-        true => analysis::Flow::Normal,
-        false => analysis::Flow::Branching(cond != 14),
+    let flow = if is_link {
+        analysis::Flow::Normal
+    } else {
+        analysis::Flow::Branching(cond != 14)
     };
 
-    match is_link {
-        true => Ok(Disasm::new(
+    if is_link {
+        Ok(Disasm::new(
             ast::Instruction::new(
                 &format!("BL{}", condcode(cond)?),
                 vec![op::cptr(target.clone())],
@@ -389,11 +389,12 @@ fn bl(
             flow,
             vec![refr::new_static_ref(
                 pc.clone(),
-                target.clone(),
+                target,
                 refkind::Subroutine,
             )],
-        )),
-        false => Ok(Disasm::new(
+        ))
+    } else {
+        Ok(Disasm::new(
             ast::Instruction::new(
                 &format!("B{}", condcode(cond)?),
                 vec![op::cptr(target.clone())],
@@ -401,7 +402,7 @@ fn bl(
             4,
             flow,
             vec![refr::new_static_ref(pc.clone(), target, refkind::Code)],
-        )),
+        ))
     }
 }
 
@@ -410,7 +411,7 @@ fn swi(
     cond: u32,
     offset: u32,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
-    let target = offset & 0x00FFFFFF;
+    let target = offset & 0x00FF_FFFF;
 
     //TODO: The jump target can be in high RAM, how do we handle that?
     Ok(Disasm::new(
@@ -419,7 +420,7 @@ fn swi(
         analysis::Flow::Normal,
         vec![refr::new_static_ref(
             pc.clone(),
-            pc.contextualize(0x00000008),
+            pc.contextualize(0x0000_0008),
             refkind::Subroutine,
         )],
     ))
@@ -586,6 +587,7 @@ fn mul(
     }
 }
 
+#[allow(clippy::many_single_char_names)]
 fn msr(
     cond: u32,
     immediate_bit: u32,
@@ -595,31 +597,16 @@ fn msr(
     data_immed: u32,
     rm: A32Reg,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
-    let c = match (rn_val & 0x1) != 0 {
-        true => "c",
-        false => "",
-    };
-    let x = match (rn_val & 0x2) >> 1 != 0 {
-        true => "x",
-        false => "",
-    };
-    let s = match (rn_val & 0x4) >> 2 != 0 {
-        true => "s",
-        false => "",
-    };
-    let f = match (rn_val & 0x8) >> 3 != 0 {
-        true => "f",
-        false => "",
-    };
-    let xpsr = match r != 0 {
-        false => "CPSR",
-        true => "SPSR",
-    };
+    let c = if (rn_val & 0x1) != 0 { "c" } else { "" };
+    let x = if (rn_val & 0x2) >> 1 != 0 { "x" } else { "" };
+    let s = if (rn_val & 0x4) >> 2 != 0 { "s" } else { "" };
+    let f = if (rn_val & 0x8) >> 3 != 0 { "f" } else { "" };
+    let xpsr = if r != 0 { "SPSR" } else { "CPSR" };
 
     let xpsr = op::sym(&format!("{}_{}{}{}{}", xpsr, c, x, s, f));
 
     let op_list = match immediate_bit {
-        1 => vec![xpsr, op::int(data_immed << (shift_imm & 0xFFFFFFFE))],
+        1 => vec![xpsr, op::int(data_immed << (shift_imm & 0xFFFF_FFFE))],
         0 => vec![xpsr, op::sym(&rm.to_string())],
         _ => vec![op::miss()],
     };
@@ -633,10 +620,7 @@ fn msr(
 }
 
 fn mrs(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
-    let xpsr = match r != 0 {
-        false => "CPSR",
-        true => "SPSR",
-    };
+    let xpsr = if r != 0 { "CPSR" } else { "SPSR" };
 
     let op_list = vec![op::sym(&rd.to_string()), op::sym(xpsr)];
 
@@ -734,14 +718,14 @@ fn blx_immediate(
     h: u32,
     offset: u32,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
-    let signbit = if ((offset & 0x00800000) >> 23) != 0 {
-        0xFF800000
+    let signbit = if ((offset & 0x0080_0000) >> 23) != 0 {
+        0xFF80_0000
     } else {
         0
     };
     let mut target = p.contextualize(
         p.as_pointer()
-            .wrapping_add(((offset & 0x007FFFFF) | signbit) << 2 | h << 1),
+            .wrapping_add(((offset & 0x007F_FFFF) | signbit) << 2 | h << 1),
     );
     target.set_arch_context(THUMB_STATE, reg::Symbolic::new(1));
     let jumpref = refr::new_static_ref(p.clone(), target.clone(), refkind::Subroutine);
@@ -755,8 +739,8 @@ fn blx_immediate(
 }
 
 fn bkpt(instr: u32) -> analysis::Result<Disasm, Pointer, Offset> {
-    let high_immed = (instr & 0x000FFF00) >> 4;
-    let low_immed = instr & 0x0000000F;
+    let high_immed = (instr & 0x000F_FF00) >> 4;
+    let low_immed = instr & 0x0000_000F;
     let immed = high_immed | low_immed;
 
     Ok(Disasm::new(
@@ -982,7 +966,7 @@ fn ldstmisc(
         (false, false, false, true) => vec![
             op::sym(&rd.to_string()),
             op::wrap("[", vec![op::sym(&rn.to_string())], "]"),
-            op::sint(immedoffset as i32 * -1),
+            op::sint(-(immedoffset as i32)),
         ],
         (false, true, false, true) => vec![
             op::sym(&rd.to_string()),
@@ -1012,7 +996,7 @@ fn ldstmisc(
             op::sym(&rd.to_string()),
             op::wrap(
                 "[",
-                vec![op::sym(&rn.to_string()), op::sint(immedoffset as i32 * -1)],
+                vec![op::sym(&rn.to_string()), op::sint(-(immedoffset as i32))],
                 "]",
             ),
         ],
@@ -1054,7 +1038,7 @@ fn ldstmisc(
             op::suff(
                 op::wrap(
                     "[",
-                    vec![op::sym(&rn.to_string()), op::sint(immedoffset as i32 * -1)],
+                    vec![op::sym(&rn.to_string()), op::sint(-(immedoffset as i32))],
                     "]",
                 ),
                 "!",
@@ -1292,37 +1276,38 @@ pub fn pld(
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
+#[allow(clippy::many_single_char_names)]
 pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> aarch32::Result<Disasm> {
     let instr: reg::Symbolic<u32> = mem.read_leword(&p);
 
     if let Some(instr) = instr.into_concrete() {
-        let cond = (instr & 0xF0000000) >> 28;
-        let opcat = (instr & 0x0C000000) >> 26;
-        let immed_mode = (instr & 0x02000000) >> 25;
-        let opcode = (instr & 0x01F00000) >> 20;
-        let pbit = (instr & 0x01000000) >> 24;
-        let u = (instr & 0x00800000) >> 23;
-        let b = (instr & 0x00400000) >> 22;
-        let w = (instr & 0x00200000) >> 21;
-        let l = (instr & 0x00100000) >> 20;
-        let copcode1 = (instr & 0x00F00000) >> 20;
-        let rn_val = (instr & 0x000F0000) >> 16;
-        let rd_val = (instr & 0x0000F000) >> 12;
-        let rs_val = (instr & 0x00000F00) >> 8;
-        let shift_imm = (instr & 0x00000F80) >> 7;
-        let special = (instr & 0x00000080) >> 7;
-        let shiftop = (instr & 0x00000060) >> 5;
-        let copcode2 = (instr & 0x000000E0) >> 5;
-        let regshift = (instr & 0x00000010) >> 4;
-        let rm_val = instr & 0x0000000F;
-        let data_immed = instr & 0x000000FF;
+        let cond = (instr & 0xF000_0000) >> 28;
+        let opcat = (instr & 0x0C00_0000) >> 26;
+        let immed_mode = (instr & 0x0200_0000) >> 25;
+        let opcode = (instr & 0x01F0_0000) >> 20;
+        let pbit = (instr & 0x0100_0000) >> 24;
+        let u = (instr & 0x0080_0000) >> 23;
+        let b = (instr & 0x0040_0000) >> 22;
+        let w = (instr & 0x0020_0000) >> 21;
+        let l = (instr & 0x0010_0000) >> 20;
+        let copcode1 = (instr & 0x00F0_0000) >> 20;
+        let rn_val = (instr & 0x000F_0000) >> 16;
+        let rd_val = (instr & 0x0000_F000) >> 12;
+        let rs_val = (instr & 0x0000_0F00) >> 8;
+        let shift_imm = (instr & 0x0000_0F80) >> 7;
+        let special = (instr & 0x0000_0080) >> 7;
+        let shiftop = (instr & 0x0000_0060) >> 5;
+        let copcode2 = (instr & 0x0000_00E0) >> 5;
+        let regshift = (instr & 0x0000_0010) >> 4;
+        let rm_val = instr & 0x0000_000F;
+        let data_immed = instr & 0x0000_00FF;
         let rn = A32Reg::from_instr(rn_val)
             .expect("What the heck? The register definitely should have parsed");
         let rd = A32Reg::from_instr(rd_val)
             .expect("What the heck? The register definitely should have parsed");
         let rs = A32Reg::from_instr(rs_val).expect("Could not parse RS... somehow?!");
         let rm = A32Reg::from_instr(rm_val).expect("Could not parse RM... somehow?!");
-        let lsimmed = instr & 0x00000FFF; //Load-Store Immediate (12bit)
+        let lsimmed = instr & 0x0000_0FFF; //Load-Store Immediate (12bit)
 
         #[allow(unused_variables)]
         match (
@@ -1389,7 +1374,7 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> aarch32::Result<D
                 p, cond, i, q, u, b, w, l, rn, rd, shift_imm, shiftop, rm, lsimmed,
             ), //Load/store
             (_, 2, 0, q, u, s, w, l, _, _, _) => {
-                ldmstm(p, cond, q, u, s, w, l, rn, instr & 0x0000FFFF)
+                ldmstm(p, cond, q, u, s, w, l, rn, instr & 0x0000_FFFF)
             } //Load/store multiple
             (_, 2, 1, l, _, _, _, _, _, _, _) => bl(&p, cond, l, instr), //Branch with or without link
             (_, 3, 0, 0, 0, 1, 0, d, _, _, _) => {

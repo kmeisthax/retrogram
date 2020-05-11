@@ -36,7 +36,7 @@ impl FromStr for u24 {
 
 impl FromStrRadix for u24 {
     fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
-        u32::from_str_radix(src, radix).map(|v| u24 { v: v & 0xFFFFFF })
+        u32::from_str_radix(src, radix).map(|v| u24 { v: v & 0xFF_FFFF })
     }
 }
 
@@ -66,14 +66,14 @@ impl Bounded for u24 {
     }
 
     fn max_value() -> Self {
-        u24 { v: 0xFFFFFF }
+        u24 { v: 0xFF_FFFF }
     }
 }
 
 impl CheckedAdd for u24 {
     fn checked_add(self, rhs: Self) -> Option<<Self as Add>::Output> {
         Some(u24 {
-            v: self.v.checked_add(rhs.v)? & 0xFFFFFF,
+            v: self.v.checked_add(rhs.v)? & 0xFF_FFFF,
         })
     }
 }
@@ -81,7 +81,7 @@ impl CheckedAdd for u24 {
 impl CheckedSub for u24 {
     fn checked_sub(self, rhs: Self) -> Option<<Self as Sub>::Output> {
         Some(u24 {
-            v: self.v.checked_sub(rhs.v)? & 0xFFFFFF,
+            v: self.v.checked_sub(rhs.v)? & 0xFF_FFFF,
         })
     }
 }
@@ -93,7 +93,7 @@ impl CheckedShl for u24 {
         }
 
         Some(u24 {
-            v: self.v.checked_shl(rhs)? & 0xFFFFFF,
+            v: self.v.checked_shl(rhs)? & 0xFF_FFFF,
         })
     }
 }
@@ -103,17 +103,17 @@ impl Not for u24 {
 
     fn not(self) -> Self {
         u24 {
-            v: !self.v & 0xFFFFFF,
+            v: !self.v & 0xFF_FFFF,
         }
     }
 }
 
-masked_conv_impl!(u24, u32, u8, 0xFFFFFF);
-masked_conv_impl!(u24, u32, u16, 0xFFFFFF);
-masked_tryconv_impl!(u24, u32, u32, 0xFFFFFF);
-masked_tryconv_impl!(u24, u32, u64, 0xFFFFFF);
-masked_tryconv_impl!(u24, u32, u128, 0xFFFFFF);
-masked_tryconv_impl!(u24, u32, usize, 0xFFFFFF);
+masked_conv_impl!(u24, u32, u8, 0xFF_FFFF);
+masked_conv_impl!(u24, u32, u16, 0xFF_FFFF);
+masked_tryconv_impl!(u24, u32, u32, 0xFF_FFFF);
+masked_tryconv_impl!(u24, u32, u64, 0xFF_FFFF);
+masked_tryconv_impl!(u24, u32, u128, 0xFF_FFFF);
+masked_tryconv_impl!(u24, u32, usize, 0xFF_FFFF);
 
 try_unwrap_impl!(u24, u32, u8);
 try_unwrap_impl!(u24, u32, u16);
@@ -122,53 +122,53 @@ unwrap_impl!(u24, u32, u64);
 unwrap_impl!(u24, u32, u128);
 try_unwrap_impl!(u24, u32, usize);
 
-binary_op_masked_impl!(u24, Add, add, 0xFFFFFF);
-binary_op_masked_impl!(u24, Sub, sub, 0xFFFFFF);
-binary_op_masked_impl!(u24, Div, div, 0xFFFFFF);
-binary_op_masked_impl!(u24, Mul, mul, 0xFFFFFF);
-binary_op_masked_impl!(u24, BitAnd, bitand, 0xFFFFFF);
-binary_op_masked_impl!(u24, BitOr, bitor, 0xFFFFFF);
-binary_op_masked_impl!(u24, BitXor, bitxor, 0xFFFFFF);
-binary_op_masked_impl!(u24, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, Shr, shr, 0xFFFFFF);
+binary_op_masked_impl!(u24, Add, add, 0xFF_FFFF);
+binary_op_masked_impl!(u24, Sub, sub, 0xFF_FFFF);
+binary_op_masked_impl!(u24, Div, div, 0xFF_FFFF);
+binary_op_masked_impl!(u24, Mul, mul, 0xFF_FFFF);
+binary_op_masked_impl!(u24, BitAnd, bitand, 0xFF_FFFF);
+binary_op_masked_impl!(u24, BitOr, bitor, 0xFF_FFFF);
+binary_op_masked_impl!(u24, BitXor, bitxor, 0xFF_FFFF);
+binary_op_masked_impl!(u24, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, Shr, shr, 0xFF_FFFF);
 
-assign_binary_op_masked_impl!(u24, AddAssign, add_assign, 0xFFFFFF);
-assign_binary_op_masked_impl!(u24, SubAssign, sub_assign, 0xFFFFFF);
-assign_binary_op_masked_impl!(u24, DivAssign, div_assign, 0xFFFFFF);
-assign_binary_op_masked_impl!(u24, MulAssign, mul_assign, 0xFFFFFF);
-assign_binary_op_masked_impl!(u24, BitAndAssign, bitand_assign, 0xFFFFFF);
-assign_binary_op_masked_impl!(u24, BitOrAssign, bitor_assign, 0xFFFFFF);
-assign_binary_op_masked_impl!(u24, BitXorAssign, bitxor_assign, 0xFFFFFF);
-assign_binary_op_masked_impl!(u24, ShlAssign, shl_assign, 0xFFFFFF);
-assign_binary_op_masked_impl!(u24, ShrAssign, shr_assign, 0xFFFFFF);
+assign_binary_op_masked_impl!(u24, AddAssign, add_assign, 0xFF_FFFF);
+assign_binary_op_masked_impl!(u24, SubAssign, sub_assign, 0xFF_FFFF);
+assign_binary_op_masked_impl!(u24, DivAssign, div_assign, 0xFF_FFFF);
+assign_binary_op_masked_impl!(u24, MulAssign, mul_assign, 0xFF_FFFF);
+assign_binary_op_masked_impl!(u24, BitAndAssign, bitand_assign, 0xFF_FFFF);
+assign_binary_op_masked_impl!(u24, BitOrAssign, bitor_assign, 0xFF_FFFF);
+assign_binary_op_masked_impl!(u24, BitXorAssign, bitxor_assign, 0xFF_FFFF);
+assign_binary_op_masked_impl!(u24, ShlAssign, shl_assign, 0xFF_FFFF);
+assign_binary_op_masked_impl!(u24, ShrAssign, shr_assign, 0xFF_FFFF);
 
-binary_op_masked_impl_notype!(u24, WrappingMul, wrapping_mul, 0xFFFFFF);
+binary_op_masked_impl_notype!(u24, WrappingMul, wrapping_mul, 0xFF_FFFF);
 
-binary_op_masked_impl!(u24, u8, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, u16, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, u32, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, u64, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, u128, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, usize, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, i8, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, i16, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, i32, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, i64, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, i128, Shl, shl, 0xFFFFFF);
-binary_op_masked_impl!(u24, isize, Shl, shl, 0xFFFFFF);
+binary_op_masked_impl!(u24, u8, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, u16, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, u32, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, u64, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, u128, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, usize, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, i8, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, i16, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, i32, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, i64, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, i128, Shl, shl, 0xFF_FFFF);
+binary_op_masked_impl!(u24, isize, Shl, shl, 0xFF_FFFF);
 
-binary_op_masked_impl!(u24, u8, Shr, shr, 0xFFFFFF);
-binary_op_masked_impl!(u24, u16, Shr, shr, 0xFFFFFF);
-binary_op_masked_impl!(u24, u32, Shr, shr, 0xFFFFFF);
-binary_op_masked_impl!(u24, u64, Shr, shr, 0xFFFFFF);
-binary_op_masked_impl!(u24, u128, Shr, shr, 0xFFFFFF);
-binary_op_masked_impl!(u24, usize, Shr, shr, 0xFFFFFF);
-binary_op_masked_impl!(u24, i8, Shr, shr, 0xFFFFFF);
-binary_op_masked_impl!(u24, i16, Shr, shr, 0xFFFFFF);
-binary_op_masked_impl!(u24, i32, Shr, shr, 0xFFFFFF);
-binary_op_masked_impl!(u24, i64, Shr, shr, 0xFFFFFF);
-binary_op_masked_impl!(u24, i128, Shr, shr, 0xFFFFFF);
-binary_op_masked_impl!(u24, isize, Shr, shr, 0xFFFFFF);
+binary_op_masked_impl!(u24, u8, Shr, shr, 0xFF_FFFF);
+binary_op_masked_impl!(u24, u16, Shr, shr, 0xFF_FFFF);
+binary_op_masked_impl!(u24, u32, Shr, shr, 0xFF_FFFF);
+binary_op_masked_impl!(u24, u64, Shr, shr, 0xFF_FFFF);
+binary_op_masked_impl!(u24, u128, Shr, shr, 0xFF_FFFF);
+binary_op_masked_impl!(u24, usize, Shr, shr, 0xFF_FFFF);
+binary_op_masked_impl!(u24, i8, Shr, shr, 0xFF_FFFF);
+binary_op_masked_impl!(u24, i16, Shr, shr, 0xFF_FFFF);
+binary_op_masked_impl!(u24, i32, Shr, shr, 0xFF_FFFF);
+binary_op_masked_impl!(u24, i64, Shr, shr, 0xFF_FFFF);
+binary_op_masked_impl!(u24, i128, Shr, shr, 0xFF_FFFF);
+binary_op_masked_impl!(u24, isize, Shr, shr, 0xFF_FFFF);
 
 boundwidth_impl!(u24, u8, 24);
 boundwidth_impl!(u24, u16, 24);

@@ -24,7 +24,7 @@ impl LinearMapper {
 
 impl Mapper for LinearMapper {
     fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize> {
-        Some((ptr.as_pointer() & 0x3FFF + 0x4000) as usize)
+        Some(((ptr.as_pointer() & 0x3FFF) + 0x4000) as usize)
     }
 }
 
@@ -129,10 +129,7 @@ where
 
         file.read_to_end(&mut data)?;
 
-        Ok(GameBoyROMImage {
-            data: data,
-            mapper: mapper,
-        })
+        Ok(GameBoyROMImage { data, mapper })
     }
 }
 

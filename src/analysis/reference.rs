@@ -44,7 +44,7 @@ where
         kind: ReferenceKind,
     ) -> Self {
         Reference {
-            from: from,
+            from,
             to: Some(to),
             reftype: kind,
         }
@@ -52,7 +52,7 @@ where
 
     pub fn new_dyn_ref(from: memory::Pointer<P>, kind: ReferenceKind) -> Self {
         Reference {
-            from: from,
+            from,
             to: None,
             reftype: kind,
         }

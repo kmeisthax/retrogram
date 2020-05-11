@@ -77,11 +77,11 @@ impl Decoder for PlatformVariant {
         match self {
             LoROM => {
                 let pv: usize = ptr.as_pointer().clone().try_into().ok()?;
-                let ba = pv & 0xFF0000 >> 16;
-                let pa = pv & 0x00FFFF;
+                let ba = pv & 0xFF_0000 >> 16;
+                let pa = pv & 0x00_FFFF;
 
                 if pa > 0x8000 && (ba < 0x7D || ba >= 0x80) {
-                    Some(ba << 15 + (pa - 0x8000))
+                    Some((ba << 15) + (pa - 0x8000))
                 } else {
                     None
                 }
@@ -90,13 +90,13 @@ impl Decoder for PlatformVariant {
                 //TODO: We still don't support the LoROM mirrors in bank 0
                 //required to successfully boot a HiROM or ExHiROM game.
                 let pv: usize = ptr.as_pointer().clone().try_into().ok()?;
-                let ba = pv & 0xFF0000 >> 16;
-                let pa = pv & 0x00FFFF;
+                let ba = pv & 0xFF_0000 >> 16;
+                let pa = pv & 0x00_FFFF;
 
                 if ba >= 0x40 && ba <= 0x7D {
-                    Some((ba - 0x40) << 16 + pa)
+                    Some(((ba - 0x40) << 16) + pa)
                 } else if ba >= 0xC0 && ba <= 0xFF {
-                    Some((ba - 0x80) << 16 + pa)
+                    Some(((ba - 0x80) << 16) + pa)
                 } else {
                     None
                 }
@@ -110,13 +110,13 @@ impl Decoder for PlatformVariant {
                 //TODO: We still don't support the LoROM mirrors in bank 0
                 //required to successfully boot a HiROM or ExHiROM game.
                 let pv: usize = ptr.as_pointer().clone().try_into().ok()?;
-                let ba = pv & 0xFF0000 >> 16;
-                let pa = pv & 0x00FFFF;
+                let ba = pv & 0xFF_0000 >> 16;
+                let pa = pv & 0x00_FFFF;
 
                 if ba >= 0x40 && ba <= 0x7D {
-                    Some((ba - 0x40) << 16 + pa)
+                    Some(((ba - 0x40) << 16) + pa)
                 } else if ba >= 0xC0 && ba <= 0xFF {
-                    Some((ba - 0xC0) << 16 + pa)
+                    Some(((ba - 0xC0) << 16) + pa)
                 } else {
                     None
                 }
@@ -133,11 +133,11 @@ struct SufamiPlatform<D> {
 }
 
 impl<D> SufamiPlatform<D> {
-    fn new(data: Vec<u8>, floffset: usize, mapper: D) -> Self {
+    fn new(image: Vec<u8>, floffset: usize, mapper: D) -> Self {
         SufamiPlatform {
-            image: data,
-            floffset: floffset,
-            mapper: mapper,
+            image,
+            floffset,
+            mapper,
         }
     }
 }
@@ -279,7 +279,7 @@ where
     //Really dumb format from Nintendo where we store the later banks of the ROM
     //first for... no appreciable reason, except maybe to make it slightly
     //easier to cheap out on ROM for the slow half of a fast-ROM game?
-    if let Some(header_data) = clean_data.get(0x40FFC0..) {
+    if let Some(header_data) = clean_data.get(0x40_FFC0..) {
         let exhirom_header = parse_rom_image_header(header_data);
 
         if exhirom_header.checksum == !exhirom_header.checksum_inv {
@@ -300,7 +300,7 @@ where
     })?;
     m.install_rom_image(
         u24::from(0 as u16),
-        u24::try_from(0xFFFFFF as u32).or_else(|_| {
+        u24::try_from(0xFF_FFFF as u32).or_else(|_| {
             Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "ROM size is too large for the SFC platform",
@@ -310,8 +310,8 @@ where
     );
 
     m.install_ram(
-        u24::try_from(0x7E0000 as u32).expect("This should work."),
-        u24::try_from(0x020000 as u32).expect("This should work."),
+        u24::try_from(0x7E_0000 as u32).expect("This should work."),
+        u24::try_from(0x02_0000 as u32).expect("This should work."),
     );
     //TODO: System IO area. Requires a custom image to handle banking.
 

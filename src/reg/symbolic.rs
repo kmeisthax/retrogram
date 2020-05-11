@@ -39,8 +39,8 @@ impl<T> Symbolic<T> {
     /// should be cleared.
     pub fn from_bits(bits_set: T, bits_cleared: T) -> Self {
         Symbolic {
-            bits_set: bits_set,
-            bits_cleared: bits_cleared,
+            bits_set,
+            bits_cleared,
         }
     }
 }
@@ -82,7 +82,7 @@ where
     }
 
     fn is_zero(&self) -> bool {
-        return self.is_concrete() && self.bits_set.is_zero();
+        self.is_concrete() && self.bits_set.is_zero()
     }
 }
 
@@ -604,7 +604,7 @@ where
 
         for i in i_iter {
             let unit = Symbolic::convert_from(data.get(i as usize)?.clone());
-            sum = sum | unit << i * <U as BoundWidth<u32>>::bound_width();
+            sum = sum | unit << (i * <U as BoundWidth<u32>>::bound_width());
         }
 
         Some(sum)

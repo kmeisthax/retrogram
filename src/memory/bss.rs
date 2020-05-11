@@ -115,12 +115,10 @@ where
         mut ptr: Pointer<Self::Pointer>,
         ctxts: &[&str],
     ) -> Pointer<Self::Pointer> {
-        match ctxts.get(0) {
-            Some(ctxt) => match u64::from_str_radix(ctxt, 16) {
-                Ok(cval) => ptr.set_platform_context(self.banking_ctxt, reg::Symbolic::new(cval)),
-                _ => {}
-            },
-            _ => {}
+        if let Some(ctxt) = ctxts.get(0) {
+            if let Ok(cval) = u64::from_str_radix(ctxt, 16) {
+                ptr.set_platform_context(self.banking_ctxt, reg::Symbolic::new(cval));
+            }
         }
 
         ptr

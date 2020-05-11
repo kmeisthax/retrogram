@@ -35,7 +35,7 @@ where
 
     loop {
         let (missing_regs, missing_mem, _is_complete) = prereq(&new_pc, bus, &new_state);
-        let is_forking = missing_regs.len() > 0 || missing_mem.len() > 0;
+        let is_forking = !missing_regs.is_empty() || !missing_mem.is_empty();
 
         if is_forking {
             break;

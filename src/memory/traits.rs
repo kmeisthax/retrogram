@@ -119,7 +119,7 @@ macro_rules! desegmentable_impl {
 
                 for i in i_iter {
                     let unit = Self::from(data.get(i as usize)?.clone());
-                    sum = sum | unit << (i * <$from_type as BoundWidth<u32>>::bound_width());
+                    sum |= unit << (i * <$from_type as BoundWidth<u32>>::bound_width());
                 }
 
                 Some(sum)

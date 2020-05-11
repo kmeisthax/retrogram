@@ -79,6 +79,12 @@ pub struct Memory<P, MV, S = P, IO = usize> {
     views: Vec<Region<P, MV, S, IO>>,
 }
 
+impl<P, MV, S, IO> Default for Memory<P, MV, S, IO> {
+    fn default() -> Self {
+        Memory { views: Vec::new() }
+    }
+}
+
 impl<P, MV, S, IO> Memory<P, MV, S, IO> {
     pub fn new() -> Self {
         Memory { views: Vec::new() }
@@ -94,12 +100,12 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
         image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>,
     ) {
         self.views.push(Region {
-            start: start,
-            length: length,
-            read_memtype: read_memtype,
-            write_memtype: write_memtype,
-            exec_memtype: exec_memtype,
-            image: image,
+            start,
+            length,
+            read_memtype,
+            write_memtype,
+            exec_memtype,
+            image,
         });
     }
 
@@ -110,12 +116,12 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
         image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>,
     ) {
         self.views.push(Region {
-            start: start,
-            length: length,
+            start,
+            length,
             read_memtype: Behavior::Memory,
             write_memtype: Behavior::Invalid,
             exec_memtype: Behavior::Memory,
-            image: image,
+            image,
         });
     }
 }
@@ -137,19 +143,19 @@ where
         exec_memtype: Behavior,
     ) {
         self.views.push(Region {
-            start: start,
-            length: length,
-            read_memtype: read_memtype,
-            write_memtype: write_memtype,
-            exec_memtype: exec_memtype,
+            start,
+            length,
+            read_memtype,
+            write_memtype,
+            exec_memtype,
             image: Box::new(UnknownImage::new()),
         });
     }
 
     pub fn install_ram(&mut self, start: P, length: S) {
         self.views.push(Region {
-            start: start,
-            length: length,
+            start,
+            length,
             read_memtype: Behavior::Memory,
             write_memtype: Behavior::Memory,
             exec_memtype: Behavior::Memory,
@@ -159,8 +165,8 @@ where
 
     pub fn install_io(&mut self, start: P, length: S) {
         self.views.push(Region {
-            start: start,
-            length: length,
+            start,
+            length,
             read_memtype: Behavior::MappedIO,
             write_memtype: Behavior::MappedIO,
             exec_memtype: Behavior::MappedIO,
@@ -170,8 +176,8 @@ where
 
     pub fn install_openbus(&mut self, start: P, length: S) {
         self.views.push(Region {
-            start: start,
-            length: length,
+            start,
+            length,
             read_memtype: Behavior::Invalid,
             write_memtype: Behavior::Invalid,
             exec_memtype: Behavior::Invalid,
@@ -191,8 +197,8 @@ where
         F: io::Read,
     {
         self.views.push(Region {
-            start: start,
-            length: length,
+            start,
+            length,
             read_memtype: Behavior::Memory,
             write_memtype: Behavior::MappedIO,
             exec_memtype: Behavior::Memory,
@@ -225,7 +231,7 @@ where
     ///
     pub fn is_overwritable(&self, ptr: &Pointer<P>) -> bool {
         for view in &self.views {
-            if let Some(_) = view.image.decode_addr(ptr, view.start.clone()) {
+            if view.image.decode_addr(ptr, view.start.clone()).is_some() {
                 if view.read_memtype == Behavior::Memory && view.write_memtype == Behavior::Memory {
                     return true;
                 }
@@ -245,7 +251,7 @@ where
         for view in &self.views {
             if let Some(offset) = view.image.decode_addr(ptr, view.start.clone()) {
                 if let Some(imgdata) = view.image.retrieve(offset, IO::one()) {
-                    if imgdata.len() > 0 {
+                    if !imgdata.is_empty() {
                         return reg::Symbolic::new(imgdata[0].clone());
                     }
                 }
@@ -303,7 +309,7 @@ where
             },
         );
         reg::Symbolic::<EV>::from_segments(&data, Endianness::LittleEndian)
-            .unwrap_or_else(|| reg::Symbolic::<EV>::default())
+            .unwrap_or_else(reg::Symbolic::<EV>::default)
     }
 
     /// Read an arbitary big-endian integer type from memory.
@@ -326,7 +332,7 @@ where
             },
         );
         reg::Symbolic::<EV>::from_segments(&data, Endianness::BigEndian)
-            .unwrap_or_else(|| reg::Symbolic::<EV>::default())
+            .unwrap_or_else(reg::Symbolic::<EV>::default)
     }
 }
 

@@ -353,12 +353,11 @@ where
     {
         let from_end = from_start.clone() + from_length;
 
-        return self
-            .xref_source_index
+        self.xref_source_index
             .range(from_start..&from_end.into_ptr())
             .map(|(_, v)| v)
             .flatten()
-            .copied();
+            .copied()
     }
 
     /// Given a contextualized memory range, return all xref IDs targeting that
@@ -373,12 +372,11 @@ where
     {
         let to_end = to_start.clone() + to_length;
 
-        return self
-            .xref_target_index
+        self.xref_target_index
             .range(to_start..&to_end.into_ptr())
             .map(|(_, v)| v)
             .flatten()
-            .copied();
+            .copied()
     }
 
     /// Search for all crossreferences whose static target has not yet been

@@ -79,7 +79,7 @@ pub fn import(prog: &project::Program, datasrc: &project::DataSource) -> io::Res
             database::ExternalFormat::RGBDSSymbolFile,
         ) => import_for_arch(prog, datasrc, &database::rgbds::parse_symbol_file),
         //(arch::ArchName::AARCH32, platform::PlatformName::AGB) => scan_for_arch(prog, start_spec, &arch::aarch32::disassemble, &platform::agb::construct_platform(&mut file)?),
-        _ => return Err(io::Error::new(
+        _ => Err(io::Error::new(
             io::ErrorKind::Other,
             "The given combination of architecture, platform, and/or assembler are not compatible.",
         )),

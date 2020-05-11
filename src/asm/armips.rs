@@ -10,7 +10,7 @@ pub struct OperandFmtWrap<'a, I, S, F, P> {
 
 impl<'a, I, S, F, P> OperandFmtWrap<'a, I, S, F, P> {
     pub fn wrap(tree: &'a ast::Operand<I, S, F, P>) -> Self {
-        OperandFmtWrap { tree: tree }
+        OperandFmtWrap { tree }
     }
 }
 
@@ -96,7 +96,7 @@ pub struct InstrFmtWrap<'a, I, S, F, P> {
 
 impl<'a, I, S, F, P> InstrFmtWrap<'a, I, S, F, P> {
     pub fn wrap(tree: &'a ast::Instruction<I, S, F, P>) -> Self {
-        InstrFmtWrap { tree: tree }
+        InstrFmtWrap { tree }
     }
 }
 
@@ -132,7 +132,7 @@ pub struct SectionFmtWrap<'a, I, SI, F, P, MV, S> {
 
 impl<'a, I, SI, F, P, MV, S> SectionFmtWrap<'a, I, SI, F, P, MV, S> {
     pub fn wrap(tree: &'a ast::Section<I, SI, F, P, MV, S>) -> Self {
-        SectionFmtWrap { tree: tree }
+        SectionFmtWrap { tree }
     }
 }
 
@@ -151,18 +151,18 @@ where
                 ast::Directive::DeclareComment(comment) => write!(f, ";{}", comment)?,
                 ast::Directive::DeclareLabel(label) => {
                     if let Some(_parent_label) = label.parent_name() {
-                        write!(f, "@@{}:\n", label.name())?;
+                        writeln!(f, "@@{}:", label.name())?;
                     } else {
-                        write!(f, "{}:\n", label.name())?;
+                        writeln!(f, "{}:", label.name())?;
                     }
                 }
                 ast::Directive::DeclareOrg(loc) => {
                     let thumb_state = loc.get_arch_context(THUMB_STATE).into_concrete();
 
-                    write!(f, ".org 0x{:X}\n", loc.as_pointer())?;
+                    writeln!(f, ".org 0x{:X}", loc.as_pointer())?;
                     match thumb_state {
-                        Some(0) => write!(f, ".arm\n")?,
-                        Some(1) => write!(f, ".thumb\n")?,
+                        Some(0) => writeln!(f, ".arm")?,
+                        Some(1) => writeln!(f, ".thumb")?,
                         _ => {}
                     }
                 }
@@ -174,13 +174,13 @@ where
                             write!(f, "0x{:X}", byte)?;
                         }
 
-                        write!(f, "\n")?;
+                        writeln!(f)?;
                     }
                 }
                 ast::Directive::EmitInstr(instr, _) => {
-                    write!(f, "    {}\n", InstrFmtWrap::wrap(instr))?
+                    writeln!(f, "    {}", InstrFmtWrap::wrap(instr))?
                 }
-                ast::Directive::EmitSpace(offset) => write!(f, ".skip {}\n", offset)?,
+                ast::Directive::EmitSpace(offset) => writeln!(f, ".skip {}", offset)?,
             }
         }
 

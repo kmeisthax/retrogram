@@ -163,7 +163,7 @@ fn pop_value_from_sp(
 
             Ok(val)
         }
-        _ => return Err(analysis::Error::UnconstrainedRegister),
+        _ => Err(analysis::Error::UnconstrainedRegister),
     }
 }
 
@@ -530,7 +530,7 @@ fn trace_jump_dynamic(
 ) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
     match read_value_from_targetpair(&state, 2, false)?.into_concrete() {
         Some(hl) => Ok((state, p.contextualize(hl))),
-        _ => return Err(analysis::Error::UnconstrainedRegister),
+        _ => Err(analysis::Error::UnconstrainedRegister),
     }
 }
 
@@ -558,7 +558,7 @@ fn trace_himem_store(
 
             Ok(state)
         }
-        _ => return Err(analysis::Error::UnconstrainedMemory(op_ptr)),
+        _ => Err(analysis::Error::UnconstrainedMemory(op_ptr)),
     }
 }
 
@@ -596,7 +596,7 @@ fn trace_himem_load(
 
             Ok(state)
         }
-        _ => return Err(analysis::Error::UnconstrainedMemory(op_ptr)),
+        _ => Err(analysis::Error::UnconstrainedMemory(op_ptr)),
     }
 }
 

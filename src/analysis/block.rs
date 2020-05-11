@@ -25,10 +25,7 @@ where
     P: analysis::Mappable,
 {
     pub fn from_parts(start: memory::Pointer<P>, length: S) -> Self {
-        Block {
-            start: start,
-            length: length,
-        }
+        Block { start, length }
     }
 
     pub fn as_start(&self) -> &memory::Pointer<P> {
@@ -50,10 +47,8 @@ where
             let diff = ptr.as_pointer().clone() - self.start.as_pointer().clone();
 
             if let Ok(diff) = S::try_from(diff) {
-                if diff < self.length.clone() {
-                    if self.start.is_context_eq(ptr) {
-                        return true;
-                    }
+                if diff < self.length.clone() && self.start.is_context_eq(ptr) {
+                    return true;
                 }
             }
         }

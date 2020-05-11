@@ -15,7 +15,7 @@ impl<I, S, F, P> Instruction<I, S, F, P> {
     pub fn new(opcode: &str, operands: Vec<Operand<I, S, F, P>>) -> Self {
         Instruction {
             opcode: opcode.to_string(),
-            operands: operands,
+            operands,
         }
     }
 

@@ -39,10 +39,10 @@ where
         targets: Vec<analysis::Reference<P>>,
     ) -> Self {
         Disasm {
-            instr: instr,
-            next_offset: next_offset,
-            flow: flow,
-            targets: targets,
+            instr,
+            next_offset,
+            flow,
+            targets,
         }
     }
 

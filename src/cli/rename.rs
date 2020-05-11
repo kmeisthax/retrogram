@@ -92,6 +92,6 @@ pub fn rename(prog: &project::Program, from_spec: &str, to_spec: &str) -> io::Re
             &platform::agb::construct_platform(&mut file)?,
             arch::aarch32::architectural_ctxt_parse,
         ),
-        _ => return Err(io::Error::new(io::ErrorKind::Other, "oops")),
+        _ => Err(io::Error::new(io::ErrorKind::Other, "oops")),
     }
 }

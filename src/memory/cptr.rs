@@ -64,7 +64,7 @@ where
         let inner_name = format!("A{}", context_name);
         self.context
             .remove(&inner_name)
-            .unwrap_or_else(|| reg::Symbolic::default())
+            .unwrap_or_else(reg::Symbolic::default)
     }
 
     /// Get a context specific to a given platform.
@@ -96,7 +96,7 @@ where
         let inner_name = format!("P{}", context_name);
         self.context
             .remove(&inner_name)
-            .unwrap_or_else(|| reg::Symbolic::default())
+            .unwrap_or_else(reg::Symbolic::default)
     }
 
     /// List all the contexts a given pointer has.
@@ -109,7 +109,7 @@ where
     ) -> impl Iterator<Item = (bool, &'a str, &'a reg::Symbolic<CV>)> + 'a {
         self.context
             .iter()
-            .map(|(k, v)| (k.chars().next() == Some('A'), &k[1..], v))
+            .map(|(k, v)| (k.starts_with('A'), &k[1..], v))
     }
 
     /// Create a new pointer with the same context as the current one.
@@ -320,22 +320,22 @@ where
 
         for key in keys {
             let lhs_kval = self.context.get(key);
-            if let None = lhs_kval {
+            if lhs_kval.is_none() {
                 return Some(Ordering::Less);
             }
 
             let lhs_kconcrete = lhs_kval.unwrap().as_concrete();
-            if let None = lhs_kconcrete {
+            if lhs_kconcrete.is_none() {
                 return Some(Ordering::Less);
             }
 
             let rhs_kval = rhs.context.get(key);
-            if let None = rhs_kval {
+            if rhs_kval.is_none() {
                 return Some(Ordering::Greater);
             }
 
             let rhs_kconcrete = rhs_kval.unwrap().as_concrete();
-            if let None = rhs_kconcrete {
+            if rhs_kconcrete.is_none() {
                 return Some(Ordering::Greater);
             }
 
@@ -390,22 +390,22 @@ where
 
         for key in keys {
             let lhs_kval = self.context.get(key);
-            if let None = lhs_kval {
+            if lhs_kval.is_none() {
                 return Ordering::Less;
             }
 
             let lhs_kconcrete = lhs_kval.unwrap().as_concrete();
-            if let None = lhs_kconcrete {
+            if lhs_kconcrete.is_none() {
                 return Ordering::Less;
             }
 
             let rhs_kval = rhs.context.get(key);
-            if let None = rhs_kval {
+            if rhs_kval.is_none() {
                 return Ordering::Greater;
             }
 
             let rhs_kconcrete = rhs_kval.unwrap().as_concrete();
-            if let None = rhs_kconcrete {
+            if rhs_kconcrete.is_none() {
                 return Ordering::Greater;
             }
 
@@ -453,13 +453,12 @@ where
                 (Some(key), Some(value)) => contexts.insert(
                     key.to_string(),
                     reg::Symbolic::new(
-                        CV::from_str(value).map_err(|e| PointerParseError::ContextWontParse(e))?,
+                        CV::from_str(value).map_err(PointerParseError::ContextWontParse)?,
                     ),
                 ),
                 (Some(ptr), None) => {
                     return Ok(Pointer {
-                        pointer: P::from_str(ptr)
-                            .map_err(|e| PointerParseError::PointerWontParse(e))?,
+                        pointer: P::from_str(ptr).map_err(PointerParseError::PointerWontParse)?,
                         context: contexts,
                     })
                 }
