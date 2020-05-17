@@ -7,8 +7,8 @@ use crate::memory::Pointer;
 ///
 /// SM83 defines no architectural contexts, so this function does nothing.
 pub fn architectural_ctxt_parse(
-    context_slice: &mut &[&str],
-    ptr: &mut Pointer<PValue>,
+    _context_slice: &mut &[&str],
+    _ptr: &mut Pointer<PValue>,
 ) -> Option<()> {
     Some(())
 }
