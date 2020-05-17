@@ -283,7 +283,7 @@ where
         [0x1B] => PlatformVariant::MBC5Mapper,    //MBC5 with persistent RAM
         [0x1C] => PlatformVariant::MBC5Mapper,    //MBC5 with rumble motor
         [0x1D] => PlatformVariant::MBC5Mapper,    //MBC5 with rumble motor and RAM
-        [0x1E] => PlatformVariant::MBC5Mapper, //MBC5 with rumble motor and persistent RAM
+        [0x1E] => PlatformVariant::MBC5Mapper,    //MBC5 with rumble motor and persistent RAM
         [0x20] => PlatformVariant::UnknownMapper, //MBC6 ROM only
         [0x22] => PlatformVariant::UnknownMapper, //MBC7 with tilt sensor, rumble motor, and persistent EEPROM
         [0xFC] => PlatformVariant::UnknownMapper, //Game Boy Camera with CCD video sensor
