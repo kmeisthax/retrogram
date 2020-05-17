@@ -1,6 +1,7 @@
 //! Symbol rename command for retrogram
 
 use crate::{analysis, arch, ast, cli, input, maths, memory, platform, project};
+use crate::cli::common::resolve_program_config;
 use num_traits::One;
 use std::str::FromStr;
 use std::{fs, io};
@@ -53,29 +54,14 @@ where
 }
 
 pub fn rename(prog: &project::Program, from_spec: &str, to_spec: &str) -> io::Result<()> {
-    let platform = prog.platform().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Unspecified platform, analysis cannot continue.",
-        )
-    })?;
-    let arch = prog
-        .arch()
-        .or_else(|| platform.default_arch())
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Unspecified architecture, analysis cannot continue.",
-            )
-        })?;
     let image = prog
         .iter_images()
         .next()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    match (arch, platform) {
-        (arch::ArchName::SM83, platform::PlatformName::GB) => rename_inner(
+    match resolve_program_config(prog)? {
+        (arch::ArchName::SM83, platform::PlatformName::GB, _) => rename_inner(
             prog,
             from_spec,
             to_spec,
@@ -85,7 +71,7 @@ pub fn rename(prog: &project::Program, from_spec: &str, to_spec: &str) -> io::Re
             )?,
             |_, _| Some(()),
         ),
-        (arch::ArchName::AARCH32, platform::PlatformName::AGB) => rename_inner(
+        (arch::ArchName::AARCH32, platform::PlatformName::AGB, _) => rename_inner(
             prog,
             from_spec,
             to_spec,

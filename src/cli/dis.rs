@@ -1,6 +1,7 @@
 //! High-level CLI routines
 
 use crate::{analysis, arch, asm, ast, cli, input, maths, memory, platform, project};
+use crate::cli::common::resolve_program_config;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::{fs, io};
@@ -151,37 +152,13 @@ where
 }
 
 pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
-    let platform = prog.platform().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Unspecified platform, analysis cannot continue.",
-        )
-    })?;
-    let arch = prog
-        .arch()
-        .or_else(|| platform.default_arch())
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Unspecified architecture, analysis cannot continue.",
-            )
-        })?;
-    let asm = prog
-        .assembler()
-        .or_else(|| arch.default_asm())
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Unspecified assembler for architecture, analysis cannot continue.",
-            )
-        })?;
     let image = prog
         .iter_images()
         .next()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    match (arch, platform, asm) {
+    match resolve_program_config(prog)? {
         (arch::ArchName::SM83, platform::PlatformName::GB, _) => dis_inner(
             prog,
             start_spec,

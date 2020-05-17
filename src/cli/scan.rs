@@ -1,6 +1,7 @@
 //! CLI command: scan
 
 use crate::{analysis, arch, ast, cli, database, input, maths, memory, platform, project, reg};
+use crate::cli::common::resolve_program_config;
 use num_traits::{One, Zero};
 use std::collections::HashSet;
 use std::{fmt, fs, io};
@@ -211,29 +212,14 @@ where
 
 /// Scan a given program for control flow, symbols, and so on.
 pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
-    let platform = prog.platform().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Unspecified platform, analysis cannot continue.",
-        )
-    })?;
-    let arch = prog
-        .arch()
-        .or_else(|| platform.default_arch())
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Unspecified architecture, analysis cannot continue.",
-            )
-        })?;
     let image = prog
         .iter_images()
         .next()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    match (arch, platform) {
-        (arch::ArchName::SM83, platform::PlatformName::GB) => scan_for_arch(
+    match resolve_program_config(prog)? {
+        (arch::ArchName::SM83, platform::PlatformName::GB, _) => scan_for_arch(
             prog,
             start_spec,
             arch::sm83::disassemble,
@@ -243,7 +229,7 @@ pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
             )?,
             |_, _| Some(()),
         ),
-        (arch::ArchName::AARCH32, platform::PlatformName::AGB) => scan_for_arch(
+        (arch::ArchName::AARCH32, platform::PlatformName::AGB, _) => scan_for_arch(
             prog,
             start_spec,
             arch::aarch32::disassemble,
