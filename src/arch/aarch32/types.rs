@@ -138,6 +138,9 @@ pub type Offset = u32;
 /// The type which represents data stored in memory as seen by the processor.
 pub type Data = u8;
 
+/// The compatible contextual pointer type for AArch32
+pub type BusAddress = memory::Pointer<Pointer>;
+
 /// The compatible memory model type necessary to analyze AArch32 programs.
 pub type Bus = memory::Memory<Pointer, Data, Offset>;
 
@@ -149,6 +152,10 @@ pub type Instruction = ast::Instruction<Offset, Value, f32, Pointer>;
 
 /// The AST type which represents disassembled code.
 pub type Section = ast::Section<Offset, Value, f32, Pointer, Data, Offset>;
+
+/// The register state type which represents the execution state of a given
+/// AArch32 program.
+pub type State = reg::State<Aarch32Register, Value, Pointer, Data>;
 
 /// The type which represents a single disassembled instruction.
 pub type Disasm = analysis::Disasm<Offset, Value, f32, Pointer, Offset>;
