@@ -1,5 +1,6 @@
 //! Context injection for AArch32
 
+use crate::arch::aarch32::types::Pointer as PValue;
 use crate::arch::aarch32::THUMB_STATE;
 use crate::reg::New;
 use crate::{memory, reg};
@@ -43,9 +44,9 @@ fn recognize_context<P>(ctxt_str: &str, ptr: &mut memory::Pointer<P>) -> Option<
 /// While the following will not be treated as an AArch32 platform context:
 ///
 ///  * `2:T:24:A0320002` (Context slice is returned as is)
-pub fn architectural_ctxt_parse<P>(
+pub fn architectural_ctxt_parse(
     context_slice: &mut &[&str],
-    ptr: &mut memory::Pointer<P>,
+    ptr: &mut memory::Pointer<PValue>,
 ) -> Option<()> {
     while let Some(ctxt_str) = context_slice.get(0) {
         if recognize_context(ctxt_str, ptr) == None {
