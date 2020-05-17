@@ -199,6 +199,12 @@ pub fn main() -> io::Result<()> {
                     )
                 })?,
             )?,
+            cli::Command::Trace => cli::trace(
+                &prog,
+                &start_pc.ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC")
+                })?,
+            )?,
         };
     } else {
         eprintln!("Please enter a command");

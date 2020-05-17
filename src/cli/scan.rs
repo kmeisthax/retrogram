@@ -1,7 +1,6 @@
 //! CLI command: scan
 
-use crate::cli::common::resolve_program_config;
-use crate::{analysis, arch, ast, cli, database, input, maths, memory, platform, project, reg};
+use crate::{analysis, ast, cli, database, input, maths, memory, project, reg};
 use num_traits::{One, Zero};
 use std::collections::HashSet;
 use std::{fmt, fs, io};
@@ -218,7 +217,13 @@ pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus, dis, fmt_section, fmt_instr, aparse| {
+    with_architecture!(prog, file, |bus,
+                                    dis,
+                                    _fmt_s,
+                                    _fmt_i,
+                                    aparse,
+                                    _prereq,
+                                    _tracer| {
         scan_for_arch(prog, start_spec, dis, bus, aparse)
     })
 }

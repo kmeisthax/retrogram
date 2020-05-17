@@ -16,6 +16,7 @@ pub enum Command {
     Import,
     Backreference,
     Rename,
+    Trace,
 }
 
 impl FromStr for Command {
@@ -30,6 +31,7 @@ impl FromStr for Command {
             "backrefs" => Ok(Command::Backreference),
             "name" => Ok(Command::Rename),
             "rename" => Ok(Command::Rename),
+            "trace" => Ok(Command::Trace),
             _ => Err(()),
         }
     }
@@ -71,13 +73,13 @@ pub fn resolve_program_config(
 
 /// Execute a callback with a given set of architectural, platform, and
 /// assembler related functions.
-/// 
+///
 /// This macro must be invoked in order to almost anything generic with a
 /// particular architecture. It is responsible for instantiating your code
 /// across each architecture's particular type system.
 macro_rules! with_architecture {
-    ($prog:ident, $image_file:ident, |$bus:ident, $dis:ident, $fmt_section:ident, $fmt_instr:ident, $aparse:ident| $callback:block) => {
-        match resolve_program_config($prog)? {
+    ($prog:ident, $image_file:ident, |$bus:ident, $dis:ident, $fmt_section:ident, $fmt_instr:ident, $aparse:ident, $prereq:ident, $tracer:ident| $callback:block) => {
+        match crate::cli::common::resolve_program_config($prog)? {
             (
                 crate::arch::ArchName::SM83,
                 crate::platform::PlatformName::GB,
@@ -100,6 +102,8 @@ macro_rules! with_architecture {
                     crate::arch::sm83::Pointer,
                 >;
                 let $aparse = crate::arch::sm83::architectural_ctxt_parse;
+                let $prereq = crate::arch::sm83::prereq;
+                let $tracer = crate::arch::sm83::trace;
                 $callback
             }
             (
@@ -124,6 +128,8 @@ macro_rules! with_architecture {
                     crate::arch::aarch32::Pointer,
                 >;
                 let $aparse = crate::arch::aarch32::architectural_ctxt_parse;
+                let $prereq = crate::arch::aarch32::prereq;
+                let $tracer = crate::arch::aarch32::trace;
                 $callback
             }
             _ => Err(::std::io::Error::new(

@@ -32,6 +32,7 @@ use std::hash::Hash;
 /// memory do exist.
 ///
 /// # Interaction with
+#[derive(Clone)]
 pub struct State<RK, RV, P, MV>
 where
     RK: Eq + Hash,

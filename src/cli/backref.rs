@@ -1,7 +1,6 @@
 //! Backreference list command for retrogram
 
-use crate::cli::common::resolve_program_config;
-use crate::{analysis, arch, asm, ast, cli, input, maths, memory, platform, project};
+use crate::{analysis, ast, cli, input, maths, memory, project};
 use num_traits::One;
 use std::{fs, io};
 
@@ -90,7 +89,13 @@ pub fn backref(prog: &project::Program, start_spec: &str) -> io::Result<()> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus, dis, _fmt_sec, fmt_instr, aparse| {
+    with_architecture!(prog, file, |bus,
+                                    dis,
+                                    _fmt_sec,
+                                    fmt_instr,
+                                    aparse,
+                                    _prereq,
+                                    _tracer| {
         backref_inner(prog, start_spec, bus, dis, fmt_instr, aparse)
     })
 }

@@ -31,6 +31,11 @@ impl<P> Trace<P> {
         self.pc_path.push(next_pc);
         self
     }
+
+    /// Read out the contents of the trace.
+    pub fn iter(&self) -> impl Iterator<Item = &Pointer<P>> {
+        self.pc_path.iter()
+    }
 }
 
 impl<P> Trace<P>

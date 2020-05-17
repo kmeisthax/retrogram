@@ -9,6 +9,7 @@ mod import;
 mod main;
 mod rename;
 mod scan;
+mod trace;
 mod traits;
 
 pub use backref::backref;
@@ -18,4 +19,5 @@ pub use import::import;
 pub use main::main;
 pub use rename::rename;
 pub use scan::scan;
+pub use trace::trace;
 pub use traits::*;

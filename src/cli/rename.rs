@@ -1,7 +1,6 @@
 //! Symbol rename command for retrogram
 
-use crate::cli::common::resolve_program_config;
-use crate::{analysis, arch, ast, cli, input, maths, memory, platform, project};
+use crate::{analysis, ast, cli, input, maths, memory, project};
 use num_traits::One;
 use std::str::FromStr;
 use std::{fs, io};
@@ -60,7 +59,13 @@ pub fn rename(prog: &project::Program, from_spec: &str, to_spec: &str) -> io::Re
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus, _dis, _fmt_section, _fmt_instr, aparse| {
+    with_architecture!(prog, file, |bus,
+                                    _dis,
+                                    _fmt_section,
+                                    _fmt_instr,
+                                    aparse,
+                                    _prereq,
+                                    _tracer| {
         rename_inner(prog, from_spec, to_spec, bus, aparse)
     })
 }
