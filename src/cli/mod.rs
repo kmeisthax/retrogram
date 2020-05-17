@@ -1,7 +1,9 @@
 //! CLI commands
 
-mod backref;
+#[macro_use]
 mod common;
+
+mod backref;
 mod dis;
 mod import;
 mod main;

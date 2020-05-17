@@ -1,7 +1,7 @@
 //! Symbol rename command for retrogram
 
-use crate::{analysis, arch, ast, cli, input, maths, memory, platform, project};
 use crate::cli::common::resolve_program_config;
+use crate::{analysis, arch, ast, cli, input, maths, memory, platform, project};
 use num_traits::One;
 use std::str::FromStr;
 use std::{fs, io};
@@ -60,23 +60,7 @@ pub fn rename(prog: &project::Program, from_spec: &str, to_spec: &str) -> io::Re
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    match resolve_program_config(prog)? {
-        (arch::ArchName::SM83, platform::PlatformName::GB, _) => rename_inner(
-            prog,
-            from_spec,
-            to_spec,
-            &platform::gb::construct_platform(
-                &mut file
-            )?,
-            |_, _| Some(()),
-        ),
-        (arch::ArchName::AARCH32, platform::PlatformName::AGB, _) => rename_inner(
-            prog,
-            from_spec,
-            to_spec,
-            &platform::agb::construct_platform(&mut file)?,
-            arch::aarch32::architectural_ctxt_parse,
-        ),
-        _ => Err(io::Error::new(io::ErrorKind::Other, "oops")),
-    }
+    with_architecture!(prog, file, |bus, _dis, _fmt_section, _fmt_instr, aparse| {
+        rename_inner(prog, from_spec, to_spec, bus, aparse)
+    })
 }

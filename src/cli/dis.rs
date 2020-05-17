@@ -1,7 +1,7 @@
 //! High-level CLI routines
 
-use crate::{analysis, arch, asm, ast, cli, input, maths, memory, platform, project};
 use crate::cli::common::resolve_program_config;
+use crate::{analysis, arch, asm, ast, cli, input, maths, memory, platform, project};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::{fs, io};
@@ -11,7 +11,7 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(
     start_spec: &str,
     bus: &memory::Memory<P, MV, MS, IO>,
     disassemble: DIS,
-    format_and_print: FMT,
+    format: FMT,
     architectural_ctxt_parse: APARSE,
 ) -> io::Result<()>
 where
@@ -25,7 +25,7 @@ where
     ast::Instruction<I, S, F, P>: Clone,
     ast::Directive<I, S, F, P, MV, MS>: Clone,
     DIS: analysis::Disassembler<I, S, F, P, MV, MS, IO>,
-    FMT: Fn(&ast::Section<I, S, F, P, MV, MS>),
+    FMT: Fn(&ast::Section<I, S, F, P, MV, MS>) -> String,
     APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()>,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
@@ -145,7 +145,7 @@ where
         let labeled_asm = analysis::replace_labels(orig_asm, db, bus);
         let injected_asm = analysis::inject_labels(labeled_asm, db);
         let orgd_asm = analysis::inject_orgs(injected_asm);
-        format_and_print(&orgd_asm);
+        println!("{}", format(&orgd_asm));
     }
 
     Ok(())
@@ -158,25 +158,7 @@ pub fn dis(prog: &project::Program, start_spec: &str) -> io::Result<()> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    match resolve_program_config(prog)? {
-        (arch::ArchName::SM83, platform::PlatformName::GB, _) => dis_inner(
-            prog,
-            start_spec,
-            &platform::gb::construct_platform(
-                &mut file
-            )?,
-            arch::sm83::disassemble,
-            |asm| println!("{}", asm::rgbds::SectionFmtWrap::wrap(&asm)),
-            |_, _| Some(()),
-        ),
-        (arch::ArchName::AARCH32, platform::PlatformName::AGB, _) => dis_inner(
-            prog,
-            start_spec,
-            &platform::agb::construct_platform(&mut file)?,
-            arch::aarch32::disassemble,
-            |asm| println!("{}", asm::armips::SectionFmtWrap::wrap(&asm)),
-            arch::aarch32::architectural_ctxt_parse,
-        ),
-        _ => Err(io::Error::new(io::ErrorKind::Other, "oops")),
-    }
+    with_architecture!(prog, file, |bus, dis, fmt_section, _fmt_instr, aparse| {
+        dis_inner(prog, start_spec, bus, dis, fmt_section, aparse)
+    })
 }

@@ -1,7 +1,7 @@
 //! Backreference list command for retrogram
 
-use crate::{analysis, arch, asm, ast, cli, input, maths, memory, platform, project};
 use crate::cli::common::resolve_program_config;
+use crate::{analysis, arch, asm, ast, cli, input, maths, memory, platform, project};
 use num_traits::One;
 use std::{fs, io};
 
@@ -90,29 +90,7 @@ pub fn backref(prog: &project::Program, start_spec: &str) -> io::Result<()> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    match resolve_program_config(prog)? {
-        (arch::ArchName::SM83, platform::PlatformName::GB, asm::AssemblerName::RGBDS) => {
-            backref_inner(
-                prog,
-                start_spec,
-                &platform::gb::construct_platform(
-                    &mut file
-                )?,
-                arch::sm83::disassemble,
-                |asm| format!("{}", asm::rgbds::InstrFmtWrap::wrap(asm)),
-                |_, _| Some(()),
-            )
-        }
-        (arch::ArchName::AARCH32, platform::PlatformName::AGB, asm::AssemblerName::ARMIPS) => {
-            backref_inner(
-                prog,
-                start_spec,
-                &platform::agb::construct_platform(&mut file)?,
-                arch::aarch32::disassemble,
-                |asm| format!("{}", asm::armips::InstrFmtWrap::wrap(asm)),
-                arch::aarch32::architectural_ctxt_parse,
-            )
-        }
-        _ => Err(io::Error::new(io::ErrorKind::Other, "oops")),
-    }
+    with_architecture!(prog, file, |bus, dis, _fmt_sec, fmt_instr, aparse| {
+        backref_inner(prog, start_spec, bus, dis, fmt_instr, aparse)
+    })
 }

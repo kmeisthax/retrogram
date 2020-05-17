@@ -126,11 +126,29 @@ where
     }
 }
 
+pub fn format_instr<'a, I, S, F, P>(tree: &'a ast::Instruction<I, S, F, P>) -> String
+where
+    I: fmt::Display,
+    S: fmt::Display,
+    F: fmt::Display,
+    P: Clone + From<u16> + fmt::Display + PartialOrd + fmt::LowerHex + fmt::UpperHex,
+{
+    format!("{}", InstrFmtWrap::wrap(tree))
+}
+
 pub struct SectionFmtWrap<'a, I, SI, F, P, MV, S> {
     tree: &'a ast::Section<I, SI, F, P, MV, S>,
 }
 
-impl<'a, I, SI, F, P, MV, S> SectionFmtWrap<'a, I, SI, F, P, MV, S> {
+impl<'a, I, SI, F, P, MV, S> SectionFmtWrap<'a, I, SI, F, P, MV, S>
+where
+    I: fmt::Display,
+    SI: fmt::Display,
+    F: fmt::Display,
+    P: Clone + From<u16> + fmt::Display + PartialOrd + fmt::LowerHex + fmt::UpperHex,
+    MV: fmt::UpperHex,
+    S: fmt::Display,
+{
     pub fn wrap(tree: &'a ast::Section<I, SI, F, P, MV, S>) -> Self {
         SectionFmtWrap { tree }
     }
@@ -268,4 +286,16 @@ where
 
         Ok(())
     }
+}
+
+pub fn format_section<'a, I, SI, F, P, MV, S>(tree: &'a ast::Section<I, SI, F, P, MV, S>) -> String
+where
+    I: fmt::Display,
+    SI: fmt::Display,
+    F: fmt::Display,
+    P: Clone + From<u16> + fmt::Display + PartialOrd + fmt::LowerHex + fmt::UpperHex,
+    MV: fmt::UpperHex,
+    S: fmt::Display,
+{
+    format!("{}", SectionFmtWrap::wrap(tree))
 }

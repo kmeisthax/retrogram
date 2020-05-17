@@ -100,6 +100,16 @@ impl<'a, I, S, F, P> InstrFmtWrap<'a, I, S, F, P> {
     }
 }
 
+pub fn format_instr<'a, I, S, F, P>(tree: &'a ast::Instruction<I, S, F, P>) -> String
+where
+    I: fmt::Display,
+    S: fmt::Display,
+    F: fmt::Display,
+    P: Clone + From<u16> + fmt::Display + PartialOrd + fmt::LowerHex + fmt::UpperHex,
+{
+    format!("{}", InstrFmtWrap::wrap(tree))
+}
+
 impl<'a, I, S, F, P> fmt::Display for InstrFmtWrap<'a, I, S, F, P>
 where
     I: fmt::Display,
@@ -186,4 +196,16 @@ where
 
         Ok(())
     }
+}
+
+pub fn format_section<'a, I, SI, F, P, MV, S>(tree: &'a ast::Section<I, SI, F, P, MV, S>) -> String
+where
+    I: fmt::Display,
+    SI: fmt::Display,
+    F: fmt::Display,
+    P: Clone + From<u16> + fmt::Display + cmp::PartialOrd + fmt::LowerHex + fmt::UpperHex,
+    MV: fmt::UpperHex,
+    S: fmt::Display,
+{
+    format!("{}", SectionFmtWrap::wrap(tree))
 }

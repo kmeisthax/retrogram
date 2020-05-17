@@ -1,7 +1,7 @@
 //! CLI command: scan
 
-use crate::{analysis, arch, ast, cli, database, input, maths, memory, platform, project, reg};
 use crate::cli::common::resolve_program_config;
+use crate::{analysis, arch, ast, cli, database, input, maths, memory, platform, project, reg};
 use num_traits::{One, Zero};
 use std::collections::HashSet;
 use std::{fmt, fs, io};
@@ -218,26 +218,7 @@ pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    match resolve_program_config(prog)? {
-        (arch::ArchName::SM83, platform::PlatformName::GB, _) => scan_for_arch(
-            prog,
-            start_spec,
-            arch::sm83::disassemble,
-            &platform::gb::construct_platform(
-                &mut file
-            )?,
-            |_, _| Some(()),
-        ),
-        (arch::ArchName::AARCH32, platform::PlatformName::AGB, _) => scan_for_arch(
-            prog,
-            start_spec,
-            arch::aarch32::disassemble,
-            &platform::agb::construct_platform(&mut file)?,
-            arch::aarch32::architectural_ctxt_parse,
-        ),
-        _ => Err(io::Error::new(
-            io::ErrorKind::Other,
-            "The given combination of architecture, platform, and/or assembler are not compatible.",
-        )),
-    }
+    with_architecture!(prog, file, |bus, dis, fmt_section, fmt_instr, aparse| {
+        scan_for_arch(prog, start_spec, dis, bus, aparse)
+    })
 }
