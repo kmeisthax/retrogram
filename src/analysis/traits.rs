@@ -35,7 +35,7 @@ pub trait PrerequisiteAnalysis<RK, I, P, MV, S, IO>:
     &memory::Pointer<P>,
     &memory::Memory<P, MV, S, IO>,
     &reg::State<RK, I, P, MV>,
-) -> (Vec<RK>, Vec<memory::Pointer<P>>, bool)
+) -> analysis::Result<(Vec<RK>, Vec<memory::Pointer<P>>, bool), P, S>
 {
 }
 
@@ -44,7 +44,7 @@ impl<T, RK, I, P, MV, S, IO> PrerequisiteAnalysis<RK, I, P, MV, S, IO> for T whe
         &memory::Pointer<P>,
         &memory::Memory<P, MV, S, IO>,
         &reg::State<RK, I, P, MV>,
-    ) -> (Vec<RK>, Vec<memory::Pointer<P>>, bool)
+    ) -> analysis::Result<(Vec<RK>, Vec<memory::Pointer<P>>, bool), P, S>
 {
 }
 
