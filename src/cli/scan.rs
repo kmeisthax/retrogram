@@ -224,8 +224,7 @@ pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
             start_spec,
             arch::sm83::disassemble,
             &platform::gb::construct_platform(
-                &mut file,
-                platform::gb::PlatformVariant::MBC5Mapper,
+                &mut file
             )?,
             |_, _| Some(()),
         ),

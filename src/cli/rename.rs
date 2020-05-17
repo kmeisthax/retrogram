@@ -66,8 +66,7 @@ pub fn rename(prog: &project::Program, from_spec: &str, to_spec: &str) -> io::Re
             from_spec,
             to_spec,
             &platform::gb::construct_platform(
-                &mut file,
-                platform::gb::PlatformVariant::MBC5Mapper,
+                &mut file
             )?,
             |_, _| Some(()),
         ),
