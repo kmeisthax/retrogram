@@ -18,25 +18,27 @@ type TraceResult<RK, I, P, MV, S> = analysis::Result<
 /// This function returns the precondition state and a pointer to the first
 /// instruction which requires parallel tracing and cannot be executed
 /// symbolically.
-fn trace_until_fork<RK, I, SI, F, P, MV, S, IO>(
+pub fn trace_until_fork<RK, I, P, MV, S, IO, PREREQ, TRACER>(
     pc: &memory::Pointer<P>,
     mut trace: analysis::Trace<P>,
     bus: &memory::Memory<P, MV, S, IO>,
     pre_state: &reg::State<RK, I, P, MV>,
-    prereq: &dyn analysis::PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
-    tracer: &dyn analysis::Tracer<RK, I, P, MV, S, IO>,
+    prereq: PREREQ,
+    tracer: TRACER,
 ) -> TraceResult<RK, I, P, MV, S>
 where
     RK: analysis::Mappable,
     P: analysis::Mappable,
     memory::Pointer<P>: Clone,
     reg::State<RK, I, P, MV>: Clone,
+    PREREQ: analysis::PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
+    TRACER: analysis::Tracer<RK, I, P, MV, S, IO>,
 {
     let mut new_pc = pc.clone();
     let mut new_state = pre_state.clone();
 
     loop {
-        let (missing_regs, missing_mem, _is_complete) = prereq(&new_pc, bus, &new_state);
+        let (missing_regs, missing_mem, _is_complete) = prereq(&new_pc, bus, &new_state)?;
         let is_forking = !missing_regs.is_empty() || !missing_mem.is_empty();
 
         if is_forking {
