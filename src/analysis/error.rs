@@ -85,4 +85,18 @@ where
     }
 }
 
+impl<P, S> Into<io::Error> for Error<P, S>
+where
+    P: fmt::UpperHex,
+{
+    fn into(self) -> io::Error {
+        use Error::*;
+
+        match self {
+            IOError(e) => e,
+            _ => io::Error::new(io::ErrorKind::Other, format!("{}", self)),
+        }
+    }
+}
+
 pub type Result<T, P, S> = result::Result<T, Error<P, S>>;
