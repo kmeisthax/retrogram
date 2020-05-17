@@ -1,7 +1,7 @@
 //! Types used in modeling the SM83
 
 use crate::{analysis, ast, memory, reg};
-use std::str;
+use std::{fmt, result, str};
 
 /// Enumeration of all architectural GBZ80 registers.
 ///
@@ -10,7 +10,7 @@ use std::str;
 ///  * We don't consider register pairs (e.g. BC, DE, HL)
 ///  * F isn't considered special here
 ///  * SP has been treated as a register pair and split into S and P.
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Register {
     A,
     B,
@@ -42,6 +42,47 @@ impl Register {
             "hli" => vec![Register::H, Register::L],
             "sp" => vec![Register::S, Register::P],
             _ => vec![],
+        }
+    }
+}
+
+impl fmt::Display for Register {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Register::*;
+
+        match self {
+            A => write!(f, "A"),
+            B => write!(f, "B"),
+            C => write!(f, "C"),
+            D => write!(f, "D"),
+            E => write!(f, "E"),
+            H => write!(f, "H"),
+            L => write!(f, "L"),
+            F => write!(f, "F"),
+            S => write!(f, "S"),
+            P => write!(f, "P"),
+        }
+    }
+}
+
+impl str::FromStr for Register {
+    type Err = ();
+
+    fn from_str(s: &str) -> result::Result<Self, Self::Err> {
+        use Register::*;
+
+        match s {
+            "A" => Ok(A),
+            "B" => Ok(B),
+            "C" => Ok(C),
+            "D" => Ok(D),
+            "E" => Ok(E),
+            "H" => Ok(H),
+            "L" => Ok(L),
+            "F" => Ok(F),
+            "S" => Ok(S),
+            "P" => Ok(P),
+            _ => Err(()),
         }
     }
 }

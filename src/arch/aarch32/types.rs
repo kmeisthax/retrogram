@@ -1,8 +1,9 @@
 //! Types used by aarch32
 
-use crate::{analysis, ast, memory};
+use crate::{analysis, ast, memory, reg};
+use std::{fmt, result, str};
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Aarch32Register {
     R0,
     R1,
@@ -71,27 +72,56 @@ impl Aarch32Register {
     }
 }
 
-impl ToString for Aarch32Register {
-    fn to_string(&self) -> String {
+impl fmt::Display for Aarch32Register {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Aarch32Register::*;
 
         match self {
-            R0 => "R0".to_string(),
-            R1 => "R1".to_string(),
-            R2 => "R2".to_string(),
-            R3 => "R3".to_string(),
-            R4 => "R4".to_string(),
-            R5 => "R5".to_string(),
-            R6 => "R6".to_string(),
-            R7 => "R7".to_string(),
-            R8 => "R8".to_string(),
-            R9 => "R9".to_string(),
-            R10 => "R10".to_string(),
-            R11 => "R11".to_string(),
-            R12 => "R12".to_string(),
-            R13 => "R13".to_string(),
-            R14 => "R14".to_string(),
-            R15 => "PC".to_string(),
+            R0 => write!(f, "R0"),
+            R1 => write!(f, "R1"),
+            R2 => write!(f, "R2"),
+            R3 => write!(f, "R3"),
+            R4 => write!(f, "R4"),
+            R5 => write!(f, "R5"),
+            R6 => write!(f, "R6"),
+            R7 => write!(f, "R7"),
+            R8 => write!(f, "R8"),
+            R9 => write!(f, "R9"),
+            R10 => write!(f, "R10"),
+            R11 => write!(f, "R11"),
+            R12 => write!(f, "R12"),
+            R13 => write!(f, "R13"),
+            R14 => write!(f, "R14"),
+            R15 => write!(f, "PC"),
+        }
+    }
+}
+
+impl str::FromStr for Aarch32Register {
+    type Err = ();
+
+    fn from_str(s: &str) -> result::Result<Self, Self::Err> {
+        use Aarch32Register::*;
+
+        match s {
+            "R0" => Ok(R0),
+            "R1" => Ok(R1),
+            "R2" => Ok(R2),
+            "R3" => Ok(R3),
+            "R4" => Ok(R4),
+            "R5" => Ok(R5),
+            "R6" => Ok(R6),
+            "R7" => Ok(R7),
+            "R8" => Ok(R8),
+            "R9" => Ok(R9),
+            "R10" => Ok(R10),
+            "R11" => Ok(R11),
+            "R12" => Ok(R12),
+            "R13" => Ok(R13),
+            "R14" => Ok(R14),
+            "R15" => Ok(R15),
+            "PC" => Ok(R15),
+            _ => Err(()),
         }
     }
 }
