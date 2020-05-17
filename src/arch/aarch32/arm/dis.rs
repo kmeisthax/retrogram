@@ -1070,6 +1070,7 @@ fn ldstmisc(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn ldst_coproc(
     _p: &memory::Pointer<Pointer>,
     cond: u32,

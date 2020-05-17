@@ -9,6 +9,14 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::UpperHex;
 
+pub type DisassmbledSection<I, SI, F, P, MV, S> = (
+    ast::Section<I, SI, F, P, MV, S>,
+    HashSet<analysis::Reference<P>>,
+    Option<S>,
+    Vec<analysis::Block<P, S>>,
+    Option<analysis::Error<P, S>>,
+);
+
 /// Given memory and a pointer, disassemble a basic block of instructions and
 /// return them.
 ///
@@ -36,13 +44,7 @@ pub fn disassemble_block<I, SI, F, P, MV, S, IO, DIS>(
     start_pc: memory::Pointer<P>,
     plat: &memory::Memory<P, MV, S, IO>,
     disassemble: &DIS,
-) -> (
-    ast::Section<I, SI, F, P, MV, S>,
-    HashSet<analysis::Reference<P>>,
-    Option<S>,
-    Vec<analysis::Block<P, S>>,
-    Option<analysis::Error<P, S>>,
-)
+) -> DisassmbledSection<I, SI, F, P, MV, S>
 where
     P: memory::PtrNum<S> + analysis::Mappable + fmt::Display + fmt::UpperHex,
     S: memory::Offset<P> + fmt::Display,

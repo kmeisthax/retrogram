@@ -2,12 +2,13 @@
 
 use crate::ast::Directive;
 use crate::memory;
-use std::slice;
+
+type FixedDirective<I, SI, F, P, MV, S> = (Directive<I, SI, F, P, MV, S>, memory::Pointer<P>);
 
 #[derive(Clone, Debug)]
 pub struct Section<I, SI, F, P, MV, S> {
     name: String,
-    directives: Vec<(Directive<I, SI, F, P, MV, S>, memory::Pointer<P>)>,
+    directives: Vec<FixedDirective<I, SI, F, P, MV, S>>,
 }
 
 impl<I, SI, F, P, MV, S> Section<I, SI, F, P, MV, S>
@@ -21,9 +22,7 @@ where
         }
     }
 
-    pub fn iter_directives(
-        &self,
-    ) -> slice::Iter<(Directive<I, SI, F, P, MV, S>, memory::Pointer<P>)> {
+    pub fn iter_directives(&self) -> impl Iterator<Item = &FixedDirective<I, SI, F, P, MV, S>> {
         self.directives.iter()
     }
 

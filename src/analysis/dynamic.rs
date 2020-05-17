@@ -2,6 +2,16 @@
 
 use crate::{analysis, memory, reg};
 
+type TraceResult<RK, I, P, MV, S> = analysis::Result<
+    (
+        memory::Pointer<P>,
+        analysis::Trace<P>,
+        reg::State<RK, I, P, MV>,
+    ),
+    P,
+    S,
+>;
+
 /// Trace a given precondition state until it is necessary to fork the analysis
 /// into multiple states.
 ///
@@ -15,15 +25,7 @@ fn trace_until_fork<RK, I, SI, F, P, MV, S, IO>(
     pre_state: &reg::State<RK, I, P, MV>,
     prereq: &dyn analysis::PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
     tracer: &dyn analysis::Tracer<RK, I, P, MV, S, IO>,
-) -> analysis::Result<
-    (
-        memory::Pointer<P>,
-        analysis::Trace<P>,
-        reg::State<RK, I, P, MV>,
-    ),
-    P,
-    S,
->
+) -> TraceResult<RK, I, P, MV, S>
 where
     RK: analysis::Mappable,
     P: analysis::Mappable,
