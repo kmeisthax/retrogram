@@ -1,10 +1,11 @@
 //! Single-run tracing command
 
-use crate::analysis::{trace_until_fork, Trace};
+use crate::analysis::{trace_until_fork, Trace, TraceEvent};
 use crate::input::parse_ptr;
 use crate::project;
 use crate::reg::{State, Symbolic};
 use clap::{ArgMatches, Values};
+use std::cmp::max;
 use std::fs;
 use std::hash::Hash;
 use std::io;
@@ -97,9 +98,57 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
             trace_until_fork(&start_pc, trace, bus, &state, prereq, tracer)
                 .map_err(Into::<io::Error>::into)?;
 
-        for pc in trace.iter() {
-            let disasm = dis(pc, bus).map_err(Into::<io::Error>::into)?;
-            println!("{}: {}", pc, fmt_i(disasm.as_instr()));
+        let mut pc_list = vec![];
+        let mut instr_list = vec![];
+        let mut event_list = vec![];
+
+        for event in trace.iter() {
+            match event {
+                TraceEvent::Execute(pc) => {
+                    let disasm = dis(pc, bus).map_err(Into::<io::Error>::into)?;
+
+                    pc_list.push(format!("{}", pc));
+                    instr_list.push(fmt_i(disasm.as_instr()).to_string());
+                    event_list.push("".to_string());
+                }
+                TraceEvent::RegisterSet(reg, val) => {
+                    if let Some(evt) = event_list.last_mut() {
+                        if !evt.is_empty() {
+                            *evt = format!("{}, ", evt);
+                        }
+
+                        *evt = format!("{}={:X}", reg, val);
+                    }
+                }
+                TraceEvent::MemoryWrite(ptr, values) => {
+                    if let Some(evt) = event_list.last_mut() {
+                        if !evt.is_empty() {
+                            *evt = format!("{}, ", evt);
+                        }
+
+                        *evt = format!(
+                            "{:X}={}",
+                            ptr,
+                            values
+                                .iter()
+                                .map(|v| format!("{:X}", v))
+                                .collect::<Vec<String>>()
+                                .join("")
+                        );
+                    }
+                }
+            }
+        }
+
+        let pc_width = pc_list.iter().fold(0, |m, s| max(m, s.len()));
+        let instr_width = instr_list.iter().fold(0, |m, s| max(m, s.len()));
+        let event_width = event_list.iter().fold(0, |m, s| max(m, s.len()));
+
+        for ((pc, instr), event) in pc_list.iter().zip(instr_list.iter()).zip(event_list.iter()) {
+            println!(
+                "{0:1$} | {2:3$} | {4:5$}",
+                pc, pc_width, instr, instr_width, event, event_width
+            );
         }
 
         Ok(())

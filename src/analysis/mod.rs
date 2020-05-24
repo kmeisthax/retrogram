@@ -22,5 +22,5 @@ pub use passes::inject_orgs;
 pub use passes::replace_labels;
 pub use reference::Reference;
 pub use reference::ReferenceKind;
-pub use trace::Trace;
+pub use trace::{Trace, TraceEvent};
 pub use traits::*;

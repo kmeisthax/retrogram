@@ -5,7 +5,7 @@ use crate::{analysis, memory, reg};
 type TraceResult<RK, I, P, MV, S> = analysis::Result<
     (
         memory::Pointer<P>,
-        analysis::Trace<P>,
+        analysis::Trace<RK, I, P, MV>,
         reg::State<RK, I, P, MV>,
     ),
     P,
@@ -20,7 +20,7 @@ type TraceResult<RK, I, P, MV, S> = analysis::Result<
 /// symbolically.
 pub fn trace_until_fork<RK, I, P, MV, S, IO, PREREQ, TRACER>(
     pc: &memory::Pointer<P>,
-    mut trace: analysis::Trace<P>,
+    mut trace: analysis::Trace<RK, I, P, MV>,
     bus: &memory::Memory<P, MV, S, IO>,
     pre_state: &reg::State<RK, I, P, MV>,
     prereq: PREREQ,
