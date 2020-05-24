@@ -4,7 +4,6 @@
 use crate::maths::CheckedSub;
 use crate::memory::{Image, Pointer};
 use crate::reg;
-use crate::reg::New;
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
@@ -117,7 +116,7 @@ where
     ) -> Pointer<Self::Pointer> {
         if let Some(ctxt) = ctxts.get(0) {
             if let Ok(cval) = u64::from_str_radix(ctxt, 16) {
-                ptr.set_platform_context(self.banking_ctxt, reg::Symbolic::new(cval));
+                ptr.set_platform_context(self.banking_ctxt, reg::Symbolic::from(cval));
             }
         }
 

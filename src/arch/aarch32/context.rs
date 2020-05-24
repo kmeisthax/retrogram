@@ -2,18 +2,17 @@
 
 use crate::arch::aarch32::types::Pointer as PValue;
 use crate::arch::aarch32::THUMB_STATE;
-use crate::reg::New;
 use crate::{memory, reg};
 
 fn recognize_context<P>(ctxt_str: &str, ptr: &mut memory::Pointer<P>) -> Option<()> {
     match ctxt_str {
         "T" => {
-            ptr.set_arch_context(THUMB_STATE, reg::Symbolic::new(1));
+            ptr.set_arch_context(THUMB_STATE, reg::Symbolic::from(1));
 
             Some(())
         }
         "A" => {
-            ptr.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
+            ptr.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
 
             Some(())
         }

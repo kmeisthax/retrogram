@@ -9,7 +9,6 @@ use crate::arch::aarch32::arm::condcode;
 use crate::arch::aarch32::Aarch32Register as A32Reg;
 use crate::arch::aarch32::{Bus, Disasm, Instruction, Offset, Operand, Pointer, THUMB_STATE};
 use crate::ast::Operand as op;
-use crate::reg::New;
 use crate::{analysis, ast, memory, reg};
 
 fn shift_symbol(shift: u32, shift_imm: u32) -> analysis::Result<&'static str, Pointer, Offset> {
@@ -727,7 +726,7 @@ fn blx_immediate(
         p.as_pointer()
             .wrapping_add(((offset & 0x007F_FFFF) | signbit) << 2 | h << 1),
     );
-    target.set_arch_context(THUMB_STATE, reg::Symbolic::new(1));
+    target.set_arch_context(THUMB_STATE, reg::Symbolic::from(1));
     let jumpref = refr::new_static_ref(p.clone(), target.clone(), refkind::Subroutine);
 
     Ok(Disasm::new(

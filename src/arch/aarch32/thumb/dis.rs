@@ -7,7 +7,6 @@ use crate::arch::aarch32::thumb::THUMB_STATE;
 use crate::arch::aarch32::Aarch32Register as A32Reg;
 use crate::arch::aarch32::Operand as op;
 use crate::arch::aarch32::{Bus, Disasm, Instruction, Offset, Pointer};
-use crate::reg::New;
 use crate::{analysis, memory, reg};
 
 fn cond_branch(
@@ -21,7 +20,7 @@ fn cond_branch(
     let target = p.contextualize((signed_offset - 4 + *p.as_pointer() as i32) as Pointer);
     let mut swi_target = p.contextualize(0x0000_0008);
 
-    swi_target.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
+    swi_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
 
     match cond {
         //Unconditional conditional branches are undefined and are thus treated as illegal
@@ -601,7 +600,7 @@ fn uncond_branch_link(
             let target = p.contextualize((*p.as_pointer() as i32 + offset as i32) as u32);
             let mut arm_target =
                 p.contextualize((*p.as_pointer() as i32 + offset as i32) as u32 & 0xFFFF_FFFC);
-            arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
+            arm_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
 
             match h {
                 1 if low_offset & 1 == 0 => Ok(Disasm::new(
@@ -772,7 +771,7 @@ fn breakpoint(
     immed: u16,
 ) -> analysis::Result<Disasm, Pointer, Offset> {
     let mut bkpt_target = p.contextualize(0x0000_000C);
-    bkpt_target.set_arch_context(THUMB_STATE, reg::Symbolic::new(0));
+    bkpt_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
 
     let targets = vec![refr::new_static_ref(
         p.clone(),

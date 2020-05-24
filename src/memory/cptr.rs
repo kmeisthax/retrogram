@@ -2,7 +2,6 @@
 //! necessary to understand them.
 
 use crate::reg;
-use crate::reg::New;
 use num::traits::Bounded;
 use serde::de;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -434,7 +433,7 @@ impl<P, CV> str::FromStr for Pointer<P, CV>
 where
     P: str::FromStr,
     CV: str::FromStr,
-    reg::Symbolic<CV>: Default + reg::New<CV>,
+    reg::Symbolic<CV>: Default + From<CV>,
 {
     type Err = PointerParseError<P, CV>;
 
@@ -452,7 +451,7 @@ where
                 }
                 (Some(key), Some(value)) => contexts.insert(
                     key.to_string(),
-                    reg::Symbolic::new(
+                    reg::Symbolic::from(
                         CV::from_str(value).map_err(PointerParseError::ContextWontParse)?,
                     ),
                 ),
@@ -539,7 +538,7 @@ impl<'de, P, CV> Deserialize<'de> for Pointer<P, CV>
 where
     P: str::FromStr,
     CV: str::FromStr,
-    reg::Symbolic<CV>: Default + reg::New<CV>,
+    reg::Symbolic<CV>: Default + From<CV>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -549,7 +548,7 @@ where
         where
             P: str::FromStr,
             CV: str::FromStr,
-            reg::Symbolic<CV>: Default + reg::New<CV>,
+            reg::Symbolic<CV>: Default + From<CV>,
         {
             p: std::marker::PhantomData<P>,
             cv: std::marker::PhantomData<CV>,
@@ -559,7 +558,7 @@ where
         where
             P: str::FromStr,
             CV: str::FromStr,
-            reg::Symbolic<CV>: Default + reg::New<CV>,
+            reg::Symbolic<CV>: Default + From<CV>,
         {
             type Value = Pointer<P, CV>;
 

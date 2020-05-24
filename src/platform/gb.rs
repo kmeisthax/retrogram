@@ -1,7 +1,6 @@
 //! Platform implementation for Game Boy and it's attendant memory mapper chips
 
 use crate::arch::sm83;
-use crate::reg::New;
 use crate::{memory, reg};
 use std::io;
 
@@ -179,7 +178,7 @@ where
         if *ptr.as_pointer() > 0x4000 {
             if let Some(ctxt) = ctxts.get(0) {
                 if let Ok(cval) = u64::from_str_radix(ctxt, 16) {
-                    ptr.set_platform_context("R", reg::Symbolic::new(cval));
+                    ptr.set_platform_context("R", reg::Symbolic::from(cval));
                 }
             }
         }
@@ -216,22 +215,22 @@ where
         } else if values[values.len() - 1] >= V::from(0xC000) {
             context.set_platform_context(
                 "W",
-                reg::Symbolic::new(u64::from(values[values.len() - 2].clone())),
+                reg::Symbolic::from(u64::from(values[values.len() - 2].clone())),
             );
         } else if values[values.len() - 1] >= V::from(0xA000) {
             context.set_platform_context(
                 "S",
-                reg::Symbolic::new(u64::from(values[values.len() - 2].clone())),
+                reg::Symbolic::from(u64::from(values[values.len() - 2].clone())),
             );
         } else if values[values.len() - 1] >= V::from(0x8000) {
             context.set_platform_context(
                 "V",
-                reg::Symbolic::new(u64::from(values[values.len() - 2].clone())),
+                reg::Symbolic::from(u64::from(values[values.len() - 2].clone())),
             );
         } else if values[values.len() - 1] >= V::from(0x4000) {
             context.set_platform_context(
                 "R",
-                reg::Symbolic::new(u64::from(values[values.len() - 2].clone())),
+                reg::Symbolic::from(u64::from(values[values.len() - 2].clone())),
             );
         }
     }

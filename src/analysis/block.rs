@@ -61,7 +61,7 @@ where
 mod tests {
     use crate::analysis::Block;
     use crate::memory::Pointer;
-    use crate::reg::{New, Symbolic};
+    use crate::reg::Symbolic;
 
     #[test]
     fn block_within() {
@@ -87,10 +87,10 @@ mod tests {
     #[test]
     fn block_separate_arch_context() {
         let mut base = Pointer::from(0x100);
-        base.set_arch_context("T", Symbolic::new(0));
+        base.set_arch_context("T", Symbolic::from(0));
 
         let mut tgt = Pointer::from(0x105);
-        tgt.set_arch_context("T", Symbolic::new(1));
+        tgt.set_arch_context("T", Symbolic::from(1));
 
         let block = Block::from_parts(base, 0x50);
 
@@ -100,10 +100,10 @@ mod tests {
     #[test]
     fn block_separate_plat_context() {
         let mut base = Pointer::from(0x100);
-        base.set_platform_context("R", Symbolic::new(0));
+        base.set_platform_context("R", Symbolic::from(0));
 
         let mut tgt = Pointer::from(0x105);
-        tgt.set_platform_context("R", Symbolic::new(1));
+        tgt.set_platform_context("R", Symbolic::from(1));
 
         let block = Block::from_parts(base, 0x50);
 
@@ -113,10 +113,10 @@ mod tests {
     #[test]
     fn block_separate_context() {
         let mut base = Pointer::from(0x100);
-        base.set_arch_context("T", Symbolic::new(0));
+        base.set_arch_context("T", Symbolic::from(0));
 
         let mut tgt = Pointer::from(0x105);
-        tgt.set_platform_context("R", Symbolic::new(1));
+        tgt.set_platform_context("R", Symbolic::from(1));
 
         let block = Block::from_parts(base, 0x50);
 

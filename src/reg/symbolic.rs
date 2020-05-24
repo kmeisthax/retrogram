@@ -3,7 +3,7 @@
 
 use crate::maths::BoundWidth;
 use crate::memory::{Desegmentable, Endianness};
-use crate::reg::{Bitwise, Convertable, New, TryConvertable};
+use crate::reg::{Bitwise, Convertable, TryConvertable};
 use num::traits::{Bounded, CheckedShl, One, Zero};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
@@ -57,11 +57,11 @@ where
     }
 }
 
-impl<T> New<T> for Symbolic<T>
+impl<T> From<T> for Symbolic<T>
 where
     T: Clone + Not<Output = T>,
 {
-    fn new(v: T) -> Self {
+    fn from(v: T) -> Self {
         Symbolic {
             bits_set: v.clone(),
             bits_cleared: !v,
@@ -501,11 +501,11 @@ where
         let half_adds = self.clone() ^ rhs.clone();
         let half_carries = self & rhs;
         let zero: XOROut<T, R> = XOROut::<T, R>::zero();
-        let mut carry = Symbolic::new(zero);
+        let mut carry = Symbolic::from(zero);
         let mut sum = carry.clone();
 
         for bit in 0..bits {
-            let mask = Symbolic::new(XOROut::<T, R>::one() << bit);
+            let mask = Symbolic::from(XOROut::<T, R>::one() << bit);
             sum = sum | half_adds.clone() & mask.clone() ^ carry.clone() & mask.clone();
             carry = (carry & half_adds.clone() & mask.clone() | half_carries.clone() & mask) << 1;
         }
@@ -554,12 +554,12 @@ where
         let half_adds = self.clone() ^ !rhs.clone();
         let half_carries = self & !rhs;
         let zero: XOROut<T, R> = XOROut::<T, R>::zero();
-        let mut sum = Symbolic::new(zero);
+        let mut sum = Symbolic::from(zero);
         let one: XOROut<T, R> = XOROut::<T, R>::one();
-        let mut carry = Symbolic::new(one);
+        let mut carry = Symbolic::from(one);
 
         for bit in 0..bits {
-            let mask = Symbolic::new(XOROut::<T, R>::one() << bit);
+            let mask = Symbolic::from(XOROut::<T, R>::one() << bit);
             sum = sum | half_adds.clone() & mask.clone() ^ carry.clone() & mask.clone();
             carry = (carry & half_adds.clone() & mask.clone() | half_carries.clone() & mask) << 1;
         }
@@ -571,14 +571,14 @@ where
 impl<T> Bounded for Symbolic<T>
 where
     T: Bounded,
-    Symbolic<T>: New<T>,
+    Symbolic<T>: From<T>,
 {
     fn min_value() -> Self {
-        Self::new(T::min_value())
+        Self::from(T::min_value())
     }
 
     fn max_value() -> Self {
-        Self::new(T::max_value())
+        Self::from(T::max_value())
     }
 }
 

@@ -5,7 +5,6 @@ use crate::maths::CheckedSub;
 use crate::memory::bss::UnknownImage;
 use crate::memory::rombin::ROMBinaryImage;
 use crate::memory::{Behavior, Desegmentable, Endianness, Image, Pointer};
-use crate::reg::New;
 use crate::{memory, reg};
 use num::traits::One;
 use std::convert::{TryFrom, TryInto};
@@ -252,7 +251,7 @@ where
             if let Some(offset) = view.image.decode_addr(ptr, view.start.clone()) {
                 if let Some(imgdata) = view.image.retrieve(offset, IO::one()) {
                     if !imgdata.is_empty() {
-                        return reg::Symbolic::new(imgdata[0].clone());
+                        return reg::Symbolic::from(imgdata[0].clone());
                     }
                 }
             }
