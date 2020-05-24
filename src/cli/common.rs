@@ -4,6 +4,7 @@ use crate::arch::ArchName;
 use crate::asm::AssemblerName;
 use crate::platform::PlatformName;
 use crate::project::Program;
+use clap::{App, Arg, SubCommand};
 use std::io;
 use std::str;
 use std::str::FromStr;
@@ -17,6 +18,82 @@ pub enum Command {
     Backreference,
     Rename,
     Trace,
+}
+
+impl Command {
+    /// Enumerate all commands that Retrogram recognizes.
+    pub fn enumerate() -> Vec<Self> {
+        use Command::*;
+
+        vec![Scan, Disassemble, Import, Backreference, Rename, Trace]
+    }
+
+    /// Construct the subcommand object for this particular `Command`.
+    pub fn into_clap_subcommand<'a, 'b>(self) -> App<'a, 'b> {
+        match self {
+            Command::Scan => SubCommand::with_name("scan")
+                .about("Scan for code at a given address")
+                .arg(
+                    Arg::with_name("start_pc")
+                        .value_name("1234")
+                        .index(1)
+                        .required(true)
+                        .help("The PC value to start analysis from"),
+                ),
+            Command::Disassemble => SubCommand::with_name("dis")
+                .about("Display code for a given address or label")
+                .arg(
+                    Arg::with_name("start_pc")
+                        .value_name("1234")
+                        .index(1)
+                        .required(true)
+                        .help("The PC value or label to list code for"),
+                ),
+            Command::Import => SubCommand::with_name("import")
+                .about("Import data from an external data source")
+                .arg(
+                    Arg::with_name("external_db")
+                        .value_name("myapp_sym")
+                        .index(1)
+                        .required(true)
+                        .help("The name of an external data source in the project to import from"),
+                ),
+            Command::Backreference => SubCommand::with_name("backref")
+                .about("List backreferences to a given address or label")
+                .arg(
+                    Arg::with_name("start_pc")
+                        .value_name("1234")
+                        .index(1)
+                        .required(true)
+                        .help("The PC value or label to list backreferences for"),
+                ),
+            Command::Rename => SubCommand::with_name("rename")
+                .about("Assign a label to a memory location (or reassign an existing one)")
+                .arg(
+                    Arg::with_name("start_pc")
+                        .value_name("1234")
+                        .index(1)
+                        .required(true)
+                        .help("The PC value (or existing label) to (re)label"),
+                )
+                .arg(
+                    Arg::with_name("new_label")
+                        .value_name("MyLabel")
+                        .index(2)
+                        .required(true)
+                        .help("What to name the PC value or label"),
+                ),
+            Command::Trace => SubCommand::with_name("trace")
+                .about("Execute a portion of the program with a particular register state")
+                .arg(
+                    Arg::with_name("start_pc")
+                        .value_name("1234")
+                        .index(1)
+                        .required(true)
+                        .help("The PC value or label to trace"),
+                ),
+        }
+    }
 }
 
 impl FromStr for Command {

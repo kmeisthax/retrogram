@@ -1,7 +1,8 @@
 //! CLI support for non-command bits
 
+use crate::cli::common::Command;
 use crate::{cli, project};
-use clap::{Arg, ArgSettings, SubCommand};
+use clap::{Arg, ArgSettings};
 use std::io;
 use std::str::FromStr;
 
@@ -72,68 +73,10 @@ pub fn main() -> io::Result<()> {
             .help("The project file to load")
             .set(ArgSettings::Global),
     );
-    app = app.subcommand(
-        SubCommand::with_name("scan")
-            .about("Scan for code at a given address")
-            .arg(
-                Arg::with_name("start_pc")
-                    .value_name("1234")
-                    .index(1)
-                    .required(true)
-                    .help("The PC value to start analysis from"),
-            ),
-    );
-    app = app.subcommand(
-        SubCommand::with_name("dis")
-            .about("Display code for a given address or label")
-            .arg(
-                Arg::with_name("start_pc")
-                    .value_name("1234")
-                    .index(1)
-                    .required(true)
-                    .help("The PC value or label to list code for"),
-            ),
-    );
-    app = app.subcommand(
-        SubCommand::with_name("import")
-            .about("Import data from an external data source")
-            .arg(
-                Arg::with_name("external_db")
-                    .value_name("myapp_sym")
-                    .index(1)
-                    .required(true)
-                    .help("The name of an external data source in the project to import from"),
-            ),
-    );
-    app = app.subcommand(
-        SubCommand::with_name("backref")
-            .about("List backreferences to a given address or label")
-            .arg(
-                Arg::with_name("start_pc")
-                    .value_name("1234")
-                    .index(1)
-                    .required(true)
-                    .help("The PC value or label to list backreferences for"),
-            ),
-    );
-    app = app.subcommand(
-        SubCommand::with_name("rename")
-            .about("Assign a label to a memory location (or reassign an existing one)")
-            .arg(
-                Arg::with_name("start_pc")
-                    .value_name("1234")
-                    .index(1)
-                    .required(true)
-                    .help("The PC value (or existing label) to (re)label"),
-            )
-            .arg(
-                Arg::with_name("new_label")
-                    .value_name("MyLabel")
-                    .index(2)
-                    .required(true)
-                    .help("What to name the PC value or label"),
-            ),
-    );
+
+    for cmd in Command::enumerate().iter() {
+        app = app.subcommand(cmd.into_clap_subcommand());
+    }
 
     let matches = app.get_matches();
 
