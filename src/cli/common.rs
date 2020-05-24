@@ -91,6 +91,15 @@ impl Command {
                         .index(1)
                         .required(true)
                         .help("The PC value or label to trace"),
+                )
+                .arg(
+                    Arg::with_name("register")
+                        .value_name("A=8F")
+                        .short("R")
+                        .multiple(true)
+                        .takes_value(true)
+                        .value_terminator("--")
+                        .help("One or more registers to set to particular values"),
                 ),
         }
     }

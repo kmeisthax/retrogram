@@ -3,10 +3,43 @@
 use crate::analysis::{trace_until_fork, Trace};
 use crate::input::parse_ptr;
 use crate::project;
-use crate::reg::State;
-use clap::ArgMatches;
+use crate::reg::{State, Symbolic};
+use clap::{ArgMatches, Values};
 use std::fs;
+use std::hash::Hash;
 use std::io;
+use std::str::FromStr;
+
+/// Parse a bunch of registers from a multiple-value argument into a State.
+fn reg_parse<RK, RV, P, MV>(state: &mut State<RK, RV, P, MV>, regs: Values<'_>) -> io::Result<()>
+where
+    RK: Eq + Hash + FromStr,
+    RV: FromStr,
+    Symbolic<RV>: From<RV>,
+    P: Eq + Hash,
+{
+    for reg_spec in regs {
+        let values = reg_spec.split('=').collect::<Vec<&str>>();
+        if let Some(v) = values.get(0..2) {
+            let reg: RK = v[0].parse().map_err(|_e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Register {} is invalid", v[0]),
+                )
+            })?;
+            let value: RV = v[1].parse().map_err(|_e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Value {} for register {} is invalid", v[1], v[0]),
+                )
+            })?;
+
+            state.set_register(reg, Symbolic::from(value))
+        }
+    }
+
+    Ok(())
+}
 
 /// Trace execution of a particular program and display the results to the
 /// user.
@@ -54,7 +87,11 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
             )
         })?;
         let trace = Trace::begin_at(start_pc.clone());
-        let state = State::default();
+        let mut state = State::default();
+
+        if let Some(regs) = argv.values_of("register") {
+            reg_parse(&mut state, regs)?;
+        }
 
         let (_busaddr, trace, _state) =
             trace_until_fork(&start_pc, trace, bus, &state, prereq, tracer)
