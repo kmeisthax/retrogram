@@ -1,6 +1,7 @@
 //! Symbol rename command for retrogram
 
 use crate::{analysis, ast, cli, input, maths, memory, project};
+use clap::ArgMatches;
 use num_traits::One;
 use std::str::FromStr;
 use std::{fs, io};
@@ -52,7 +53,16 @@ where
     pjdb.write(prog.as_database_path())
 }
 
-pub fn rename(prog: &project::Program, from_spec: &str, to_spec: &str) -> io::Result<()> {
+pub fn rename<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()> {
+    let from_spec = argv
+        .value_of("start_pc")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC"))?;
+    let to_spec = argv.value_of("new_label").ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Did not provide a target label",
+        )
+    })?;
     let image = prog
         .iter_images()
         .next()

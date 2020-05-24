@@ -4,6 +4,7 @@ use crate::analysis::{trace_until_fork, Trace};
 use crate::input::parse_ptr;
 use crate::project;
 use crate::reg::State;
+use clap::ArgMatches;
 use std::fs;
 use std::io;
 
@@ -12,7 +13,10 @@ use std::io;
 ///
 /// The `start_spec` is provided by the user and is interpreted by the program's
 /// architecture to produce a valid start pointer.
-pub fn trace(prog: &project::Program, start_spec: &str) -> io::Result<()> {
+pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()> {
+    let start_spec = argv
+        .value_of("start_pc")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC"))?;
     let image = prog
         .iter_images()
         .next()

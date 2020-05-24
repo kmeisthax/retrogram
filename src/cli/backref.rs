@@ -1,6 +1,7 @@
 //! Backreference list command for retrogram
 
 use crate::{analysis, ast, cli, input, maths, memory, project};
+use clap::ArgMatches;
 use num_traits::One;
 use std::{fs, io};
 
@@ -82,7 +83,10 @@ where
     Ok(())
 }
 
-pub fn backref(prog: &project::Program, start_spec: &str) -> io::Result<()> {
+pub fn backref<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()> {
+    let start_spec = argv
+        .value_of("start_pc")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC"))?;
     let image = prog
         .iter_images()
         .next()

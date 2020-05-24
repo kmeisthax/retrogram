@@ -1,6 +1,7 @@
 //! CLI command: scan
 
 use crate::{analysis, ast, cli, database, input, maths, memory, project, reg};
+use clap::ArgMatches;
 use num_traits::{One, Zero};
 use std::collections::HashSet;
 use std::{fmt, fs, io};
@@ -210,7 +211,10 @@ where
 }
 
 /// Scan a given program for control flow, symbols, and so on.
-pub fn scan(prog: &project::Program, start_spec: &str) -> io::Result<()> {
+pub fn scan<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()> {
+    let start_spec = argv
+        .value_of("start_pc")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC"))?;
     let image = prog
         .iter_images()
         .next()

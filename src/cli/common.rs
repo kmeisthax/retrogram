@@ -3,7 +3,7 @@
 use crate::arch::ArchName;
 use crate::asm::AssemblerName;
 use crate::platform::PlatformName;
-use crate::project::Program;
+use crate::project::{DataSource, Program, Project};
 use clap::{App, Arg, SubCommand};
 use std::io;
 use std::str;
@@ -112,6 +112,55 @@ impl FromStr for Command {
             _ => Err(()),
         }
     }
+}
+
+/// Resolve the program the user may have specified.
+pub fn resolve_program(
+    project: &mut Project,
+    version: Option<&str>,
+    mut prog: Program,
+) -> io::Result<Program> {
+    //TODO: If the user specifies no program, we must select one from the DB,
+    //otherwise disassembly fails because the program is unnamed.
+    if let Some(version) = version {
+        match project.program(&version) {
+            Some(project_program) => prog = project_program.apply_override(&prog),
+            None => eprintln!("The specified program version {} does not exist.", version),
+        }
+    } else if let Some((_, default_program)) = project.default_program() {
+        prog = default_program.apply_override(&prog);
+    }
+
+    Ok(prog)
+}
+
+/// Resolve the data source the user may have specified.
+pub fn resolve_source(
+    project: &mut Project,
+    source_name: Option<&str>,
+    prog: &Program,
+    mut source: DataSource,
+) -> io::Result<DataSource> {
+    if let Some(source_name) = source_name {
+        match project.data_source(&source_name) {
+            Some(project_source) => source = project_source.apply_override(&source),
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("The specified data source {} does not exist.", source_name),
+                ));
+            }
+        }
+    } else if let Some(first_datasource_name) = prog.iter_sources().next() {
+        match project.data_source(&first_datasource_name) {
+            Some(project_source) => source = project_source.apply_override(&source),
+            None => return Err(io::Error::new(io::ErrorKind::NotFound, "No project data source was configured or mentioned and the project's first data source does not exist.".to_string())),
+        }
+    } else {
+        return Err(io::Error::new(io::ErrorKind::NotFound, "No project data source was configured or mentioned and the given program does not have any sources.".to_string()));
+    }
+
+    Ok(source)
 }
 
 /// Resolve a program's platform, architecture, and assembler.
