@@ -1,12 +1,18 @@
 //! Dynamic analysis passes
 
+use crate::analysis::{Mappable, PrerequisiteAnalysis, Tracer};
+use crate::memory::{Offset, Pointer, PtrNum};
+use crate::reg::{Bitwise, Symbolic};
 use crate::{analysis, memory, reg};
+use num_traits::One;
 
 type TraceResult<RK, I, P, MV, S> = analysis::Result<
     (
         memory::Pointer<P>,
         analysis::Trace<RK, I, P, MV>,
         reg::State<RK, I, P, MV>,
+        Vec<RK>,
+        Vec<Pointer<P>>,
     ),
     P,
     S,
@@ -27,22 +33,41 @@ pub fn trace_until_fork<RK, I, P, MV, S, IO, PREREQ, TRACER>(
     tracer: TRACER,
 ) -> TraceResult<RK, I, P, MV, S>
 where
-    RK: analysis::Mappable,
-    P: analysis::Mappable,
+    RK: Mappable,
+    P: Mappable + PtrNum<S>,
+    S: Offset<P>,
+    I: Bitwise,
+    MV: Bitwise,
+    IO: One,
     memory::Pointer<P>: Clone,
     reg::State<RK, I, P, MV>: Clone,
-    PREREQ: analysis::PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
-    TRACER: analysis::Tracer<RK, I, P, MV, S, IO>,
+    Symbolic<I>: Clone + Default,
+    Symbolic<MV>: Clone + Default,
+    PREREQ: PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
+    TRACER: Tracer<RK, I, P, MV, S, IO>,
 {
     let mut new_pc = pc.clone();
     let mut new_state = pre_state.clone();
 
     loop {
-        let (missing_regs, missing_mem, _is_complete) = prereq(&new_pc, bus, &new_state)?;
-        let is_forking = !missing_regs.is_empty() || !missing_mem.is_empty();
+        let (required_regs, required_mem, _is_complete) = prereq(&new_pc, bus, &new_state)?;
+        let mut missing_regs = vec![];
+        let mut missing_mem = vec![];
 
-        if is_forking {
-            break;
+        for reg in required_regs {
+            if !new_state.get_register(reg.clone()).is_concrete() {
+                missing_regs.push(reg);
+            }
+        }
+
+        for ptr in required_mem {
+            if !new_state.get_memory(ptr.clone(), bus).is_concrete() {
+                missing_mem.push(ptr);
+            }
+        }
+
+        if !missing_regs.is_empty() || !missing_mem.is_empty() {
+            return Ok((new_pc, trace, new_state, missing_regs, missing_mem));
         }
 
         let (next_state, next_pc) = tracer(&new_pc, bus, new_state, &mut trace)?;
@@ -51,6 +76,4 @@ where
         trace.traced_to(next_pc.clone());
         new_pc = next_pc;
     }
-
-    Ok((new_pc, trace, new_state))
 }

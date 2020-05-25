@@ -94,7 +94,7 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
             reg_parse(&mut state, regs)?;
         }
 
-        let (_busaddr, trace, _state) =
+        let (_busaddr, trace, _state, missing_reg, missing_mem) =
             trace_until_fork(&start_pc, trace, bus, &state, prereq, tracer)
                 .map_err(Into::<io::Error>::into)?;
 
@@ -148,6 +148,28 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
             println!(
                 "{0:1$} | {2:3$} | {4:5$}",
                 pc, pc_width, instr, instr_width, event, event_width
+            );
+        }
+
+        if !missing_reg.is_empty() {
+            println!(
+                "Halted on unconstrainted register: {}",
+                missing_reg
+                    .iter()
+                    .map(|m| format!("{}", m))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            );
+        }
+
+        if !missing_mem.is_empty() {
+            println!(
+                "Halted on unconstrainted memory: {}",
+                missing_mem
+                    .iter()
+                    .map(|m| format!("${:X}", m))
+                    .collect::<Vec<String>>()
+                    .join(", ")
             );
         }
 
