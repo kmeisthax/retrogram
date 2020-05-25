@@ -5,6 +5,7 @@ use crate::input::parse_ptr;
 use crate::project;
 use crate::reg::{State, Symbolic};
 use clap::{ArgMatches, Values};
+use num_traits::Num;
 use std::cmp::max;
 use std::fs;
 use std::hash::Hash;
@@ -15,7 +16,7 @@ use std::str::FromStr;
 fn reg_parse<RK, RV, P, MV>(state: &mut State<RK, RV, P, MV>, regs: Values<'_>) -> io::Result<()>
 where
     RK: Eq + Hash + FromStr,
-    RV: FromStr,
+    RV: Num,
     Symbolic<RV>: From<RV>,
     P: Eq + Hash,
 {
@@ -28,7 +29,7 @@ where
                     format!("Register {} is invalid", v[0]),
                 )
             })?;
-            let value: RV = v[1].parse().map_err(|_e| {
+            let value = RV::from_str_radix(v[1], 16).map_err(|_e| {
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!("Value {} for register {} is invalid", v[1], v[0]),
