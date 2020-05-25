@@ -2,7 +2,7 @@
 
 use crate::maths::BoundWidth;
 use crate::reg;
-use num::traits::{CheckedShl, Zero};
+use num::traits::{CheckedShl, CheckedShr, Zero};
 use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 /// Rust doesn't let us expose the child type's From impl as another From impl
@@ -44,6 +44,7 @@ pub trait Bitwise:
     + Zero
     + BoundWidth<u32>
     + CheckedShl
+    + CheckedShr
     + BitAnd<Output = Self>
     + BitXor<Output = Self>
     + BitOr<Output = Self>
@@ -56,6 +57,7 @@ impl<T> Bitwise for T where
         + Zero
         + BoundWidth<u32>
         + CheckedShl
+        + CheckedShr
         + BitAnd<Output = Self>
         + BitXor<Output = Self>
         + BitOr<Output = Self>

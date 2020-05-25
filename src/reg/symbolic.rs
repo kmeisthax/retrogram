@@ -8,6 +8,8 @@ use num::traits::{Bounded, CheckedShl, CheckedShr, One, Zero};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::convert::TryFrom;
+use std::fmt;
+use std::fmt::{Formatter, LowerHex, UpperHex};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Not, Shl, Shr, Sub};
 
 /// Represents a processor register bounded to a particular set of states.
@@ -622,5 +624,95 @@ where
         }
 
         Some(sum)
+    }
+}
+
+impl<U> UpperHex for Symbolic<U>
+where
+    U: Bitwise + From<u8> + fmt::Debug,
+    u8: TryFrom<U>,
+    Symbolic<U>: Bitwise,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut val = self.clone();
+        let mut hexes = vec![];
+
+        for _i in 0..Self::bound_width() / 4 {
+            hexes.push(
+                (val.clone() & Symbolic::from(U::from(0xF)))
+                    .into_concrete()
+                    .and_then(|v| u8::try_from(v).ok()),
+            );
+            val = val.checked_shr(4).unwrap();
+        }
+
+        for hex in hexes.iter().rev() {
+            match hex {
+                Some(0) => f.write_str("0")?,
+                Some(1) => f.write_str("1")?,
+                Some(2) => f.write_str("2")?,
+                Some(3) => f.write_str("3")?,
+                Some(4) => f.write_str("4")?,
+                Some(5) => f.write_str("5")?,
+                Some(6) => f.write_str("6")?,
+                Some(7) => f.write_str("7")?,
+                Some(8) => f.write_str("8")?,
+                Some(9) => f.write_str("9")?,
+                Some(10) => f.write_str("A")?,
+                Some(11) => f.write_str("B")?,
+                Some(12) => f.write_str("C")?,
+                Some(13) => f.write_str("D")?,
+                Some(14) => f.write_str("E")?,
+                Some(15) => f.write_str("F")?,
+                _ => f.write_str("?")?,
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl<U> LowerHex for Symbolic<U>
+where
+    U: Bitwise + From<u8>,
+    u8: TryFrom<U>,
+    Symbolic<U>: Bitwise,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut val = self.clone();
+        let mut hexes = vec![];
+
+        for _i in 0..Self::bound_width() / 4 {
+            hexes.push(
+                (val.clone() & Symbolic::from(U::from(0xF)))
+                    .into_concrete()
+                    .and_then(|v| u8::try_from(v).ok()),
+            );
+            val = val.checked_shr(4).unwrap();
+        }
+
+        for hex in hexes.iter().rev() {
+            match hex {
+                Some(0) => f.write_str("0")?,
+                Some(1) => f.write_str("1")?,
+                Some(2) => f.write_str("2")?,
+                Some(3) => f.write_str("3")?,
+                Some(4) => f.write_str("4")?,
+                Some(5) => f.write_str("5")?,
+                Some(6) => f.write_str("6")?,
+                Some(7) => f.write_str("7")?,
+                Some(8) => f.write_str("8")?,
+                Some(9) => f.write_str("9")?,
+                Some(10) => f.write_str("a")?,
+                Some(11) => f.write_str("b")?,
+                Some(12) => f.write_str("c")?,
+                Some(13) => f.write_str("d")?,
+                Some(14) => f.write_str("e")?,
+                Some(15) => f.write_str("f")?,
+                _ => f.write_str(".")?,
+            }
+        }
+
+        Ok(())
     }
 }

@@ -353,3 +353,35 @@ fn test_concrete_tryconv() {
 
     assert_eq!(Some(narrow_value), narrow_sym_value.into_concrete());
 }
+
+#[test]
+fn test_concrete_lowerhex() {
+    let sym_value: reg::Symbolic<u8> = reg::Symbolic::from(0xC5);
+    let fmtd = format!("{:x}", sym_value);
+
+    assert_eq!("c5", fmtd);
+}
+
+#[test]
+fn test_symbolic_lowerhex() {
+    let sym_value: reg::Symbolic<u8> = reg::Symbolic::from_bits(0x7A, 0x80);
+    let fmtd = format!("{:x}", sym_value);
+
+    assert_eq!("7.", fmtd);
+}
+
+#[test]
+fn test_concrete_upperhex() {
+    let sym_value: reg::Symbolic<u8> = reg::Symbolic::from(0xC5);
+    let fmtd = format!("{:X}", sym_value);
+
+    assert_eq!("C5", fmtd);
+}
+
+#[test]
+fn test_symbolic_upperhex() {
+    let sym_value: reg::Symbolic<u8> = reg::Symbolic::from_bits(0x7A, 0x80);
+    let fmtd = format!("{:X}", sym_value);
+
+    assert_eq!("7?", fmtd);
+}
