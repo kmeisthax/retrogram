@@ -6,7 +6,18 @@ use crate::arch::sm83::{Bus, Pointer, Register, State};
 use crate::ast::Operand as op;
 use crate::{analysis, memory};
 
-fn memlist_op16(
+/// Return a prerequisite list for an instruction that reads or writes the
+/// address situated in the opcode of this instruction.
+fn memlist_rw_op16(
+    regs: Vec<Register>,
+    p: &memory::Pointer<Pointer>,
+) -> sm83::Result<(Vec<Register>, Vec<memory::Pointer<Pointer>>, bool)> {
+    Ok((regs, vec![p.clone(), p.clone() + 1], true))
+}
+
+/// Return a prerequisite list for an instruction that jumps to or calls the
+/// address situated in the opcode of this instruction.
+fn memlist_call_op16(
     regs: Vec<Register>,
     p: &memory::Pointer<Pointer>,
     mem: &Bus,
@@ -18,20 +29,13 @@ fn memlist_op16(
     Ok((regs, vec![p.clone(), p.clone() + 1], false))
 }
 
-fn memlist_hi8(
+/// Return a prerequisite list for an instruction that reads or writes the
+/// high memory address situated in the opcode of this instruction.
+fn memlist_rw_hi8(
     regs: Vec<Register>,
     p: &memory::Pointer<Pointer>,
-    mem: &Bus,
 ) -> sm83::Result<(Vec<Register>, Vec<memory::Pointer<Pointer>>, bool)> {
-    if let Some(val) = mem.read_unit(p).into_concrete() {
-        return Ok((
-            regs,
-            vec![mem.minimize_context(p.contextualize(0xFF00 | val as Pointer))],
-            true,
-        ));
-    }
-
-    Ok((regs, vec![p.clone()], false))
+    Ok((regs, vec![p.clone()], true))
 }
 
 fn memlist_pc8(
@@ -49,7 +53,9 @@ fn memlist_pc8(
     }
 }
 
-fn memlist_indir16(
+/// Return a prerequisite list for an instruction that jumps to or calls the
+/// address at a particular 16-bit register pair (e.g. jp [hl] or ret)
+fn memlist_call_indir16(
     regs: Vec<Register>,
     p: &memory::Pointer<Pointer>,
     mem: &Bus,
@@ -117,28 +123,28 @@ pub fn prereq(
 
         //Z80 instructions that don't fit the pattern decoder below
         Some(0x00) => Ok((vec![], vec![], true)), //nop
-        Some(0x08) => memlist_op16(vec![], &(p.clone() + 1), mem), //ld [u16], sp
+        Some(0x08) => memlist_rw_op16(vec![], &(p.clone() + 1)), //ld [u16], sp
         Some(0x10) => Ok((vec![], vec![], true)), //stop
         Some(0x18) => memlist_pc8(vec![], &(p.clone() + 1), mem), //jr u8
         Some(0x76) => Ok((vec![], vec![], true)), //halt
 
-        Some(0xC3) => memlist_op16(vec![], &(p.clone() + 1), mem), //jp u16
-        Some(0xCD) => memlist_op16(vec![Register::S, Register::P], &(p.clone() + 1), mem), //call u16
+        Some(0xC3) => memlist_call_op16(vec![], &(p.clone() + 1), mem), //jp u16
+        Some(0xCD) => memlist_call_op16(vec![Register::S, Register::P], &(p.clone() + 1), mem), //call u16
 
-        Some(0xC9) => memlist_indir16(vec![Register::S, Register::P], p, mem, state), //ret
-        Some(0xD9) => memlist_indir16(vec![Register::S, Register::P], p, mem, state), //reti
-        Some(0xE9) => Ok((vec![Register::H, Register::L], vec![], true)),             //jp [hl]
-        Some(0xF9) => Ok((vec![], vec![], true)),                                     //ld sp, hl
+        Some(0xC9) => memlist_call_indir16(vec![Register::S, Register::P], p, mem, state), //ret
+        Some(0xD9) => memlist_call_indir16(vec![Register::S, Register::P], p, mem, state), //reti
+        Some(0xE9) => memlist_call_indir16(vec![Register::H, Register::L], p, mem, state), //jp [hl]
+        Some(0xF9) => Ok((vec![], vec![], true)), //ld sp, hl
 
-        Some(0xE0) => memlist_hi8(vec![], &(p.clone() + 1), mem), //ldh [u8], a
-        Some(0xE8) => Ok((vec![], vec![], true)),                 //add sp, reg
-        Some(0xF0) => memlist_hi8(vec![], &(p.clone() + 1), mem), //ldh a, [u8]
-        Some(0xF8) => Ok((vec![], vec![], true)),                 //ld hl, sp+r8
+        Some(0xE0) => memlist_rw_hi8(vec![], &(p.clone() + 1)), //ldh [u8], a
+        Some(0xE8) => Ok((vec![], vec![], true)),               //add sp, reg
+        Some(0xF0) => memlist_rw_hi8(vec![], &(p.clone() + 1)), //ldh a, [u8]
+        Some(0xF8) => Ok((vec![], vec![], true)),               //ld hl, sp+r8
 
         Some(0xE2) => Ok((vec![Register::C], vec![], true)), //ldh [c], a
-        Some(0xEA) => memlist_op16(vec![], &(p.clone() + 1), mem), //ld [u16], a
+        Some(0xEA) => memlist_rw_op16(vec![], &(p.clone() + 1)), //ld [u16], a
         Some(0xF2) => Ok((vec![Register::C], vec![], true)), //ldh a, [c]
-        Some(0xFA) => memlist_op16(vec![], &(p.clone() + 1), mem), //ld a, [u16]
+        Some(0xFA) => memlist_rw_op16(vec![], &(p.clone() + 1)), //ld a, [u16]
         //TODO: Should memory reads prereq on the target of the read?
         Some(0xF3) => Ok((vec![], vec![], true)),
         Some(0xFB) => Ok((vec![], vec![], true)),
@@ -188,17 +194,17 @@ pub fn prereq(
                 } //aluops r8, [hl]
                 (2, _, _, _) => Ok((vec![], vec![], true)), //aluops a, r8
                 (3, 0, _, 0) => {
-                    memlist_indir16(vec![Register::S, Register::P, Register::F], p, mem, state)
+                    memlist_call_indir16(vec![Register::S, Register::P, Register::F], p, mem, state)
                 } //ret cond... TODO: Can we specify which bit of F we want?
                 (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
-                (3, _, 0, 1) => memlist_indir16(vec![Register::S, Register::P], p, mem, state), //pop r16
+                (3, _, 0, 1) => Ok((vec![Register::S, Register::P], vec![], true)), //pop r16
                 (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
-                (3, 0, _, 2) => memlist_op16(vec![Register::F], &(p.clone() + 1), mem), //jp cond, d16
+                (3, 0, _, 2) => memlist_call_op16(vec![Register::F], &(p.clone() + 1), mem), //jp cond, d16
                 (3, 1, _, 2) => Err(analysis::Error::Misinterpretation(1, false)), /* E2, EA, F2, FA */
                 (3, _, _, 3) => Err(analysis::Error::InvalidInstruction),          //invalid
-                (3, 0, _, 4) => memlist_op16(vec![Register::F], &(p.clone() + 1), mem), //call cond, d16
-                (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction),               //invalid
-                (3, _, 0, 5) => memlist_indir16(vec![Register::S, Register::P], p, mem, state), //push r16
+                (3, 0, _, 4) => memlist_call_op16(vec![Register::F], &(p.clone() + 1), mem), //call cond, d16
+                (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction), //invalid
+                (3, _, 0, 5) => Ok((vec![Register::S, Register::P], vec![], true)), //push r16
                 (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction), //invalid
                 (3, _, _, 6) => Ok((vec![], vec![], true)),               //aluops a, d8
                 (3, _, _, 7) => Ok((vec![Register::S, Register::P], vec![], true)), //rst nn
