@@ -107,7 +107,7 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
                 TraceEvent::Execute(pc) => {
                     let disasm = dis(pc, bus).map_err(Into::<io::Error>::into)?;
 
-                    pc_list.push(format!("{}", pc));
+                    pc_list.push(format!("${:X}", pc));
                     instr_list.push(fmt_i(disasm.as_instr()).to_string());
                     event_list.push("".to_string());
                 }
