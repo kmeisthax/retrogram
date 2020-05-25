@@ -45,7 +45,7 @@ where
             break;
         }
 
-        let (next_state, next_pc) = tracer(&new_pc, bus, new_state)?;
+        let (next_state, next_pc) = tracer(&new_pc, bus, new_state, &mut trace)?;
 
         new_state = next_state;
         trace.traced_to(next_pc.clone());

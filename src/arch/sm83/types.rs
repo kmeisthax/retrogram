@@ -124,6 +124,10 @@ pub type Section = ast::Section<Offset, SignedValue, f32, Pointer, Data, Offset>
 /// SM83 program.
 pub type State = reg::State<Register, Value, Pointer, Value>;
 
+/// The trace log type which represents the past execution of a given SM83
+/// program.
+pub type Trace = analysis::Trace<Register, Value, Pointer, Value>;
+
 /// The disasm type which represents a successful disassembly of a single
 /// instruction.
 pub type Disasm = analysis::Disasm<Offset, SignedValue, f32, Pointer, Offset>;

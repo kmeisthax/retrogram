@@ -53,6 +53,7 @@ pub trait Tracer<RK, I, P, MV, S, IO>:
     &memory::Pointer<P>,
     &memory::Memory<P, MV, S, IO>,
     reg::State<RK, I, P, MV>,
+    &mut analysis::Trace<RK, I, P, MV>,
 ) -> analysis::Result<(reg::State<RK, I, P, MV>, memory::Pointer<P>), P, S>
 where
     RK: analysis::Mappable,
@@ -66,6 +67,7 @@ where
         &memory::Pointer<P>,
         &memory::Memory<P, MV, S, IO>,
         reg::State<RK, I, P, MV>,
+        &mut analysis::Trace<RK, I, P, MV>,
     ) -> analysis::Result<(reg::State<RK, I, P, MV>, memory::Pointer<P>), P, S>,
     RK: analysis::Mappable,
     P: analysis::Mappable,
