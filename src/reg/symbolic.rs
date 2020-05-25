@@ -4,7 +4,7 @@
 use crate::maths::BoundWidth;
 use crate::memory::{Desegmentable, Endianness};
 use crate::reg::{Bitwise, Convertable, TryConvertable};
-use num::traits::{Bounded, CheckedShl, One, Zero};
+use num::traits::{Bounded, CheckedShl, CheckedShr, One, Zero};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::convert::TryFrom;
@@ -406,7 +406,7 @@ where
     T: CheckedShl + Zero + Not<Output = T> + BitOr<Output = T>,
 {
     fn checked_shl(&self, rhs: u32) -> Option<Self> {
-        let extension = !(!T::zero().checked_shl(rhs)?);
+        let extension = !((!T::zero()).checked_shl(rhs)?);
 
         Some(Symbolic {
             bits_set: self.bits_set.checked_shl(rhs)?,
@@ -433,6 +433,20 @@ where
             bits_set: self.bits_set >> rhs.clone(),
             bits_cleared: self.bits_cleared >> rhs | extension,
         }
+    }
+}
+
+impl<T> CheckedShr for Symbolic<T>
+where
+    T: CheckedShr + Zero + Not<Output = T> + BitOr<Output = T>,
+{
+    fn checked_shr(&self, rhs: u32) -> Option<Self> {
+        let extension = !((!T::zero()).checked_shr(rhs)?);
+
+        Some(Symbolic {
+            bits_set: self.bits_set.checked_shr(rhs.clone())?,
+            bits_cleared: self.bits_cleared.checked_shr(rhs)? | extension,
+        })
     }
 }
 

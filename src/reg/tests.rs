@@ -1,4 +1,5 @@
 use crate::reg;
+use num_traits::{CheckedShl, CheckedShr};
 
 #[test]
 fn test_symbolic_default() {
@@ -202,6 +203,35 @@ fn test_concrete_shl_arithmetic() {
 
     assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
 }
+#[test]
+fn test_concrete_checked_shl() {
+    let value_one: u8 = 0xF0;
+    let sym_value_one = reg::Symbolic::from(value_one);
+
+    let value_shift = value_one
+        .checked_shl(2)
+        .expect("Non-overflowing concrete value");
+    let sym_value_shift = sym_value_one
+        .checked_shl(2)
+        .expect("Non-overflowing symbolic value");
+
+    assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
+}
+
+#[test]
+fn test_concrete_checked_shl_arithmetic() {
+    let value_one: i8 = -16;
+    let sym_value_one = reg::Symbolic::from(value_one);
+
+    let value_shift = value_one
+        .checked_shl(2)
+        .expect("Non-overflowing concrete value");
+    let sym_value_shift = sym_value_one
+        .checked_shl(2)
+        .expect("Non-overflowing symbolic value");
+
+    assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
+}
 
 #[test]
 fn test_concrete_shr() {
@@ -221,6 +251,36 @@ fn test_concrete_shr_arithmetic() {
 
     let value_shift = value_one >> 2;
     let sym_value_shift = sym_value_one >> 2;
+
+    assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
+}
+
+#[test]
+fn test_concrete_checked_shr() {
+    let value_one: u8 = 0xF0;
+    let sym_value_one = reg::Symbolic::from(value_one);
+
+    let value_shift = value_one
+        .checked_shr(2)
+        .expect("Non-overflowing concrete value");
+    let sym_value_shift = sym_value_one
+        .checked_shr(2)
+        .expect("Non-overflowing symbolic value");
+
+    assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
+}
+
+#[test]
+fn test_concrete_checked_shr_arithmetic() {
+    let value_one: i8 = -16;
+    let sym_value_one = reg::Symbolic::from(value_one);
+
+    let value_shift = value_one
+        .checked_shr(2)
+        .expect("Non-overflowing concrete value");
+    let sym_value_shift = sym_value_one
+        .checked_shr(2)
+        .expect("Non-overflowing symbolic value");
 
     assert_eq!(Some(value_shift), sym_value_shift.into_concrete());
 }
