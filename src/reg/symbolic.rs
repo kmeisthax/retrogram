@@ -195,6 +195,13 @@ where
         !self.is_unsatisfiable() && (!self.bits_set.clone() & !self.bits_cleared.clone()).is_zero()
     }
 
+    /// Determines if specific bits of this symbolic value are constrained to
+    /// precisely one value.
+    pub fn bits_are_concrete(&self, mask: T) -> bool {
+        !self.is_unsatisfiable()
+            && (!self.bits_set.clone() & !self.bits_cleared.clone() & mask).is_zero()
+    }
+
     /// Consumes the symbolic value to produce a concrete value, or None if it
     /// is not concrete.
     pub fn into_concrete(self) -> Option<T> {

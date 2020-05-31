@@ -44,12 +44,33 @@ fn test_concrete_validation() {
 }
 
 #[test]
+fn test_concrete_bits_concrete() {
+    let start_value: u8 = 83;
+    let sym_value = reg::Symbolic::from(start_value);
+
+    assert!(sym_value.bits_are_concrete(0xF0));
+    assert!(sym_value.bits_are_concrete(0x0F));
+    assert!(sym_value.bits_are_concrete(0x00));
+    assert!(sym_value.bits_are_concrete(0xFF));
+}
+
+#[test]
 fn test_unsatisfiable() {
     let sym_value: reg::Symbolic<u8> = reg::Symbolic::from_bits(0xF0, 0x1F);
 
     assert!(sym_value.is_unsatisfiable());
     assert!(!sym_value.is_concrete());
     assert!(!sym_value.is_unconstrained());
+}
+
+#[test]
+fn test_unsatisfiable_bits_concrete() {
+    let sym_value: reg::Symbolic<u8> = reg::Symbolic::from_bits(0xF0, 0x1F);
+
+    assert!(!sym_value.bits_are_concrete(0xF0));
+    assert!(!sym_value.bits_are_concrete(0x0F));
+    assert!(!sym_value.bits_are_concrete(0x00));
+    assert!(!sym_value.bits_are_concrete(0xFF));
 }
 
 #[test]
@@ -145,6 +166,17 @@ fn test_concrete_signed_add() {
     let sym_value_sum = sym_value_one + sym_value_two;
 
     assert_eq!(Some(value_sum), sym_value_sum.into_concrete());
+}
+
+#[test]
+fn test_symbolic_bits_concrete() {
+    let sym_value_one: reg::Symbolic<u16> = reg::Symbolic::from_bits(0x0049, 0x0124);
+    let sym_value_two: reg::Symbolic<u16> = reg::Symbolic::from_bits(0x0007, 0x01C0);
+
+    assert!(sym_value_one.bits_are_concrete(0x016D));
+    assert!(!sym_value_one.bits_are_concrete(0xFE92));
+    assert!(sym_value_two.bits_are_concrete(0x01C7));
+    assert!(!sym_value_two.bits_are_concrete(0xFE38));
 }
 
 #[test]
