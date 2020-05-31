@@ -12,7 +12,7 @@ mod traits;
 
 pub use block::Block;
 pub use disasm::Disasm;
-pub use dynamic::trace_until_fork;
+pub use dynamic::{trace_until_fork, Prerequisite};
 pub use error::Error;
 pub use error::Result;
 pub use flow::Flow;

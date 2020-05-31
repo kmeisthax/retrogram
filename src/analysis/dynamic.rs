@@ -4,15 +4,76 @@ use crate::analysis::{Mappable, PrerequisiteAnalysis, Tracer};
 use crate::memory::{Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, Symbolic};
 use crate::{analysis, memory, reg};
-use num_traits::One;
+use num_traits::{One, Zero};
+use std::convert::TryInto;
+use std::ops::{AddAssign, Not};
+
+/// Indicates a memory or register value that needs to be a concrete value
+/// before execution can continue.
+pub enum Prerequisite<RK, I, P, MV, S> {
+    /// A register that must be resolved before execution can continue.
+    Register {
+        /// The register to resolve.
+        register: RK,
+
+        /// Which bits are considered necessary to be resolved.
+        ///
+        /// A value of all-ones (e.g. 0xFF) would indicate a register which
+        /// needs total resolution, while a value of all-zeroes would indicate
+        /// a register that does not need to be resolved.
+        mask: I,
+    },
+
+    /// A memory location (or set of locations) that must be resolved before
+    /// execution can continue.
+    Memory {
+        /// The memory location to resolve.
+        ptr: Pointer<P>,
+
+        /// How wide the memory location is.
+        length: S,
+
+        /// Which bits are considered necessary to be resolved.
+        ///
+        /// Memory locations not listed in the mask shall be considered equal
+        /// to all-ones. Ergo, to indicate memory that needs total resolution,
+        /// you may use an empty `Vec`.
+        mask: Vec<MV>,
+    },
+}
+
+impl<RK, I, P, MV, S> Prerequisite<RK, I, P, MV, S> {
+    pub fn memory(ptr: Pointer<P>, length: S) -> Self {
+        Prerequisite::Memory {
+            ptr,
+            length,
+            mask: vec![],
+        }
+    }
+
+    pub fn register(register: RK, mask: I) -> Self {
+        Prerequisite::Register { register, mask }
+    }
+}
+
+impl<RK, I, P, MV, S> From<RK> for Prerequisite<RK, I, P, MV, S>
+where
+    I: Zero + Not<Output = I>,
+{
+    fn from(register: RK) -> Self {
+        Prerequisite::Register {
+            register,
+            mask: !I::zero(),
+        }
+    }
+}
 
 type TraceResult<RK, I, P, MV, S> = analysis::Result<
     (
         memory::Pointer<P>,
         analysis::Trace<RK, I, P, MV>,
         reg::State<RK, I, P, MV>,
-        Vec<RK>,
-        Vec<Pointer<P>>,
+        Vec<Prerequisite<RK, I, P, MV, S>>,
     ),
     P,
     S,
@@ -35,7 +96,7 @@ pub fn trace_until_fork<RK, I, P, MV, S, IO, PREREQ, TRACER>(
 where
     RK: Mappable,
     P: Mappable + PtrNum<S>,
-    S: Offset<P>,
+    S: Offset<P> + TryInto<usize> + AddAssign,
     I: Bitwise,
     MV: Bitwise,
     IO: One,
@@ -50,24 +111,48 @@ where
     let mut new_state = pre_state.clone();
 
     loop {
-        let (required_regs, required_mem, _is_complete) = prereq(&new_pc, bus, &new_state)?;
-        let mut missing_regs = vec![];
-        let mut missing_mem = vec![];
+        let (prerequisites, _is_complete) = prereq(&new_pc, bus, &new_state)?;
+        let mut missing = vec![];
 
-        for reg in required_regs {
-            if !new_state.get_register(reg.clone()).is_concrete() {
-                missing_regs.push(reg);
+        for pr in prerequisites {
+            match &pr {
+                Prerequisite::Register { register, mask } => {
+                    if !new_state
+                        .get_register(register.clone())
+                        .bits_are_concrete(mask.clone())
+                    {
+                        missing.push(pr);
+                    }
+                }
+                Prerequisite::Memory { ptr, length, mask } => {
+                    let mut i = S::zero();
+
+                    while i < length.clone() {
+                        let mask = mask
+                            .get(
+                                i.clone()
+                                    .try_into()
+                                    .map_err(|_| analysis::Error::BlockSizeOverflow)?,
+                            )
+                            .cloned()
+                            .unwrap_or_else(MV::zero);
+
+                        if !new_state
+                            .get_memory(ptr.clone() + length.clone(), bus)
+                            .bits_are_concrete(mask)
+                        {
+                            missing.push(pr);
+                            break;
+                        }
+
+                        i += S::one();
+                    }
+                }
             }
         }
 
-        for ptr in required_mem {
-            if !new_state.get_memory(ptr.clone(), bus).is_concrete() {
-                missing_mem.push(ptr);
-            }
-        }
-
-        if !missing_regs.is_empty() || !missing_mem.is_empty() {
-            return Ok((new_pc, trace, new_state, missing_regs, missing_mem));
+        if !missing.is_empty() {
+            return Ok((new_pc, trace, new_state, missing));
         }
 
         let (next_state, next_pc) = tracer(&new_pc, bus, new_state, &mut trace)?;

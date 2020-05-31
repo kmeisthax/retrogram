@@ -1,5 +1,6 @@
 //! Traits for analysis
 
+use crate::analysis::Prerequisite;
 use crate::{analysis, memory, reg};
 use std::cmp::Ord;
 use std::fmt::Display;
@@ -35,7 +36,7 @@ pub trait PrerequisiteAnalysis<RK, I, P, MV, S, IO>:
     &memory::Pointer<P>,
     &memory::Memory<P, MV, S, IO>,
     &reg::State<RK, I, P, MV>,
-) -> analysis::Result<(Vec<RK>, Vec<memory::Pointer<P>>, bool), P, S>
+) -> analysis::Result<(Vec<Prerequisite<RK, I, P, MV, S>>, bool), P, S>
 {
 }
 
@@ -44,7 +45,7 @@ impl<T, RK, I, P, MV, S, IO> PrerequisiteAnalysis<RK, I, P, MV, S, IO> for T whe
         &memory::Pointer<P>,
         &memory::Memory<P, MV, S, IO>,
         &reg::State<RK, I, P, MV>,
-    ) -> analysis::Result<(Vec<RK>, Vec<memory::Pointer<P>>, bool), P, S>
+    ) -> analysis::Result<(Vec<Prerequisite<RK, I, P, MV, S>>, bool), P, S>
 {
 }
 

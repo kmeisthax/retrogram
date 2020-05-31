@@ -25,7 +25,7 @@ pub enum Register {
 }
 
 impl Register {
-    pub fn reglist_from_sym(s: &str) -> Vec<Register> {
+    pub fn prereqs_from_sym(s: &str) -> Vec<Prerequisite> {
         match s.to_ascii_lowercase().as_str() {
             "a" => vec![Register::A],
             "b" => vec![Register::B],
@@ -43,6 +43,9 @@ impl Register {
             "sp" => vec![Register::S, Register::P],
             _ => vec![],
         }
+        .iter()
+        .map(|r| Prerequisite::from(*r))
+        .collect()
     }
 }
 
@@ -123,6 +126,9 @@ pub type Section = ast::Section<Offset, SignedValue, f32, Pointer, Data, Offset>
 /// The register state type which represents the execution state of a given
 /// SM83 program.
 pub type State = reg::State<Register, Value, Pointer, Value>;
+
+/// The prerequisites necessary to execute a given SM83 program.
+pub type Prerequisite = analysis::Prerequisite<Register, Value, Pointer, Value, Offset>;
 
 /// The trace log type which represents the past execution of a given SM83
 /// program.
