@@ -1,12 +1,16 @@
 //! Single-run tracing command
 
-use crate::analysis::{trace_until_fork, Prerequisite, Trace, TraceEvent};
+use crate::analysis::{trace_until_fork, Disassembler, Mappable, Prerequisite, Trace, TraceEvent};
+use crate::ast::Instruction;
+use crate::cli::Nameable;
 use crate::input::parse_ptr;
+use crate::memory::Memory;
 use crate::project;
 use crate::reg::{State, Symbolic};
 use clap::{ArgMatches, Values};
 use num_traits::Num;
 use std::cmp::max;
+use std::fmt::{Display, UpperHex};
 use std::fs;
 use std::hash::Hash;
 use std::io;
@@ -41,6 +45,120 @@ where
     }
 
     Ok(())
+}
+
+/// Print a tracelog out to the console as a table.
+fn print_tracelog<RK, I, LI, SI, F, P, MV, S, IO, DIS, FMTI>(
+    trace: Trace<RK, I, P, MV>,
+    bus: &Memory<P, MV, S, IO>,
+    dis: DIS,
+    fmt_i: FMTI,
+) -> io::Result<()>
+where
+    RK: Display,
+    I: Nameable,
+    Symbolic<I>: UpperHex,
+    P: Mappable + Nameable,
+    Symbolic<MV>: UpperHex,
+    DIS: Disassembler<LI, SI, F, P, MV, S, IO>,
+    FMTI: Fn(&Instruction<LI, SI, F, P>) -> String,
+{
+    let mut pc_list = vec![];
+    let mut instr_list = vec![];
+    let mut event_list = vec![];
+
+    for event in trace.iter() {
+        match event {
+            TraceEvent::Execute(pc) => {
+                let disasm = dis(pc, bus).map_err(Into::<io::Error>::into)?;
+
+                pc_list.push(format!("${:X}", pc));
+                instr_list.push(fmt_i(disasm.as_instr()).to_string());
+                event_list.push("".to_string());
+            }
+            TraceEvent::RegisterSet(reg, val) => {
+                if let Some(evt) = event_list.last_mut() {
+                    if !evt.is_empty() {
+                        *evt = format!("{}, ", evt);
+                    }
+
+                    *evt = format!("{}={:X}", reg, val);
+                }
+            }
+            TraceEvent::MemoryWrite(ptr, values) => {
+                if let Some(evt) = event_list.last_mut() {
+                    if !evt.is_empty() {
+                        *evt = format!("{}, ", evt);
+                    }
+
+                    *evt = format!(
+                        "{:X}={}",
+                        ptr,
+                        values
+                            .iter()
+                            .map(|v| format!("{:X}", v))
+                            .collect::<Vec<String>>()
+                            .join("")
+                    );
+                }
+            }
+        }
+    }
+
+    let pc_width = pc_list.iter().fold(0, |m, s| max(m, s.len()));
+    let instr_width = instr_list.iter().fold(0, |m, s| max(m, s.len()));
+    let event_width = event_list.iter().fold(0, |m, s| max(m, s.len()));
+
+    for ((pc, instr), event) in pc_list.iter().zip(instr_list.iter()).zip(event_list.iter()) {
+        println!(
+            "{0:1$} | {2:3$} | {4:5$}",
+            pc, pc_width, instr, instr_width, event, event_width
+        );
+    }
+
+    Ok(())
+}
+
+/// Print out the prerequisites that a trace operation stopped on.
+fn print_prereqs<RK, I, P, MV, S>(missing: Vec<Prerequisite<RK, I, P, MV, S>>)
+where
+    RK: Display,
+    P: UpperHex,
+{
+    if !missing.is_empty() {
+        let missing_reg = missing
+            .iter()
+            .filter_map(|p| match p {
+                Prerequisite::Register {
+                    register,
+                    mask: _mask,
+                } => Some(format!("{}", register)),
+                _ => None,
+            })
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        if !missing_reg.is_empty() {
+            println!("Halted on unconstrained register: {}", missing_reg);
+        }
+
+        let missing_mem = missing
+            .iter()
+            .filter_map(|p| match p {
+                Prerequisite::Memory {
+                    ptr,
+                    length: _length,
+                    mask: _mask,
+                } => Some(format!("${:X}", ptr)),
+                _ => None,
+            })
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        if !missing_mem.is_empty() {
+            println!("Halted on unconstrained register: {}", missing_mem);
+        }
+    }
 }
 
 /// Trace execution of a particular program and display the results to the
@@ -99,93 +217,9 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
             trace_until_fork(&start_pc, trace, bus, &state, prereq, tracer)
                 .map_err(Into::<io::Error>::into)?;
 
-        let mut pc_list = vec![];
-        let mut instr_list = vec![];
-        let mut event_list = vec![];
+        print_tracelog(trace, bus, dis, fmt_i)?;
 
-        for event in trace.iter() {
-            match event {
-                TraceEvent::Execute(pc) => {
-                    let disasm = dis(pc, bus).map_err(Into::<io::Error>::into)?;
-
-                    pc_list.push(format!("${:X}", pc));
-                    instr_list.push(fmt_i(disasm.as_instr()).to_string());
-                    event_list.push("".to_string());
-                }
-                TraceEvent::RegisterSet(reg, val) => {
-                    if let Some(evt) = event_list.last_mut() {
-                        if !evt.is_empty() {
-                            *evt = format!("{}, ", evt);
-                        }
-
-                        *evt = format!("{}={:X}", reg, val);
-                    }
-                }
-                TraceEvent::MemoryWrite(ptr, values) => {
-                    if let Some(evt) = event_list.last_mut() {
-                        if !evt.is_empty() {
-                            *evt = format!("{}, ", evt);
-                        }
-
-                        *evt = format!(
-                            "{:X}={}",
-                            ptr,
-                            values
-                                .iter()
-                                .map(|v| format!("{:X}", v))
-                                .collect::<Vec<String>>()
-                                .join("")
-                        );
-                    }
-                }
-            }
-        }
-
-        let pc_width = pc_list.iter().fold(0, |m, s| max(m, s.len()));
-        let instr_width = instr_list.iter().fold(0, |m, s| max(m, s.len()));
-        let event_width = event_list.iter().fold(0, |m, s| max(m, s.len()));
-
-        for ((pc, instr), event) in pc_list.iter().zip(instr_list.iter()).zip(event_list.iter()) {
-            println!(
-                "{0:1$} | {2:3$} | {4:5$}",
-                pc, pc_width, instr, instr_width, event, event_width
-            );
-        }
-
-        if !missing.is_empty() {
-            let missing_reg = missing
-                .iter()
-                .filter_map(|p| match p {
-                    Prerequisite::Register {
-                        register,
-                        mask: _mask,
-                    } => Some(format!("{}", register)),
-                    _ => None,
-                })
-                .collect::<Vec<String>>()
-                .join(", ");
-
-            if !missing_reg.is_empty() {
-                println!("Halted on unconstrained register: {}", missing_reg);
-            }
-
-            let missing_mem = missing
-                .iter()
-                .filter_map(|p| match p {
-                    Prerequisite::Memory {
-                        ptr,
-                        length: _length,
-                        mask: _mask,
-                    } => Some(format!("${:X}", ptr)),
-                    _ => None,
-                })
-                .collect::<Vec<String>>()
-                .join(", ");
-
-            if !missing_mem.is_empty() {
-                println!("Halted on unconstrained register: {}", missing_mem);
-            }
-        }
+        print_prereqs(missing);
 
         Ok(())
     })
