@@ -4,7 +4,8 @@ use crate::analysis::{trace_until_fork, Disassembler, Mappable, Prerequisite, Tr
 use crate::ast::Instruction;
 use crate::cli::Nameable;
 use crate::input::parse_ptr;
-use crate::memory::Memory;
+use crate::maths::FromStrRadix;
+use crate::memory::{Memory, Pointer};
 use crate::project;
 use crate::reg::{State, Symbolic};
 use clap::{ArgMatches, Values};
@@ -14,7 +15,32 @@ use std::fmt::{Display, UpperHex};
 use std::fs;
 use std::hash::Hash;
 use std::io;
+use std::io::{stdin, stdout, BufRead, Write};
 use std::str::FromStr;
+
+enum NextAction {
+    Trace,
+    Ask,
+    SetRegister,
+    SetMemory,
+    Quit,
+    Help,
+    Invalid,
+}
+
+impl NextAction {
+    pub fn step(self) -> Self {
+        match self {
+            NextAction::Trace => NextAction::Ask,
+            NextAction::Ask => NextAction::Invalid,
+            NextAction::SetRegister => NextAction::Ask,
+            NextAction::SetMemory => NextAction::Ask,
+            NextAction::Quit => NextAction::Quit,
+            NextAction::Help => NextAction::Ask,
+            NextAction::Invalid => NextAction::Ask,
+        }
+    }
+}
 
 /// Parse a bunch of registers from a multiple-value argument into a State.
 fn reg_parse<RK, RV, P, MV>(state: &mut State<RK, RV, P, MV>, regs: Values<'_>) -> io::Result<()>
@@ -120,11 +146,13 @@ where
 }
 
 /// Print out the prerequisites that a trace operation stopped on.
-fn print_prereqs<RK, I, P, MV, S>(missing: Vec<Prerequisite<RK, I, P, MV, S>>)
+fn print_prereqs<RK, I, P, MV, S>(halt_pc: Pointer<P>, missing: &[Prerequisite<RK, I, P, MV, S>])
 where
     RK: Display,
     P: UpperHex,
 {
+    println!("Halted at ${:X}", halt_pc);
+
     if !missing.is_empty() {
         let missing_reg = missing
             .iter()
@@ -156,9 +184,162 @@ where
             .join(", ");
 
         if !missing_mem.is_empty() {
-            println!("Halted on unconstrained register: {}", missing_mem);
+            println!("Halted on unconstrained memory: {}", missing_mem);
         }
     }
+}
+
+/// Prompt the user for the next action.
+fn get_next_action() -> io::Result<NextAction> {
+    print!("What to do next? [T/R/M/Q/?]: ");
+
+    let mut buf = String::new();
+
+    {
+        stdout().lock().flush()?;
+        stdin().lock().read_line(&mut buf)?;
+    }
+
+    Ok(match buf.trim().to_lowercase().as_str() {
+        "t" => NextAction::Trace,
+        "r" => NextAction::SetRegister,
+        "m" => NextAction::SetMemory,
+        "q" => NextAction::Quit,
+        "?" => NextAction::Help,
+        _ => NextAction::Invalid,
+    })
+}
+
+/// Collect a register key and value from the user and set that register to
+/// that value in the state.
+fn set_register<RK, RV, P, MV, S>(
+    state: &mut State<RK, RV, P, MV>,
+    missing: &[Prerequisite<RK, RV, P, MV, S>],
+) -> io::Result<()>
+where
+    RK: Eq + Hash + Display + FromStr,
+    RV: FromStrRadix,
+    Symbolic<RV>: From<RV>,
+    P: Eq + Hash,
+{
+    let options = missing
+        .iter()
+        .filter_map(|m| match m {
+            Prerequisite::Register {
+                register,
+                mask: _mask,
+            } => Some(format!("{}", register)),
+            _ => None,
+        })
+        .collect::<Vec<String>>()
+        .join("/");
+
+    let rkey = {
+        print!("Register name? [{}]: ", options);
+
+        let mut rkey_buf = String::new();
+        {
+            stdout().lock().flush()?;
+            stdin().lock().read_line(&mut rkey_buf)?;
+        }
+
+        match RK::from_str(&rkey_buf.trim()) {
+            Ok(r) => r,
+            Err(_) => {
+                println!("Invalid register name");
+                return Ok(());
+            }
+        }
+    };
+
+    let rval = {
+        print!("Register value? [$ABCD]: $");
+
+        let mut rval_buf = String::new();
+        {
+            stdout().lock().flush()?;
+            stdin().lock().read_line(&mut rval_buf)?;
+        }
+
+        match RV::from_str_radix(&rval_buf.trim(), 16) {
+            Ok(r) => r,
+            Err(_) => {
+                println!("Invalid register value");
+                return Ok(());
+            }
+        }
+    };
+
+    state.set_register(rkey, Symbolic::from(rval));
+
+    Ok(())
+}
+
+/// Collect a memory pointer and value from the user and set that address to
+/// that value in the state memory.
+fn set_memory<RK, RV, P, MV, S>(
+    state: &mut State<RK, RV, P, MV>,
+    missing: &[Prerequisite<RK, RV, P, MV, S>],
+) -> io::Result<()>
+where
+    RK: Eq + Hash,
+    MV: FromStrRadix,
+    Symbolic<MV>: From<MV>,
+    P: Eq + Hash + Display,
+    Pointer<P>: FromStrRadix,
+{
+    let options = missing
+        .iter()
+        .filter_map(|m| match m {
+            Prerequisite::Memory {
+                ptr,
+                mask: _mask,
+                length: _length,
+            } => Some(format!("{}", ptr)),
+            _ => None,
+        })
+        .collect::<Vec<String>>()
+        .join("/");
+
+    let ptr = {
+        print!("Memory address? [{}]: ", options);
+
+        let mut ptr_buf = String::new();
+        {
+            stdout().lock().flush()?;
+            stdin().lock().read_line(&mut ptr_buf)?;
+        }
+
+        match Pointer::from_str_radix(&ptr_buf.trim(), 16) {
+            Ok(r) => r,
+            Err(_) => {
+                println!("Invalid memory location");
+                return Ok(());
+            }
+        }
+    };
+
+    let rval = {
+        print!("Memory value? [$ABCD]: $");
+
+        let mut rval_buf = String::new();
+        {
+            stdout().lock().flush()?;
+            stdin().lock().read_line(&mut rval_buf)?;
+        }
+
+        match MV::from_str_radix(&rval_buf.trim(), 16) {
+            Ok(r) => r,
+            Err(_) => {
+                println!("Invalid register value");
+                return Ok(());
+            }
+        }
+    };
+
+    state.set_memory(ptr, Symbolic::from(rval));
+
+    Ok(())
 }
 
 /// Trace execution of a particular program and display the results to the
@@ -200,26 +381,63 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
         })?);
         db.update_indexes();
 
-        let start_pc = parse_ptr(start_spec, db, bus, aparse).ok_or_else(|| {
+        let mut pc = parse_ptr(start_spec, db, bus, aparse).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Must specify a valid address to analyze",
             )
         })?;
-        let trace = Trace::begin_at(start_pc.clone());
+
+        let mut action = NextAction::Trace;
         let mut state = State::default();
+        let mut missing = Vec::new();
 
         if let Some(regs) = argv.values_of("register") {
             reg_parse(&mut state, regs)?;
         }
 
-        let (_busaddr, trace, _state, missing) =
-            trace_until_fork(&start_pc, trace, bus, &state, prereq, tracer)
-                .map_err(Into::<io::Error>::into)?;
+        loop {
+            match action {
+                NextAction::Trace => {
+                    let (halt_pc, trace, new_state, new_missing) = trace_until_fork(
+                        &pc,
+                        Trace::begin_at(pc.clone()),
+                        bus,
+                        &state,
+                        prereq,
+                        tracer,
+                    )
+                    .map_err(Into::<io::Error>::into)?;
 
-        print_tracelog(trace, bus, dis, fmt_i)?;
+                    state = new_state;
+                    missing = new_missing;
+                    pc = halt_pc.clone();
 
-        print_prereqs(missing);
+                    print_tracelog(trace, bus, dis, fmt_i)?;
+
+                    print_prereqs(halt_pc, &missing);
+                }
+                NextAction::Ask => {
+                    action = get_next_action()?;
+                    continue;
+                }
+                NextAction::SetRegister => set_register(&mut state, &missing)?,
+                NextAction::SetMemory => set_memory(&mut state, &missing)?,
+                NextAction::Quit => break,
+                NextAction::Help => {
+                    println!("All of the listed prerequisites must be resolved before continuing.");
+                    println!("Use the following commands to do so:");
+                    println!(" R = Resolve a register to a concrete value");
+                    println!(" M = Resolve memory to a concrete value");
+                    println!(" T = Continue trace (if all values have been resolved)");
+                    println!(" ? = Print help screen");
+                    println!(" Q = End tracing");
+                }
+                NextAction::Invalid => println!("Please type a valid command."),
+            }
+
+            action = action.step();
+        }
 
         Ok(())
     })

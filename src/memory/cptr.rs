@@ -1,6 +1,7 @@
 //! "Contextual" pointers that contain any platform or architectural state
 //! necessary to understand them.
 
+use crate::maths::FromStrRadix;
 use crate::reg;
 use num::traits::Bounded;
 use serde::de;
@@ -9,6 +10,7 @@ use std::cmp::{Ord, Ordering, PartialEq, PartialOrd};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
+use std::num::ParseIntError;
 use std::ops::{Add, AddAssign, BitAnd, Sub, SubAssign};
 use std::{fmt, str};
 
@@ -466,6 +468,43 @@ where
         }
 
         Err(PointerParseError::MissingPointer)
+    }
+}
+
+impl<P, CV> FromStrRadix for Pointer<P, CV>
+where
+    P: FromStrRadix,
+    CV: FromStrRadix,
+    reg::Symbolic<CV>: Default + From<CV>,
+{
+    fn from_str_radix(s: &str, radix: u32) -> Result<Self, ParseIntError> {
+        let mut contexts = HashMap::new();
+        let obvious_error = u32::from_str_radix("AU!4*", 10).unwrap_err();
+
+        for kv_str in s.split('!') {
+            let mut kv_iter = kv_str.split('_');
+            let k = kv_iter.next();
+            let v = kv_iter.next();
+
+            match (k, v) {
+                (Some(key), Some("?")) => {
+                    contexts.insert(key.to_string(), reg::Symbolic::default())
+                }
+                (Some(key), Some(value)) => contexts.insert(
+                    key.to_string(),
+                    reg::Symbolic::from(CV::from_str_radix(value, radix)?),
+                ),
+                (Some(ptr), None) => {
+                    return Ok(Pointer {
+                        pointer: P::from_str_radix(ptr, radix)?,
+                        context: contexts,
+                    })
+                }
+                _ => return Err(obvious_error),
+            };
+        }
+
+        Err(obvious_error)
     }
 }
 
