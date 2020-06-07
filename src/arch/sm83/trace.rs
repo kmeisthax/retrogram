@@ -529,13 +529,19 @@ fn trace_jump_relative(
     mem: &Bus,
     state: State,
 ) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
-    let op_ptr = p.contextualize(*p.as_pointer() + 1);
+    let op_ptr = p.contextualize((*p.as_pointer()).overflowing_add(1).0);
     let offset = state
         .get_memory(op_ptr.clone(), mem)
         .into_concrete()
         .ok_or_else(|| analysis::Error::UnconstrainedMemory(op_ptr))? as i8 as i16
         as u16;
-    let target = p.contextualize(*p.as_pointer() + 2 + offset);
+    let target = p.contextualize(
+        (*p.as_pointer())
+            .overflowing_add(2)
+            .0
+            .overflowing_add(offset)
+            .0,
+    );
 
     if flag_test(condcode, state.get_register(Register::F))? {
         Ok((state, target))
