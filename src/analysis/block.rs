@@ -16,8 +16,14 @@ pub struct Block<P, S>
 where
     P: analysis::Mappable,
 {
+    /// The start pointer of the block.
     start: memory::Pointer<P>,
+
+    /// The offset to the end of the block.
     length: S,
+
+    /// The number of traces that have been executed within this block.
+    traces: u32,
 }
 
 impl<P, S> Block<P, S>
@@ -25,7 +31,11 @@ where
     P: analysis::Mappable,
 {
     pub fn from_parts(start: memory::Pointer<P>, length: S) -> Self {
-        Block { start, length }
+        Block {
+            start,
+            length,
+            traces: 0,
+        }
     }
 
     pub fn as_start(&self) -> &memory::Pointer<P> {
@@ -34,6 +44,16 @@ where
 
     pub fn as_length(&self) -> &S {
         &self.length
+    }
+
+    /// Return how many traces have been executed within this block.
+    pub fn traces(&self) -> u32 {
+        self.traces
+    }
+
+    /// Increase the trace count for this block.
+    pub fn add_traces(&mut self, new_traces: u32) {
+        self.traces += new_traces;
     }
 }
 
