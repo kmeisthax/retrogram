@@ -1,7 +1,11 @@
 //! Dynamic analysis passes
 
-use crate::analysis::{Mappable, PrerequisiteAnalysis, Tracer};
-use crate::memory::{Offset, Pointer, PtrNum};
+use crate::analysis::{
+    Disasm, Disassembler, Mappable, PrerequisiteAnalysis, Reference, ReferenceKind, Trace,
+    TraceEvent, Tracer,
+};
+use crate::database::Database;
+use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, Symbolic};
 use crate::{analysis, memory, reg};
 use num_traits::{One, Zero};
@@ -161,4 +165,52 @@ where
         trace.traced_to(next_pc.clone());
         new_pc = next_pc;
     }
+}
+
+/// Analyze a completed trace log, updating the database with any new cross
+/// references which could be gleaned from the log.
+pub fn analyze_trace_log<LI, LSI, LF, RK, I, P, MV, S, IO, DISASM>(
+    trace: &Trace<RK, I, P, MV>,
+    bus: &Memory<P, MV, S, IO>,
+    database: &mut Database<P, S>,
+    disasm: DISASM,
+) -> analysis::Result<(), P, S>
+where
+    P: Mappable + PtrNum<S>,
+    S: Offset<P>,
+    DISASM: Disassembler<LI, LSI, LF, P, MV, S, IO>,
+{
+    let mut last_pc: Option<Pointer<P>> = None;
+    let mut last_disasm: Option<Disasm<LI, LSI, LF, P, S>> = None;
+
+    for event in trace.iter() {
+        match event {
+            TraceEvent::Execute(pc) => {
+                if let (Some(ref last_pc), Some(ref last_disasm)) = (last_pc, last_disasm) {
+                    if let Some(kind) = last_disasm.flow().as_reference_kind() {
+                        database.insert_crossreference(Reference::new_static_ref(
+                            last_pc.clone(),
+                            pc.clone(),
+                            kind,
+                        ));
+                    }
+                }
+
+                last_pc = Some(pc.clone());
+                last_disasm = Some(disasm(pc, bus)?);
+            }
+            TraceEvent::RegisterSet(_, _) => {}
+            TraceEvent::MemoryWrite(p, _) => {
+                if let Some(ref last_pc) = last_pc {
+                    database.insert_crossreference(Reference::new_static_ref(
+                        last_pc.clone(),
+                        p.clone(),
+                        ReferenceKind::Data,
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(())
 }

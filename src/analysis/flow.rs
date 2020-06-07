@@ -1,5 +1,7 @@
 //! Analysis of instruction control flow
 
+use crate::analysis::ReferenceKind;
+
 /// Indicates what kind of control flow a particular instruction involves.
 ///
 /// Control flow determines in what order instructions are executed within a
@@ -53,6 +55,20 @@ impl Flow {
             Normal => false,
             Branching(_) => true,
             Returning => false,
+        }
+    }
+
+    /// Convert this flow type into a reference kind.
+    ///
+    /// Not all flow implies a cross reference; this function will yield `None`
+    /// if so.
+    pub fn as_reference_kind(self) -> Option<ReferenceKind> {
+        use Flow::*;
+
+        match self {
+            Normal | Returning => None,
+            Branching(true) => Some(ReferenceKind::Subroutine),
+            Branching(false) => Some(ReferenceKind::Code),
         }
     }
 }

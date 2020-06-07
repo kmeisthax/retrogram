@@ -1,6 +1,8 @@
 //! Single-run tracing command
 
-use crate::analysis::{trace_until_fork, Disassembler, Mappable, Prerequisite, Trace, TraceEvent};
+use crate::analysis::{
+    analyze_trace_log, trace_until_fork, Disassembler, Mappable, Prerequisite, Trace, TraceEvent,
+};
 use crate::ast::Instruction;
 use crate::cli::Nameable;
 use crate::input::parse_ptr;
@@ -408,6 +410,8 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
                         tracer,
                     )
                     .map_err(Into::<io::Error>::into)?;
+
+                    analyze_trace_log(&trace, bus, db, dis).map_err(Into::<io::Error>::into)?;
 
                     state = new_state;
                     missing = new_missing;
