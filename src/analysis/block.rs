@@ -53,7 +53,7 @@ where
 
     /// Increase the trace count for this block.
     pub fn add_traces(&mut self, new_traces: u32) {
-        self.traces += new_traces;
+        self.traces = self.traces.saturating_add(new_traces);
     }
 }
 
