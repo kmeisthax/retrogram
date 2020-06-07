@@ -24,14 +24,26 @@ impl Display for ReferenceKind {
     }
 }
 
+/// Represents a reference in the database.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Reference<P>
+pub enum Reference<P>
 where
     P: analysis::Mappable,
 {
-    from: memory::Pointer<P>,
-    to: Option<memory::Pointer<P>>,
-    reftype: ReferenceKind,
+    /// Represents a reference which has been derived from static analysis or
+    /// trace execution for a specific location.
+    Static {
+        from: memory::Pointer<P>,
+        to: memory::Pointer<P>,
+        reftype: ReferenceKind,
+    },
+
+    /// Represents a reference which cannot be statically analyzed and must be
+    /// traced to determine it's target(s), if any.
+    Dynamic {
+        at: memory::Pointer<P>,
+        reftype: ReferenceKind,
+    },
 }
 
 impl<P> Reference<P>
@@ -43,30 +55,47 @@ where
         to: memory::Pointer<P>,
         kind: ReferenceKind,
     ) -> Self {
-        Reference {
+        Reference::Static {
             from,
-            to: Some(to),
+            to,
             reftype: kind,
         }
     }
 
-    pub fn new_dyn_ref(from: memory::Pointer<P>, kind: ReferenceKind) -> Self {
-        Reference {
-            from,
-            to: None,
-            reftype: kind,
-        }
+    pub fn new_dyn_ref(at: memory::Pointer<P>, reftype: ReferenceKind) -> Self {
+        Reference::Dynamic { at, reftype }
     }
 
     pub fn as_source(&self) -> &memory::Pointer<P> {
-        &self.from
+        match self {
+            Reference::Static {
+                from,
+                to: _,
+                reftype: _,
+            } => &from,
+            Reference::Dynamic { at, reftype: _ } => &at,
+        }
     }
 
-    pub fn as_target(&self) -> &Option<memory::Pointer<P>> {
-        &self.to
+    pub fn as_target(&self) -> Option<&memory::Pointer<P>> {
+        match self {
+            Reference::Static {
+                from: _,
+                to,
+                reftype: _,
+            } => Some(&to),
+            Reference::Dynamic { at: _, reftype: _ } => None,
+        }
     }
 
     pub fn kind(&self) -> ReferenceKind {
-        self.reftype
+        match self {
+            Reference::Static {
+                from: _,
+                to: _,
+                reftype,
+            } => *reftype,
+            Reference::Dynamic { at: _, reftype } => *reftype,
+        }
     }
 }

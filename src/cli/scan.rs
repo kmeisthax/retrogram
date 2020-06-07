@@ -178,7 +178,7 @@ where
             let xref = db.xref(xref_id);
 
             if let Some(xref) = xref {
-                target_pc = xref.as_target().clone();
+                target_pc = xref.as_target().cloned();
             }
 
             if let Some(target_pc) = target_pc {
