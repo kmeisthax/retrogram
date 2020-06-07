@@ -9,6 +9,7 @@ use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, Symbolic};
 use crate::{analysis, memory, reg};
 use num_traits::{One, Zero};
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::ops::{AddAssign, Not};
 
@@ -169,12 +170,16 @@ where
 
 /// Analyze a completed trace log, updating the database with any new cross
 /// references which could be gleaned from the log.
+///
+/// This function returns a set of blocks that the trace has passed through. At
+/// the end of trace execution, all of these sets must be merged, and any block
+/// within them must have their trace couts incremented by one.
 pub fn analyze_trace_log<LI, LSI, LF, RK, I, P, MV, S, IO, DISASM>(
     trace: &Trace<RK, I, P, MV>,
     bus: &Memory<P, MV, S, IO>,
     database: &mut Database<P, S>,
     disasm: DISASM,
-) -> analysis::Result<(), P, S>
+) -> analysis::Result<HashSet<usize>, P, S>
 where
     P: Mappable + PtrNum<S>,
     S: Offset<P>,
@@ -182,6 +187,7 @@ where
 {
     let mut last_pc: Option<Pointer<P>> = None;
     let mut last_disasm: Option<Disasm<LI, LSI, LF, P, S>> = None;
+    let mut traced_blocks = HashSet::new();
 
     for event in trace.iter() {
         match event {
@@ -194,6 +200,10 @@ where
                             kind,
                         ));
                     }
+                }
+
+                if let Some(block_id) = database.find_block_membership(pc) {
+                    traced_blocks.insert(block_id);
                 }
 
                 last_pc = Some(pc.clone());
@@ -212,5 +222,5 @@ where
         }
     }
 
-    Ok(())
+    Ok(traced_blocks)
 }

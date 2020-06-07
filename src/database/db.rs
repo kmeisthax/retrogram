@@ -267,6 +267,15 @@ where
         self.xrefs.push(myref);
     }
 
+    /// Indicate that some number of traces passed through a given block.
+    pub fn insert_trace_counts(&mut self, block_ids: HashSet<usize>, count: u32) {
+        for block_id in block_ids.iter() {
+            if let Some(block) = self.blocks.get_mut(*block_id) {
+                block.add_traces(count);
+            }
+        }
+    }
+
     pub fn pointer_symbol(&self, ptr: &memory::Pointer<P>) -> Option<usize> {
         self.pointer_symbols.get(ptr).copied()
     }

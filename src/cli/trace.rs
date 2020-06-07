@@ -13,6 +13,7 @@ use crate::reg::{State, Symbolic};
 use clap::{ArgMatches, Values};
 use num_traits::Num;
 use std::cmp::max;
+use std::collections::HashSet;
 use std::fmt::{Display, UpperHex};
 use std::fs;
 use std::hash::Hash;
@@ -393,6 +394,7 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
         let mut action = NextAction::Trace;
         let mut state = State::default();
         let mut missing = Vec::new();
+        let mut traced_blocks = HashSet::new();
 
         if let Some(regs) = argv.values_of("register") {
             reg_parse(&mut state, regs)?;
@@ -411,7 +413,13 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
                     )
                     .map_err(Into::<io::Error>::into)?;
 
-                    analyze_trace_log(&trace, bus, db, dis).map_err(Into::<io::Error>::into)?;
+                    traced_blocks = traced_blocks
+                        .union(
+                            &analyze_trace_log(&trace, bus, db, dis)
+                                .map_err(Into::<io::Error>::into)?,
+                        )
+                        .copied()
+                        .collect();
 
                     state = new_state;
                     missing = new_missing;
@@ -442,6 +450,8 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
 
             action = action.step();
         }
+
+        db.insert_trace_counts(traced_blocks, 1);
 
         Ok(())
     })
