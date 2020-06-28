@@ -10,10 +10,20 @@ pub trait Popcount {
     /// Usually, this is an integer, though population counts on
     type Output;
 
-    /// Count the number of one symbols in the binary representation of an integer.
+    /// Count the number of one symbols in the binary representation of an
+    /// integer.
+    ///
+    /// NOTE: For bounded-width types, this is not necessarily required to
+    /// mirror `depop_count`. It is perfectly valid for a population count to
+    /// not be equal to the bound width minus the depopulation count.
     fn pop_count(self) -> Self::Output;
 
-    /// Count the number of zero symbols in the binary representation of an integer.
+    /// Count the number of zero symbols in the binary representation of an
+    /// integer.
+    ///
+    /// NOTE: For bounded-width types, this is not necessarily required to
+    /// mirror `pop_count`. It is perfectly valid for a depopulation count to
+    /// not be equal to the bound width minus the population count.
     fn depop_count(self) -> Self::Output;
 }
 
