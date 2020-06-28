@@ -406,4 +406,32 @@ where
 
         xref_ids
     }
+
+    /// Search for all 'undertraced' blocks which should be traced to find
+    /// static crossreferences.
+    ///
+    /// A block is considered 'undertraced' if the number of traces that have
+    /// run through it's constituent block are less than the number of dynamic
+    /// crossreferences in that block. This would mean that a block with no
+    /// dynamic flow behavior is never considered for tracing.
+    pub fn undertraced_blocks(&self) -> Vec<usize> {
+        let mut blocks = Vec::new();
+
+        for (i, block) in self.blocks.iter().enumerate() {
+            let mut dynamism_score = 0;
+            for xref_id in self.find_xrefs_from(block.as_start(), block.as_length().clone()) {
+                if let Some(xref) = self.xref(xref_id) {
+                    if xref.is_dynamic() {
+                        dynamism_score += 1;
+                    }
+                }
+            }
+
+            if dynamism_score > block.traces() {
+                blocks.push(i);
+            }
+        }
+
+        blocks
+    }
 }

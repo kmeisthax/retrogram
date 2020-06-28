@@ -98,4 +98,11 @@ where
             Reference::Dynamic { at: _, reftype } => *reftype,
         }
     }
+
+    pub fn is_dynamic(&self) -> bool {
+        match self {
+            Reference::Dynamic { .. } => true,
+            _ => false,
+        }
+    }
 }
