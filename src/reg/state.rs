@@ -56,8 +56,8 @@ where
     /// If the value was later undefined by other actions, this function will
     /// still return true. To determine if the register is currently undefined,
     /// get the value and check if it's symbolic or not.
-    pub fn register_was_written(&self, k: RK) -> bool {
-        self.cpu_state.get(&k).is_some()
+    pub fn register_was_written(&self, k: &RK) -> bool {
+        self.cpu_state.get(k).is_some()
     }
 
     /// Determine if the trace that generated the current architectural state
@@ -67,8 +67,8 @@ where
     /// If the value was later undefined by other actions, this function will
     /// still return true. To determine if the memory location is currently
     /// undefined, get the value and check if it's symbolic or not.
-    pub fn memory_was_written(&self, k: Pointer<P>) -> bool {
-        self.mem_state.get(&k).is_some()
+    pub fn memory_was_written(&self, k: &Pointer<P>) -> bool {
+        self.mem_state.get(k).is_some()
     }
 
     pub fn set_register(&mut self, k: RK, v: Symbolic<RV>) {
@@ -99,8 +99,8 @@ where
     P: Eq + Hash,
     Symbolic<RV>: Clone + Default,
 {
-    pub fn get_register(&self, k: RK) -> Symbolic<RV> {
-        if let Some(val) = self.cpu_state.get(&k) {
+    pub fn get_register(&self, k: &RK) -> Symbolic<RV> {
+        if let Some(val) = self.cpu_state.get(k) {
             return val.clone();
         }
 
@@ -114,14 +114,14 @@ where
     P: Eq + Hash,
     Symbolic<MV>: Clone + Default,
 {
-    pub fn get_memory<S, IO>(&self, k: Pointer<P>, bus: &Memory<P, MV, S, IO>) -> Symbolic<MV>
+    pub fn get_memory<S, IO>(&self, k: &Pointer<P>, bus: &Memory<P, MV, S, IO>) -> Symbolic<MV>
     where
         P: memory::PtrNum<S>,
         S: memory::Offset<P>,
         MV: reg::Bitwise,
         IO: One,
     {
-        if let Some(val) = self.mem_state.get(&k) {
+        if let Some(val) = self.mem_state.get(k) {
             return val.clone();
         }
 

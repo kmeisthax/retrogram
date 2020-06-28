@@ -84,8 +84,8 @@ fn memlist_call_indir16(
 
     match (regs.get(0), regs.get(1)) {
         (Some(r0), Some(r1)) => match (
-            state.get_register(*r0).into_concrete(),
-            state.get_register(*r1).into_concrete(),
+            state.get_register(r0).into_concrete(),
+            state.get_register(r1).into_concrete(),
         ) {
             (Some(h), Some(l)) => {
                 preqs.push(Prerequisite::memory(
