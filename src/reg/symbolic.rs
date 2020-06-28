@@ -30,7 +30,7 @@ use std::ops::{Add, BitAnd, BitOr, BitXor, Not, Shl, Shr, Sub};
 /// If only one possible register value is valid, then the register is said to
 /// be concrete. A register with no valid state is said to be unsatisfiable. If
 /// multiple states are valid, then the register is said to be abstract.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Symbolic<T> {
     bits_set: T,
     bits_cleared: T,
@@ -453,7 +453,7 @@ where
         let extension = !((!T::zero()).checked_shr(rhs)?);
 
         Some(Symbolic {
-            bits_set: self.bits_set.checked_shr(rhs.clone())?,
+            bits_set: self.bits_set.checked_shr(rhs)?,
             bits_cleared: self.bits_cleared.checked_shr(rhs)? | extension,
         })
     }
