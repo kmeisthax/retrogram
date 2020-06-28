@@ -4,7 +4,8 @@ use crate::memory::{Memory, Pointer};
 use crate::reg::Symbolic;
 use crate::{memory, reg};
 use num_traits::One;
-use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::collections::{BTreeSet, HashMap};
 use std::hash::Hash;
 
 /// Represents a bundle of known program state.
@@ -43,6 +44,179 @@ where
 
     /// Non-architectural, or memory-related program state.
     mem_state: HashMap<Pointer<P>, Symbolic<MV>>,
+}
+
+impl<RK, RV, P, MV> PartialEq for State<RK, RV, P, MV>
+where
+    RK: Eq + Hash,
+    Symbolic<RV>: PartialEq + Default,
+    P: Eq + Hash,
+    Symbolic<MV>: PartialEq + Default,
+{
+    fn eq(&self, other: &Self) -> bool {
+        for (rk, rv) in self.cpu_state.iter() {
+            if rv != other.cpu_state.get(rk).unwrap_or(&Default::default()) {
+                return false;
+            }
+        }
+
+        for (rk, rv) in other.cpu_state.iter() {
+            if rv != self.cpu_state.get(rk).unwrap_or(&Default::default()) {
+                return false;
+            }
+        }
+
+        for (p, mv) in self.mem_state.iter() {
+            if mv != other.mem_state.get(p).unwrap_or(&Default::default()) {
+                return false;
+            }
+        }
+
+        for (p, mv) in other.mem_state.iter() {
+            if mv != self.mem_state.get(p).unwrap_or(&Default::default()) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+impl<RK, RV, P, MV> Eq for State<RK, RV, P, MV>
+where
+    RK: Eq + Hash,
+    Symbolic<RV>: Eq + Default,
+    P: Eq + Hash,
+    Symbolic<MV>: Eq + Default,
+{
+}
+
+impl<RK, RV, P, MV> PartialOrd for State<RK, RV, P, MV>
+where
+    RK: Eq + Ord + Hash + Clone,
+    Symbolic<RV>: Ord + Clone + Default,
+    P: Eq + Ord + Hash + Clone,
+    Symbolic<MV>: Ord + Clone + Default,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let rk_list = self
+            .cpu_state
+            .keys()
+            .chain(other.cpu_state.keys())
+            .cloned()
+            .collect::<BTreeSet<RK>>();
+
+        for rk in rk_list.iter() {
+            let cmp = self
+                .cpu_state
+                .get(rk)
+                .cloned()
+                .unwrap_or_else(Default::default)
+                .partial_cmp(
+                    &other
+                        .cpu_state
+                        .get(rk)
+                        .cloned()
+                        .unwrap_or_else(Default::default),
+                );
+
+            if cmp != Some(Ordering::Equal) {
+                return cmp;
+            }
+        }
+
+        let p_list = self
+            .mem_state
+            .keys()
+            .chain(other.mem_state.keys())
+            .cloned()
+            .collect::<BTreeSet<Pointer<P>>>();
+
+        for p in p_list.iter() {
+            let cmp = self
+                .mem_state
+                .get(p)
+                .cloned()
+                .unwrap_or_else(Default::default)
+                .partial_cmp(
+                    &other
+                        .mem_state
+                        .get(p)
+                        .cloned()
+                        .unwrap_or_else(Default::default),
+                );
+
+            if cmp != Some(Ordering::Equal) {
+                return cmp;
+            }
+        }
+
+        Some(Ordering::Equal)
+    }
+}
+
+impl<RK, RV, P, MV> Ord for State<RK, RV, P, MV>
+where
+    RK: Eq + Ord + Hash + Clone,
+    Symbolic<RV>: Ord + Clone + Default,
+    P: Eq + Ord + Hash + Clone,
+    Symbolic<MV>: Ord + Clone + Default,
+{
+    fn cmp(&self, other: &Self) -> Ordering {
+        let rk_list = self
+            .cpu_state
+            .keys()
+            .chain(other.cpu_state.keys())
+            .cloned()
+            .collect::<BTreeSet<RK>>();
+
+        for rk in rk_list.iter() {
+            let cmp = self
+                .cpu_state
+                .get(rk)
+                .cloned()
+                .unwrap_or_else(Default::default)
+                .cmp(
+                    &other
+                        .cpu_state
+                        .get(rk)
+                        .cloned()
+                        .unwrap_or_else(Default::default),
+                );
+
+            if cmp != Ordering::Equal {
+                return cmp;
+            }
+        }
+
+        let p_list = self
+            .mem_state
+            .keys()
+            .chain(other.mem_state.keys())
+            .cloned()
+            .collect::<BTreeSet<Pointer<P>>>();
+
+        for p in p_list.iter() {
+            let cmp = self
+                .mem_state
+                .get(p)
+                .cloned()
+                .unwrap_or_else(Default::default)
+                .cmp(
+                    &other
+                        .mem_state
+                        .get(p)
+                        .cloned()
+                        .unwrap_or_else(Default::default),
+                );
+
+            if cmp != Ordering::Equal {
+                return cmp;
+            }
+        }
+
+        Ordering::Equal
+    }
 }
 
 impl<RK, RV, P, MV> State<RK, RV, P, MV>
