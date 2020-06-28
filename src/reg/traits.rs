@@ -27,17 +27,7 @@ pub trait TryConvertable<R>: Sized {
 
 /// Guard trait for bitwise operations on a type.
 ///
-/// This is similar to `Concretizable` but stipulates the output type of all
-/// operations is identical to the implementing type. This is because `Symbolic`
-/// cannot make use of `From` conversions (which is why we have `Convertable`).
-/// In practice any good numerical type implementation that supports bitwise
-/// operators will also return it's own types, so this excludes pathological
-/// cases like redefining shifts to mean input and output (looking at you C++).
-///
-/// In short: concrete values can satisfy both traits; symbolic ones only
-/// satisfy this one.
-///
-/// Bitwise also requires the ability to shift by a `usize` count for programmer
+/// Bitwise also requires the ability to shift by a `u32` count for programmer
 /// convenience.
 pub trait Bitwise:
     Clone
