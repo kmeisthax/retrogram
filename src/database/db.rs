@@ -306,6 +306,8 @@ where
     P: analysis::Mappable + memory::PtrNum<S>,
     S: memory::Offset<P>,
 {
+    /// Find which block of the program's control-flow graph contains this
+    /// pointer.
     pub fn find_block_membership(&self, ptr: &memory::Pointer<P>) -> Option<usize> {
         //TODO: This needs to be way higher performance than a linear scan
         for (i, ref block) in self.blocks.iter().enumerate() {
