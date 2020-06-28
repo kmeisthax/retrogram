@@ -1,5 +1,6 @@
 //! My number traits
 
+use num_traits::{One, Zero};
 use std::num::ParseIntError;
 use std::ops::{Add, Mul, Shl, Sub};
 
@@ -233,3 +234,19 @@ wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, i32);
 wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, i64);
 wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, i128);
 wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, isize);
+
+/// Guard trait for numerical operations on a type.
+pub trait Numerical:
+    Clone + Zero + One + CheckedAdd<Self, Output = Self> + CheckedSub<Self, Output = Self> + PartialOrd
+{
+}
+
+impl<T> Numerical for T where
+    T: Clone
+        + Zero
+        + One
+        + CheckedAdd<Self, Output = Self>
+        + CheckedSub<Self, Output = Self>
+        + PartialOrd
+{
+}
