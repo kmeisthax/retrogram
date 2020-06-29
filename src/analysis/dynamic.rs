@@ -62,7 +62,7 @@ where
             match &pr {
                 Prerequisite::Register { register, mask } => {
                     if !new_state
-                        .get_register(register.clone())
+                        .get_register(&register.clone())
                         .bits_are_concrete(mask.clone())
                     {
                         missing.push(pr);
@@ -82,7 +82,7 @@ where
                             .unwrap_or_else(MV::zero);
 
                         if !new_state
-                            .get_memory(ptr.clone() + length.clone(), bus)
+                            .get_memory(&(ptr.clone() + length.clone()), bus)
                             .bits_are_concrete(mask)
                         {
                             missing.push(pr);
