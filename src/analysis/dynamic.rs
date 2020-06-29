@@ -11,67 +11,6 @@ use crate::{analysis, memory, reg};
 use num_traits::{One, Zero};
 use std::collections::HashSet;
 use std::convert::TryInto;
-use std::ops::{AddAssign, Not};
-
-/// Indicates a memory or register value that needs to be a concrete value
-/// before execution can continue.
-pub enum Prerequisite<RK, I, P, MV, S> {
-    /// A register that must be resolved before execution can continue.
-    Register {
-        /// The register to resolve.
-        register: RK,
-
-        /// Which bits are considered necessary to be resolved.
-        ///
-        /// A value of all-ones (e.g. 0xFF) would indicate a register which
-        /// needs total resolution, while a value of all-zeroes would indicate
-        /// a register that does not need to be resolved.
-        mask: I,
-    },
-
-    /// A memory location (or set of locations) that must be resolved before
-    /// execution can continue.
-    Memory {
-        /// The memory location to resolve.
-        ptr: Pointer<P>,
-
-        /// How wide the memory location is.
-        length: S,
-
-        /// Which bits are considered necessary to be resolved.
-        ///
-        /// Memory locations not listed in the mask shall be considered equal
-        /// to all-ones. Ergo, to indicate memory that needs total resolution,
-        /// you may use an empty `Vec`.
-        mask: Vec<MV>,
-    },
-}
-
-impl<RK, I, P, MV, S> Prerequisite<RK, I, P, MV, S> {
-    pub fn memory(ptr: Pointer<P>, length: S) -> Self {
-        Prerequisite::Memory {
-            ptr,
-            length,
-            mask: vec![],
-        }
-    }
-
-    pub fn register(register: RK, mask: I) -> Self {
-        Prerequisite::Register { register, mask }
-    }
-}
-
-impl<RK, I, P, MV, S> From<RK> for Prerequisite<RK, I, P, MV, S>
-where
-    I: Zero + Not<Output = I>,
-{
-    fn from(register: RK) -> Self {
-        Prerequisite::Register {
-            register,
-            mask: !I::zero(),
-        }
-    }
-}
 
 type TraceResult<RK, I, P, MV, S> = analysis::Result<
     (
