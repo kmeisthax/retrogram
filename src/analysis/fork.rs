@@ -49,6 +49,16 @@ where
     Symbolic<MV>: Bitwise,
     Trace<RK, I, P, MV>: Clone,
 {
+    /// Construct an initial fork at some location.
+    pub fn initial_fork(pc: Pointer<P>, pre_state: State<RK, I, P, MV>) -> Self {
+        Self {
+            num_branches: 0.0,
+            pc: pc.clone(),
+            pre_state,
+            trace: Trace::begin_at(pc),
+        }
+    }
+
     /// Given a list of prerequisites and the end of a tracing operation,
     /// construct a new list of forks to pursue.
     pub fn make_forks<S, IO>(
@@ -160,6 +170,7 @@ where
 {
     /// Consume a Fork, returning the branch count, PC, state, and the trace
     /// that got us this far.
+    #[allow(clippy::type_complexity)]
     pub fn into_parts(self) -> (f64, Pointer<P>, State<RK, I, P, MV>, Trace<RK, I, P, MV>) {
         (self.num_branches, self.pc, self.pre_state, self.trace)
     }

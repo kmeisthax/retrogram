@@ -1,9 +1,20 @@
 //! CLI command: scan
 
+use crate::analysis::{
+    analyze_trace_log, trace_until_fork, Disassembler, Fork, Mappable, PrerequisiteAnalysis, Trace,
+    Tracer,
+};
+use crate::cli::Nameable;
+use crate::database::Database;
+use crate::maths::{Numerical, Popcount};
+use crate::memory::{Offset, Pointer, PtrNum};
+use crate::reg::{Bitwise, State, Symbolic};
 use crate::{analysis, ast, cli, database, input, maths, memory, project, reg};
 use clap::ArgMatches;
 use num_traits::{One, Zero};
-use std::collections::HashSet;
+use std::collections::{BinaryHeap, HashSet};
+use std::convert::TryInto;
+use std::hash::Hash;
 use std::{fmt, fs, io};
 
 /// Scan a specific starting PC and add the results of the analysis to the
@@ -111,6 +122,141 @@ where
     Ok(())
 }
 
+/// Scan all unanalyzed static crossreferences present within a given database,
+/// recursively, until the control graph is maximally extended.
+///
+/// This function yields false if it's execution yielded no additional code. It
+/// will also yield the addresses of any code that threw errors when analyzed.
+fn exhaust_all_static_scans<I, SI, F, P, MV, S, IO, DIS>(
+    db: &mut Database<P, S>,
+    bus: &memory::Memory<P, MV, S, IO>,
+    disassembler: &DIS,
+) -> (bool, HashSet<Pointer<P>>)
+where
+    P: PtrNum<S> + Mappable + Nameable,
+    S: Offset<P> + Nameable + Zero + One,
+    IO: One,
+    MV: reg::Bitwise + fmt::UpperHex,
+    reg::Symbolic<MV>: Default,
+    ast::Instruction<I, SI, F, P>: Clone,
+    DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO>,
+{
+    let mut failed_analysis = HashSet::new();
+    let mut any_analysis_done = false;
+
+    loop {
+        let unanalyzed = db.unanalyzed_static_xrefs();
+        let mut more_analysis_done = false;
+
+        for xref_id in unanalyzed {
+            let mut target_pc = None;
+            let xref = db.xref(xref_id);
+
+            if let Some(xref) = xref {
+                target_pc = xref.as_target().cloned();
+            }
+
+            if let Some(target_pc) = target_pc {
+                if !failed_analysis.contains(&target_pc) {
+                    match scan_pc_for_arch(db, &target_pc, &disassembler, bus) {
+                        Ok(_) => {
+                            eprintln!("Found additional code at {:X}", target_pc);
+                            more_analysis_done = true;
+                        }
+                        Err(e) => {
+                            eprintln!("{}", e);
+
+                            failed_analysis.insert(target_pc);
+                        }
+                    }
+                }
+            }
+        }
+
+        any_analysis_done |= more_analysis_done;
+
+        if !more_analysis_done {
+            break;
+        }
+    }
+
+    (any_analysis_done, failed_analysis)
+}
+
+/// Given a program database, analyze all blocks in need of dynamic tracing.
+///
+/// This function yields true if any dynamic analysis was done. You will need
+/// to check for any new unanalyzed static references after the tracing has
+/// completed.
+fn exhaust_all_dynamic_scans<LI, LSI, LF, RK, I, P, MV, S, IO, PREREQ, TRACER, DISASM>(
+    db: &mut Database<P, S>,
+    bus: &memory::Memory<P, MV, S, IO>,
+    prereq: &PREREQ,
+    tracer: &TRACER,
+    disasm: &DISASM,
+) -> analysis::Result<bool, P, S>
+where
+    RK: Mappable,
+    I: Bitwise + Numerical + TryInto<u64> + Popcount<Output = I>,
+    P: Mappable + PtrNum<S> + Numerical,
+    MV: Bitwise + Numerical + TryInto<u64> + Popcount<Output = MV>,
+    S: Offset<P> + TryInto<usize>,
+    IO: One,
+    Symbolic<I>: Bitwise,
+    Symbolic<MV>: Bitwise,
+    Fork<RK, I, P, MV>: Ord,
+    State<RK, I, P, MV>: Clone + Eq + Hash,
+    PREREQ: PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
+    TRACER: Tracer<RK, I, P, MV, S, IO>,
+    DISASM: Disassembler<LI, LSI, LF, P, MV, S, IO>,
+{
+    let mut did_trace = false;
+
+    for block_id in db.undertraced_blocks().iter() {
+        let block = db.block(*block_id).unwrap();
+        let mut forks = BinaryHeap::new();
+
+        forks.push(Fork::initial_fork(
+            block.as_start().clone(),
+            Default::default(),
+        ));
+
+        while let Some(fork) = forks.pop() {
+            let (branches, pc, state, trace) = fork.into_parts();
+
+            if branches > 5.0 {
+                //TODO: better heuristic please
+                //TODO: this should retrieve the block's total fork score
+                //TODO: what happens if we overtrace a block (say a utility fn)
+                //      while it's still in the undertraced list?
+                continue;
+            }
+
+            let (new_pc, trace, post_state, prerequisites) =
+                trace_until_fork(&pc, trace, bus, &state, prereq, tracer)?;
+
+            did_trace = true;
+
+            let traced_blocks = analyze_trace_log(&trace, bus, db, disasm)?;
+
+            db.insert_trace_counts(traced_blocks, 1);
+
+            for result_fork in Fork::make_forks(
+                branches,
+                new_pc.clone(),
+                post_state,
+                bus,
+                Trace::begin_at(new_pc),
+                &prerequisites,
+            ) {
+                forks.push(result_fork);
+            }
+        }
+    }
+
+    Ok(did_trace)
+}
+
 /// Given a program, analyze a given routine with the given memory model and
 /// disassembler and populate the database with the results.
 ///
@@ -120,28 +266,43 @@ where
 ///
 /// TODO: The current set of lifetime bounds preclude the use of zero-copy
 /// deserialization. We should figure out a way around that.
-fn scan_for_arch<I, SI, F, P, MV, S, IO, DIS, APARSE>(
+fn scan_for_arch<LI, LSI, LF, RK, I, P, MV, S, IO, DIS, APARSE, PREREQ, TRACER>(
     prog: &project::Program,
     start_spec: &str,
     disassembler: DIS,
     bus: &memory::Memory<P, MV, S, IO>,
     architectural_ctxt_parse: APARSE,
+    prereq: PREREQ,
+    tracer: TRACER,
 ) -> io::Result<()>
 where
+    RK: Mappable,
+    I: Bitwise + Numerical + TryInto<u64> + Popcount<Output = I>,
     for<'dw> P: memory::PtrNum<S>
         + analysis::Mappable
         + cli::Nameable
         + serde::Deserialize<'dw>
         + serde::Serialize
-        + maths::FromStrRadix,
-    for<'dw> S:
-        memory::Offset<P> + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize + One,
+        + maths::FromStrRadix
+        + Numerical,
+    MV: Bitwise + Numerical + TryInto<u64> + Popcount<Output = MV> + fmt::UpperHex,
+    for<'dw> S: memory::Offset<P>
+        + cli::Nameable
+        + serde::Deserialize<'dw>
+        + serde::Serialize
+        + One
+        + TryInto<usize>,
     IO: One,
-    MV: reg::Bitwise + fmt::UpperHex,
-    reg::Symbolic<MV>: Default,
-    ast::Instruction<I, SI, F, P>: Clone,
-    DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO>,
+    reg::Symbolic<I>: Bitwise,
+    reg::Symbolic<MV>: Default + Bitwise,
+    ast::Instruction<LI, LSI, LF, P>: Clone,
+    Fork<RK, I, P, MV>: Ord,
+    State<RK, I, P, MV>: Clone + Eq + Hash,
+    DIS: analysis::Disassembler<LI, LSI, LF, P, MV, S, IO>,
+    PREREQ: PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
+    TRACER: Tracer<RK, I, P, MV, S, IO>,
     APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()>,
+    analysis::Error<P, S>: Into<io::Error>,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
@@ -167,38 +328,16 @@ where
         }
     };
 
-    let mut failed_analysis = HashSet::new();
-
     loop {
-        let unanalyzed = db.unanalyzed_static_xrefs();
-        let mut more_analysis_done = false;
-
-        for xref_id in unanalyzed {
-            let mut target_pc = None;
-            let xref = db.xref(xref_id);
-
-            if let Some(xref) = xref {
-                target_pc = xref.as_target().cloned();
-            }
-
-            if let Some(target_pc) = target_pc {
-                if !failed_analysis.contains(&target_pc) {
-                    match scan_pc_for_arch(&mut db, &target_pc, &disassembler, bus) {
-                        Ok(_) => {
-                            eprintln!("Found additional code at {:X}", target_pc);
-                            more_analysis_done = true;
-                        }
-                        Err(e) => {
-                            eprintln!("{}", e);
-
-                            failed_analysis.insert(target_pc);
-                        }
-                    }
-                }
-            }
+        let (did_find_code, _) = exhaust_all_static_scans(&mut db, bus, &disassembler);
+        if !did_find_code {
+            break;
         }
 
-        if !more_analysis_done {
+        let did_trace_branches =
+            exhaust_all_dynamic_scans(&mut db, bus, &prereq, &tracer, &disassembler)
+                .map_err(Into::<io::Error>::into)?;
+        if !did_trace_branches {
             break;
         }
     }
@@ -226,8 +365,8 @@ pub fn scan<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()
                                     _fmt_s,
                                     _fmt_i,
                                     aparse,
-                                    _prereq,
-                                    _tracer| {
-        scan_for_arch(prog, start_spec, dis, bus, aparse)
+                                    prereq,
+                                    tracer| {
+        scan_for_arch(prog, start_spec, dis, bus, aparse, prereq, tracer)
     })
 }
