@@ -8,6 +8,7 @@ use num_traits::One;
 use std::cmp::{Ord, Ordering};
 use std::collections::HashSet;
 use std::convert::TryInto;
+use std::hash::Hash;
 
 /// A single fork of an ongoing multiply-forked tracing operation.
 ///
@@ -62,7 +63,7 @@ where
         P: PtrNum<S>,
         S: Numerical + Offset<P> + TryInto<usize>,
         IO: One,
-        State<RK, I, P, MV>: Mappable,
+        State<RK, I, P, MV>: Clone + Eq + Hash,
     {
         if prerequisites.is_empty() {
             return vec![Self {
