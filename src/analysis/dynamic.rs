@@ -1,14 +1,14 @@
 //! Dynamic analysis passes
 
 use crate::analysis::{
-    Disasm, Disassembler, Mappable, PrerequisiteAnalysis, Reference, ReferenceKind, Trace,
-    TraceEvent, Tracer,
+    Disasm, Disassembler, Mappable, Prerequisite, PrerequisiteAnalysis, Reference, ReferenceKind,
+    Trace, TraceEvent, Tracer,
 };
 use crate::database::Database;
 use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, Symbolic};
 use crate::{analysis, memory, reg};
-use num_traits::{One, Zero};
+use num_traits::One;
 use std::collections::HashSet;
 use std::convert::TryInto;
 
