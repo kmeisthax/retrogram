@@ -87,6 +87,18 @@ impl Popcount for u32 {
     }
 }
 
+impl Popcount for i32 {
+    type Output = i32;
+
+    fn pop_count(self) -> Self::Output {
+        (self as u32).pop_count() as i32
+    }
+
+    fn depop_count(self) -> Self::Output {
+        (!self).pop_count()
+    }
+}
+
 impl Popcount for u64 {
     type Output = u64;
 
