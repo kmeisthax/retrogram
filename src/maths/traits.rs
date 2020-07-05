@@ -237,7 +237,13 @@ wrap_from_str_radix_impl!(FromStrRadix, from_str_radix, isize);
 
 /// Guard trait for numerical operations on a type.
 pub trait Numerical:
-    Clone + Zero + One + CheckedAdd<Self, Output = Self> + CheckedSub<Self, Output = Self> + PartialOrd
+    Clone
+    + Zero
+    + One
+    + CheckedAdd<Self, Output = Self>
+    + CheckedSub<Self, Output = Self>
+    + PartialOrd
+    + PartialEq
 {
 }
 
