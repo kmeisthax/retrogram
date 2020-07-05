@@ -6,7 +6,7 @@ use crate::{memory, reg};
 use num_traits::One;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 
 /// Represents a bundle of known program state.
 ///
@@ -89,6 +89,43 @@ where
     P: Eq + Hash,
     Symbolic<MV>: Eq + Default,
 {
+}
+
+impl<RK, RV, P, MV> Hash for State<RK, RV, P, MV>
+where
+    RK: Eq + Hash,
+    Symbolic<RV>: Eq + Hash + Default,
+    P: Eq + Hash,
+    Symbolic<MV>: Eq + Hash + Default,
+{
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        // Implementation note: `Hash` requires that hash equality mirror
+        // equality of the underlying type. This poses problems for hashing an
+        // entire `State`, as undefined keys are treated as set to the default.
+        // We cannot enumerate all possible registers or pointers in a `State`,
+        // so we instead we have to treat default values as if they were
+        // undefined and refuse to include them in our hash.
+        for (rk, rv) in self.cpu_state.iter() {
+            if *rv == Default::default() {
+                continue;
+            }
+
+            rk.hash(state);
+            rv.hash(state);
+        }
+
+        for (p, mv) in self.mem_state.iter() {
+            if *mv == Default::default() {
+                continue;
+            }
+
+            p.hash(state);
+            mv.hash(state);
+        }
+    }
 }
 
 impl<RK, RV, P, MV> PartialOrd for State<RK, RV, P, MV>
