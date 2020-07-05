@@ -40,7 +40,7 @@ pub fn trace_until_fork<RK, I, P, MV, S, IO, PREREQ, TRACER>(
 where
     RK: Mappable,
     P: Mappable + PtrNum<S>,
-    S: Offset<P> + TryInto<usize> + AddAssign,
+    S: Offset<P> + TryInto<usize>,
     I: Bitwise,
     MV: Bitwise,
     IO: One,
@@ -89,7 +89,7 @@ where
                             break;
                         }
 
-                        i += S::one();
+                        i = i + S::one();
                     }
                 }
             }
