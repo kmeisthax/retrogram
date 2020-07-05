@@ -30,7 +30,13 @@ use std::ops::{Add, BitAnd, BitOr, BitXor, Not, Shl, Shr, Sub};
 /// If only one possible register value is valid, then the register is said to
 /// be concrete. A register with no valid state is said to be unsatisfiable. If
 /// multiple states are valid, then the register is said to be abstract.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+///
+/// Note: The implementation of `PartialOrd` and `Ord` is intended primarily to
+/// allow the use of symbolic values in sets and other structures that need to
+/// produce consistent orderings of keys. It is not a logically valid ordering
+/// according to symbolic bit semantics; actual symbolic execution should not
+/// use orderings.
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbolic<T> {
     bits_set: T,
     bits_cleared: T,
