@@ -7,7 +7,7 @@ use std::hash::Hash;
 use std::ops::Add;
 
 /// An individual event in the trace log.
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum TraceEvent<RK, RV, P, MV> {
     /// The execution of an instruction at a particular address.
     Execute(Pointer<P>),
@@ -29,7 +29,7 @@ pub enum TraceEvent<RK, RV, P, MV> {
 /// This structure does not store execution state information; for that, you
 /// will need to consult `reg::State`. The Trace only contains information on
 /// how we got to that state.
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Trace<RK, RV, P, MV> {
     /// Every instruction execution, register set, and memory write along the
     /// trace path.
