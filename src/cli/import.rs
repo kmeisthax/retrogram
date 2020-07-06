@@ -1,8 +1,10 @@
 //! Import command: Copies data from an external data source into the Retrogram
 //! analysis database
 
+use crate::analysis::Mappable;
 use crate::cli::common::resolve_source;
-use crate::{analysis, arch, database, platform, project};
+use crate::cli::Nameable;
+use crate::{arch, database, platform, project};
 use clap::ArgMatches;
 use std::{fs, io};
 
@@ -12,7 +14,7 @@ pub fn import_for_arch<P, S, IMP>(
     imp: IMP,
 ) -> io::Result<()>
 where
-    for<'dw> P: analysis::Mappable + serde::Deserialize<'dw>,
+    for<'dw> P: Mappable + Nameable + serde::Deserialize<'dw>,
     for<'dw> S: serde::Deserialize<'dw>,
     IMP: Fn(
         &project::Program,

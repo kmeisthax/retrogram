@@ -1,6 +1,8 @@
 //! High-level CLI routines
 
-use crate::{analysis, ast, cli, input, maths, memory, project};
+use crate::analysis::Mappable;
+use crate::cli::Nameable;
+use crate::{analysis, ast, input, maths, memory, project};
 use clap::ArgMatches;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -16,12 +18,9 @@ fn dis_inner<L, P, MV, MS, IO, DIS, FMT, APARSE>(
 ) -> io::Result<()>
 where
     L: ast::Literal<PtrVal = P>,
-    for<'dw> P: memory::PtrNum<MS>
-        + analysis::Mappable
-        + cli::Nameable
-        + serde::Deserialize<'dw>
-        + maths::FromStrRadix,
-    for<'dw> MS: memory::Offset<P> + analysis::Mappable + serde::Deserialize<'dw>,
+    for<'dw> P:
+        memory::PtrNum<MS> + Mappable + Nameable + serde::Deserialize<'dw> + maths::FromStrRadix,
+    for<'dw> MS: memory::Offset<P> + Mappable + Nameable + serde::Deserialize<'dw>,
     ast::Operand<L>: Clone,
     ast::Instruction<L>: Clone,
     ast::Directive<L, P, MV, MS>: Clone,

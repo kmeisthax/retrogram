@@ -1,6 +1,7 @@
 //! Types needed to analyze references
 
-use crate::{analysis, memory};
+use crate::cli::Nameable;
+use crate::memory;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter, Result};
 
@@ -28,7 +29,7 @@ impl Display for ReferenceKind {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Reference<P>
 where
-    P: analysis::Mappable,
+    P: Nameable,
 {
     /// Represents a reference which has been derived from static analysis or
     /// trace execution for a specific location.
@@ -48,7 +49,7 @@ where
 
 impl<P> Reference<P>
 where
-    P: analysis::Mappable,
+    P: Nameable,
 {
     pub fn new_static_ref(
         from: memory::Pointer<P>,

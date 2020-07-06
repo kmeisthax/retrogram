@@ -2,15 +2,14 @@
 
 use crate::analysis::Prerequisite;
 use crate::ast::Literal;
+use crate::cli::Nameable;
 use crate::{analysis, memory, reg};
 use std::cmp::Ord;
-use std::fmt::Display;
 use std::hash::Hash;
-use std::str::FromStr;
 
-pub trait Mappable: Clone + Eq + Hash + Ord + Display + FromStr {}
+pub trait Mappable: Clone + Eq + Hash + Ord {}
 
-impl<T> Mappable for T where T: Clone + Eq + Hash + Ord + Display + FromStr {}
+impl<T> Mappable for T where T: Clone + Eq + Hash + Ord {}
 
 pub trait Disassembler<L, P, MV, S, IO>:
     Fn(
@@ -19,14 +18,14 @@ pub trait Disassembler<L, P, MV, S, IO>:
 ) -> analysis::Result<analysis::Disasm<L, P, S>, P, S>
 where
     L: Literal,
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
 {
 }
 
 impl<T, L, P, MV, S, IO> Disassembler<L, P, MV, S, IO> for T
 where
     L: Literal,
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
     T: Fn(
         &memory::Pointer<P>,
         &memory::Memory<P, MV, S, IO>,

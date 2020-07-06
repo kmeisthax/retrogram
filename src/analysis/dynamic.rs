@@ -5,6 +5,7 @@ use crate::analysis::{
     Trace, TraceEvent, Tracer,
 };
 use crate::ast::Literal;
+use crate::cli::Nameable;
 use crate::database::Database;
 use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, Symbolic};
@@ -122,7 +123,7 @@ pub fn analyze_trace_log<L, RK, I, P, MV, S, IO, DISASM>(
 ) -> analysis::Result<HashSet<usize>, P, S>
 where
     L: Literal,
-    P: Mappable + PtrNum<S>,
+    P: Mappable + Nameable + PtrNum<S>,
     S: Offset<P>,
     DISASM: Disassembler<L, P, MV, S, IO>,
 {

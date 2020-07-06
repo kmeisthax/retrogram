@@ -1,6 +1,8 @@
 //! Analysis sections (e.g. blocks, subroutines, etc)
 
-use crate::{analysis, memory};
+use crate::analysis::Mappable;
+use crate::cli::Nameable;
+use crate::memory;
 use serde::{Deserialize, Serialize};
 
 /// Represents a sequence of instructions with the following properties:
@@ -14,7 +16,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Block<P, S>
 where
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
 {
     /// The start pointer of the block.
     start: memory::Pointer<P>,
@@ -28,7 +30,7 @@ where
 
 impl<P, S> Block<P, S>
 where
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
 {
     pub fn from_parts(start: memory::Pointer<P>, length: S) -> Self {
         Block {
@@ -59,7 +61,7 @@ where
 
 impl<P, S> Block<P, S>
 where
-    P: analysis::Mappable + memory::PtrNum<S>,
+    P: memory::PtrNum<S> + Mappable + Nameable,
     S: memory::Offset<P>,
 {
     pub fn is_ptr_within_block(&self, ptr: &memory::Pointer<P>) -> bool {

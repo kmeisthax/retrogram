@@ -1,5 +1,7 @@
 //! Implementation of core database type
 
+use crate::analysis::Mappable;
+use crate::cli::Nameable;
 use crate::{analysis, ast, memory};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -31,11 +33,11 @@ fn im_stale() -> bool {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Symbol<P>(ast::Label, memory::Pointer<P>)
 where
-    P: analysis::Mappable;
+    P: Mappable + Nameable;
 
 impl<P> Symbol<P>
 where
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
 {
     pub fn as_label(&self) -> &ast::Label {
         &self.0
@@ -58,7 +60,7 @@ where
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Database<P, S>
 where
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
 {
     symbols: Vec<Symbol<P>>,
 
@@ -90,7 +92,7 @@ where
 
 impl<P, S> Default for Database<P, S>
 where
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
 {
     fn default() -> Self {
         Self::new()
@@ -99,7 +101,7 @@ where
 
 impl<P, S> Database<P, S>
 where
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
 {
     pub fn new() -> Self {
         Database {
@@ -303,7 +305,7 @@ where
 
 impl<P, S> Database<P, S>
 where
-    P: analysis::Mappable + memory::PtrNum<S>,
+    P: Mappable + Nameable + memory::PtrNum<S>,
     S: memory::Offset<P>,
 {
     /// Find which block of the program's control-flow graph contains this

@@ -1,10 +1,12 @@
 //! Project file structures
 
+use crate::analysis::Mappable;
 use crate::arch::ArchName;
 use crate::asm::AssemblerName;
+use crate::cli::Nameable;
+use crate::database;
 use crate::database::ExternalFormat;
 use crate::platform::PlatformName;
-use crate::{analysis, database};
 use clap::{App, Arg, ArgMatches, ArgSettings};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -318,14 +320,14 @@ impl Project {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ProjectDatabase<P, S>
 where
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
 {
     databases: HashMap<String, database::Database<P, S>>,
 }
 
 impl<P, S> ProjectDatabase<P, S>
 where
-    for<'dw> P: analysis::Mappable + Deserialize<'dw>,
+    for<'dw> P: Mappable + Nameable + Deserialize<'dw>,
     for<'dw> S: Deserialize<'dw>,
 {
     pub fn read(filename: &str) -> io::Result<Self> {
@@ -338,7 +340,7 @@ where
 
 impl<P, S> ProjectDatabase<P, S>
 where
-    P: analysis::Mappable + Serialize,
+    P: Mappable + Nameable + Serialize,
     S: Serialize,
 {
     pub fn write(&self, filename: &str) -> io::Result<()> {
@@ -354,7 +356,7 @@ where
 
 impl<P, S> Default for ProjectDatabase<P, S>
 where
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
 {
     fn default() -> Self {
         Self::new()
@@ -363,7 +365,7 @@ where
 
 impl<P, S> ProjectDatabase<P, S>
 where
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
 {
     pub fn new() -> Self {
         ProjectDatabase {

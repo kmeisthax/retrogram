@@ -201,7 +201,7 @@ where
     L: ast::Literal<PtrVal = P>,
     RK: Mappable,
     I: Bitwise + Numerical + TryInto<u64> + Popcount<Output = I>,
-    P: Mappable + PtrNum<S> + Numerical,
+    P: Mappable + Nameable + PtrNum<S> + Numerical,
     MV: Bitwise + Numerical + TryInto<u64> + Popcount<Output = MV>,
     S: Offset<P> + TryInto<usize>,
     IO: One,

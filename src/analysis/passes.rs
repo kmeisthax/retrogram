@@ -1,14 +1,13 @@
 //! Analysis passes responsible for transforming AST output from the
 //! disassemblers.
 
-use crate::analysis::ReferenceKind;
+use crate::analysis::{Mappable, ReferenceKind};
 use crate::ast::{Instruction, Literal, Operand};
+use crate::cli::Nameable;
 use crate::database::Database;
 use crate::{analysis, ast, memory};
 use std::collections::HashSet;
-use std::convert::TryFrom;
 use std::fmt;
-use std::fmt::UpperHex;
 
 pub type DisassmbledSection<L, P, MV, S> = (
     ast::Section<L, P, MV, S>,
@@ -48,7 +47,7 @@ pub fn disassemble_block<L, P, MV, S, IO, DIS>(
 ) -> DisassmbledSection<L, P, MV, S>
 where
     L: Literal,
-    P: memory::PtrNum<S> + analysis::Mappable + fmt::Display + fmt::UpperHex,
+    P: memory::PtrNum<S> + Mappable + Nameable,
     S: memory::Offset<P> + fmt::Display,
     DIS: analysis::Disassembler<L, P, MV, S, IO>,
     Instruction<L>: Clone,
@@ -132,8 +131,8 @@ pub fn replace_operand_with_label<L, P, AMV, AS, AIO>(
 ) -> Operand<L>
 where
     L: Literal<PtrVal = P>,
-    P: memory::PtrNum<AS> + analysis::Mappable + Clone + UpperHex,
-    AS: memory::Offset<P> + Clone,
+    P: memory::PtrNum<AS> + Mappable + Nameable,
+    AS: memory::Offset<P>,
     Operand<L>: Clone,
 {
     match src_operand {
@@ -184,7 +183,7 @@ pub fn replace_labels<L, P, AMV, AS, AIO>(
 ) -> ast::Section<L, P, AMV, AS>
 where
     L: Literal<PtrVal = P>,
-    P: memory::PtrNum<AS> + analysis::Mappable + Clone + UpperHex,
+    P: memory::PtrNum<AS> + Mappable + Nameable,
     AS: memory::Offset<P> + Clone,
     ast::Directive<L, P, AMV, AS>: Clone,
     Operand<L>: Clone,
@@ -227,7 +226,7 @@ pub fn inject_labels<L, P, MV, S>(
 ) -> ast::Section<L, P, MV, S>
 where
     L: Literal,
-    P: analysis::Mappable,
+    P: Mappable + Nameable,
     ast::Directive<L, P, MV, S>: Clone,
 {
     let mut dst_assembly = ast::Section::new(src_assembly.section_name());
@@ -274,8 +273,8 @@ pub fn inject_orgs<L, P, AMV, AS>(
 ) -> ast::Section<L, P, AMV, AS>
 where
     L: Literal,
-    P: memory::PtrNum<AS> + analysis::Mappable + Clone,
-    AS: memory::Offset<P> + Clone + TryFrom<usize>,
+    P: memory::PtrNum<AS> + Mappable + Nameable,
+    AS: memory::Offset<P>,
     ast::Directive<L, P, AMV, AS>: Clone,
 {
     let mut dst_assembly = ast::Section::new(src_assembly.section_name());

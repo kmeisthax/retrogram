@@ -2,6 +2,7 @@
 
 use crate::analysis::{Flow, Mappable, Reference};
 use crate::ast::{Directive, Instruction, Literal};
+use crate::cli::Nameable;
 
 /// Representation of a static disassembly of a valid instruction.
 ///
@@ -22,7 +23,7 @@ use crate::ast::{Directive, Instruction, Literal};
 pub struct Disasm<L, P, S>
 where
     L: Literal,
-    P: Mappable,
+    P: Mappable + Nameable,
 {
     instr: Instruction<L>,
     next_offset: S,
@@ -33,7 +34,7 @@ where
 impl<L, P, S> Disasm<L, P, S>
 where
     L: Literal,
-    P: Mappable,
+    P: Mappable + Nameable,
 {
     pub fn new(
         instr: Instruction<L>,
@@ -65,7 +66,7 @@ where
 impl<L, P, S> Disasm<L, P, S>
 where
     L: Literal,
-    P: Mappable,
+    P: Mappable + Nameable,
     S: Clone,
 {
     pub fn next_offset(&self) -> S {
@@ -76,7 +77,7 @@ where
 impl<L, P, S> Disasm<L, P, S>
 where
     L: Literal,
-    P: Mappable,
+    P: Mappable + Nameable,
     Instruction<L>: Clone,
     S: Clone,
 {
