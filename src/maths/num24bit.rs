@@ -4,7 +4,7 @@ use crate::maths::{CheckedAdd, CheckedSub, FromStrRadix, WrappingMul};
 use num_traits::{Bounded, CheckedShl, CheckedShr, One, Zero};
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, LowerHex, UpperHex};
 use std::num::ParseIntError;
 use std::ops::{
     Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign,
@@ -21,6 +21,18 @@ pub struct u24 {
 impl Display for u24 {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self.v)
+    }
+}
+
+impl LowerHex for u24 {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{:x}", self.v)
+    }
+}
+
+impl UpperHex for u24 {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{:X}", self.v)
     }
 }
 
