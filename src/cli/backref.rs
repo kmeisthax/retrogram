@@ -1,11 +1,12 @@
 //! Backreference list command for retrogram
 
+use crate::ast::Literal;
 use crate::{analysis, ast, cli, input, maths, memory, project};
 use clap::ArgMatches;
 use num_traits::One;
 use std::{fs, io};
 
-fn backref_inner<I, SI, F, P, MV, S, IO, DIS, FMT, APARSE>(
+fn backref_inner<L, P, MV, S, IO, DIS, FMT, APARSE>(
     prog: &project::Program,
     start_spec: &str,
     bus: &memory::Memory<P, MV, S, IO>,
@@ -14,6 +15,7 @@ fn backref_inner<I, SI, F, P, MV, S, IO, DIS, FMT, APARSE>(
     architectural_ctxt_parse: APARSE,
 ) -> io::Result<()>
 where
+    L: Literal,
     for<'dw> P: memory::PtrNum<S>
         + analysis::Mappable
         + cli::Nameable
@@ -23,8 +25,8 @@ where
     for<'dw> S:
         memory::Offset<P> + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize + One,
     for<'dw> MV: serde::Deserialize<'dw>,
-    DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO>,
-    FMT: Fn(&ast::Instruction<I, SI, F, P>) -> String,
+    DIS: analysis::Disassembler<L, P, MV, S, IO>,
+    FMT: Fn(&ast::Instruction<L>) -> String,
     APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()>,
 {
     let mut pjdb = project::ProjectDatabase::read(prog.as_database_path())?;

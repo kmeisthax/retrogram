@@ -6,7 +6,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::{fs, io};
 
-fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(
+fn dis_inner<L, P, MV, MS, IO, DIS, FMT, APARSE>(
     prog: &project::Program,
     start_spec: &str,
     bus: &memory::Memory<P, MV, MS, IO>,
@@ -15,17 +15,18 @@ fn dis_inner<I, S, F, P, MV, MS, IO, DIS, FMT, APARSE>(
     architectural_ctxt_parse: APARSE,
 ) -> io::Result<()>
 where
+    L: ast::Literal<PtrVal = P>,
     for<'dw> P: memory::PtrNum<MS>
         + analysis::Mappable
         + cli::Nameable
         + serde::Deserialize<'dw>
         + maths::FromStrRadix,
     for<'dw> MS: memory::Offset<P> + analysis::Mappable + serde::Deserialize<'dw>,
-    ast::Operand<I, S, F, P>: Clone,
-    ast::Instruction<I, S, F, P>: Clone,
-    ast::Directive<I, S, F, P, MV, MS>: Clone,
-    DIS: analysis::Disassembler<I, S, F, P, MV, MS, IO>,
-    FMT: Fn(&ast::Section<I, S, F, P, MV, MS>) -> String,
+    ast::Operand<L>: Clone,
+    ast::Instruction<L>: Clone,
+    ast::Directive<L, P, MV, MS>: Clone,
+    DIS: analysis::Disassembler<L, P, MV, MS, IO>,
+    FMT: Fn(&ast::Section<L, P, MV, MS>) -> String,
     APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()>,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {

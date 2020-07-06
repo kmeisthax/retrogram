@@ -1,6 +1,7 @@
 //! Traits for analysis
 
 use crate::analysis::Prerequisite;
+use crate::ast::Literal;
 use crate::{analysis, memory, reg};
 use std::cmp::Ord;
 use std::fmt::Display;
@@ -11,23 +12,25 @@ pub trait Mappable: Clone + Eq + Hash + Ord + Display + FromStr {}
 
 impl<T> Mappable for T where T: Clone + Eq + Hash + Ord + Display + FromStr {}
 
-pub trait Disassembler<I, SI, F, P, MV, S, IO>:
+pub trait Disassembler<L, P, MV, S, IO>:
     Fn(
     &memory::Pointer<P>,
     &memory::Memory<P, MV, S, IO>,
-) -> analysis::Result<analysis::Disasm<I, SI, F, P, S>, P, S>
+) -> analysis::Result<analysis::Disasm<L, P, S>, P, S>
 where
+    L: Literal,
     P: analysis::Mappable,
 {
 }
 
-impl<T, I, SI, F, P, MV, S, IO> Disassembler<I, SI, F, P, MV, S, IO> for T
+impl<T, L, P, MV, S, IO> Disassembler<L, P, MV, S, IO> for T
 where
+    L: Literal,
     P: analysis::Mappable,
     T: Fn(
         &memory::Pointer<P>,
         &memory::Memory<P, MV, S, IO>,
-    ) -> analysis::Result<analysis::Disasm<I, SI, F, P, S>, P, S>,
+    ) -> analysis::Result<analysis::Disasm<L, P, S>, P, S>,
 {
 }
 

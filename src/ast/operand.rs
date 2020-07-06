@@ -1,76 +1,76 @@
 //! Operand AST type
 
 use crate::ast::{Label, Literal};
-use crate::memory;
 use std::str;
 
 #[derive(Clone, Debug)]
-pub enum Operand<I, S, F, P> {
+pub enum Operand<L>
+where
+    L: Literal,
+{
     /// The name of an architecturally defined register, or some derivative of
     /// that register, or another non-register operand defined by the
     /// architecture.
     Symbol(String),
 
     /// A literal constant value.
-    Literal(Literal<I, S, F, P>),
+    Literal(L),
+
+    /// An unparsable literal value.
+    Missing,
 
     /// A reference to a user-defined label.
     Label(Label),
 
     /// An operand which constitutes a data reference.
-    DataReference(Box<Operand<I, S, F, P>>),
+    DataReference(Box<Operand<L>>),
 
     /// An operand which constitutes a code reference.
-    CodeReference(Box<Operand<I, S, F, P>>),
+    CodeReference(Box<Operand<L>>),
 
     /// The indirection of the given operand. (e.g. HL to [HL])
-    Indirect(Box<Operand<I, S, F, P>>),
+    Indirect(Box<Operand<L>>),
 
     /// Some infix operand, e.g. +, * etc
-    Infix(Box<Operand<I, S, F, P>>, String, Box<Operand<I, S, F, P>>),
+    Infix(Box<Operand<L>>, String, Box<Operand<L>>),
 
     ///A symbol prefixed to an operand
-    PrefixSymbol(String, Box<Operand<I, S, F, P>>),
+    PrefixSymbol(String, Box<Operand<L>>),
 
     ///A symbol suffixed to an operand
-    SuffixSymbol(Box<Operand<I, S, F, P>>, String),
+    SuffixSymbol(Box<Operand<L>>, String),
 
     ///A symbol that wraps an operand
-    WrapperSymbol(String, Vec<Operand<I, S, F, P>>, String),
+    WrapperSymbol(String, Vec<Operand<L>>, String),
 }
 
-impl<I, S, F, P> Operand<I, S, F, P> {
+impl<L> Operand<L>
+where
+    L: Literal,
+{
     pub fn sym(sym: &str) -> Self {
         Operand::Symbol(sym.to_string())
     }
 
-    pub fn int<MI>(int: MI) -> Self
+    pub fn lit<LV>(v: LV) -> Self
     where
-        I: From<MI>,
+        LV: Into<L>,
     {
-        Operand::Literal(Literal::Integer(I::from(int)))
+        Operand::Literal(v.into())
     }
 
-    pub fn sint<MI>(int: MI) -> Self
+    pub fn dptr<LV>(v: LV) -> Self
     where
-        S: From<MI>,
+        LV: Into<L>,
     {
-        Operand::Literal(Literal::SignedInteger(S::from(int)))
+        Operand::DataReference(Box::new(Operand::Literal(v.into())))
     }
 
-    pub fn float<MF>(flot: MF) -> Self
+    pub fn cptr<LV>(v: LV) -> Self
     where
-        F: From<MF>,
+        LV: Into<L>,
     {
-        Operand::Literal(Literal::Float(F::from(flot)))
-    }
-
-    pub fn dptr(ptr: memory::Pointer<P>) -> Self {
-        Operand::DataReference(Box::new(Operand::Literal(Literal::Pointer(ptr))))
-    }
-
-    pub fn cptr(ptr: memory::Pointer<P>) -> Self {
-        Operand::CodeReference(Box::new(Operand::Literal(Literal::Pointer(ptr))))
+        Operand::CodeReference(Box::new(Operand::Literal(v.into())))
     }
 
     pub fn dlbl(label: Label) -> Self {
@@ -81,12 +81,8 @@ impl<I, S, F, P> Operand<I, S, F, P> {
         Operand::CodeReference(Box::new(Operand::Label(label)))
     }
 
-    pub fn str(s: &str) -> Self {
-        Operand::Literal(Literal::String(s.to_string()))
-    }
-
     pub fn miss() -> Self {
-        Operand::Literal(Literal::Missing)
+        Operand::Missing
     }
 
     pub fn indir(op: Self) -> Self {

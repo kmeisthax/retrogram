@@ -1,6 +1,7 @@
 //! Disassembly result type
 
-use crate::{analysis, ast};
+use crate::analysis::{Flow, Mappable, Reference};
+use crate::ast::{Directive, Instruction, Literal};
 
 /// Representation of a static disassembly of a valid instruction.
 ///
@@ -18,25 +19,27 @@ use crate::{analysis, ast};
 /// It is only appropriate to return a `Disasm` if an actual disassembly was
 /// made of a given instruction. An error type is provided for indicating that
 /// disassembly failed for various possible reasons.
-pub struct Disasm<I, SI, F, P, S>
+pub struct Disasm<L, P, S>
 where
-    P: analysis::Mappable,
+    L: Literal,
+    P: Mappable,
 {
-    instr: ast::Instruction<I, SI, F, P>,
+    instr: Instruction<L>,
     next_offset: S,
-    flow: analysis::Flow,
-    targets: Vec<analysis::Reference<P>>,
+    flow: Flow,
+    targets: Vec<Reference<P>>,
 }
 
-impl<I, SI, F, P, S> Disasm<I, SI, F, P, S>
+impl<L, P, S> Disasm<L, P, S>
 where
-    P: analysis::Mappable,
+    L: Literal,
+    P: Mappable,
 {
     pub fn new(
-        instr: ast::Instruction<I, SI, F, P>,
+        instr: Instruction<L>,
         next_offset: S,
-        flow: analysis::Flow,
-        targets: Vec<analysis::Reference<P>>,
+        flow: Flow,
+        targets: Vec<Reference<P>>,
     ) -> Self {
         Disasm {
             instr,
@@ -46,22 +49,23 @@ where
         }
     }
 
-    pub fn as_instr(&self) -> &ast::Instruction<I, SI, F, P> {
+    pub fn as_instr(&self) -> &Instruction<L> {
         &self.instr
     }
 
-    pub fn iter_targets(&self) -> impl Iterator<Item = &analysis::Reference<P>> {
+    pub fn iter_targets(&self) -> impl Iterator<Item = &Reference<P>> {
         self.targets.iter()
     }
 
-    pub fn flow(&self) -> analysis::Flow {
+    pub fn flow(&self) -> Flow {
         self.flow
     }
 }
 
-impl<I, SI, F, P, S> Disasm<I, SI, F, P, S>
+impl<L, P, S> Disasm<L, P, S>
 where
-    P: analysis::Mappable,
+    L: Literal,
+    P: Mappable,
     S: Clone,
 {
     pub fn next_offset(&self) -> S {
@@ -69,13 +73,14 @@ where
     }
 }
 
-impl<I, SI, F, P, S> Disasm<I, SI, F, P, S>
+impl<L, P, S> Disasm<L, P, S>
 where
-    P: analysis::Mappable,
-    ast::Instruction<I, SI, F, P>: Clone,
+    L: Literal,
+    P: Mappable,
+    Instruction<L>: Clone,
     S: Clone,
 {
-    pub fn directive<MV>(&self) -> ast::Directive<I, SI, F, P, MV, S> {
-        ast::Directive::EmitInstr(self.instr.clone(), self.next_offset.clone())
+    pub fn directive<MV>(&self) -> Directive<L, P, MV, S> {
+        Directive::EmitInstr(self.instr.clone(), self.next_offset.clone())
     }
 }

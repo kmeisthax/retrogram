@@ -1,6 +1,6 @@
 //! Generic assembler directives for the AST
 
-use crate::ast::{Instruction, Label};
+use crate::ast::{Instruction, Label, Literal};
 use crate::memory::Pointer;
 
 /// Represents a particular assembler directive.
@@ -12,13 +12,16 @@ use crate::memory::Pointer;
 /// 2. Moves the assembled code's location around, or adds spaces to the stream
 /// 3. Creates new labels in the generated assembly
 #[derive(Clone, Debug)]
-pub enum Directive<I, SI, F, P, MV, S> {
+pub enum Directive<L, P, MV, S>
+where
+    L: Literal,
+{
     /// Generate an instruction in the resulting instruction stream.
     ///
     /// The offset parameter is the expected offset to the next instruction. If
     /// the expected offset does not match the PC of the next directive in the
     /// stream, then a `DeclareOrg` directive must be inserted in disassemblies.
-    EmitInstr(Instruction<I, SI, F, P>, S),
+    EmitInstr(Instruction<L>, S),
 
     /// Generate raw data in the resulting instruction stream.
     EmitData(Vec<MV>),

@@ -3,7 +3,7 @@
 use crate::arch::aarch32;
 use crate::arch::aarch32::arm::disassemble as armdis;
 use crate::arch::aarch32::thumb::disassemble as thumbdis;
-use crate::arch::aarch32::{Bus, Disasm, Pointer, THUMB_STATE};
+use crate::arch::aarch32::{Bus, Disasm, Literal, Pointer, THUMB_STATE};
 use crate::{analysis, memory};
 
 /// Disassemble the instruction at `p` in `mem`.
@@ -22,7 +22,10 @@ use crate::{analysis, memory};
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> aarch32::Result<Disasm> {
+pub fn disassemble<L>(p: &memory::Pointer<Pointer>, mem: &Bus) -> aarch32::Result<Disasm<L>>
+where
+    L: Literal,
+{
     match p.get_arch_context(THUMB_STATE).into_concrete() {
         Some(0) => armdis(p, mem),
         Some(1) => thumbdis(p, mem),

@@ -2,38 +2,97 @@
 
 use crate::arch::aarch32::THUMB_STATE;
 use crate::ast;
+use crate::memory::Pointer;
 use std::{cmp, fmt};
 
-pub struct OperandFmtWrap<'a, I, S, F, P> {
-    tree: &'a ast::Operand<I, S, F, P>,
+/// Valid literal values for the ARMIPS assembler.
+#[derive(Clone, Debug)]
+pub enum Literal {
+    Integer(u32),
+    SignedInteger(i32),
+    Float(f64),
+    Pointer(Pointer<u32>),
+    String(String),
 }
 
-impl<'a, I, S, F, P> OperandFmtWrap<'a, I, S, F, P> {
-    pub fn wrap(tree: &'a ast::Operand<I, S, F, P>) -> Self {
+impl ast::Literal for Literal {
+    type PtrVal = u32;
+
+    fn is_pointer(&self) -> bool {
+        match self {
+            Literal::Pointer(_) => true,
+            _ => false,
+        }
+    }
+
+    fn into_pointer(self) -> Option<Pointer<Self::PtrVal>> {
+        match self {
+            Literal::Pointer(p) => Some(p),
+            _ => None,
+        }
+    }
+}
+
+impl From<u16> for Literal {
+    fn from(v: u16) -> Self {
+        Self::Integer(v.into())
+    }
+}
+
+impl From<u32> for Literal {
+    fn from(v: u32) -> Self {
+        Self::Integer(v)
+    }
+}
+
+impl From<i32> for Literal {
+    fn from(v: i32) -> Self {
+        Self::SignedInteger(v)
+    }
+}
+
+impl From<f64> for Literal {
+    fn from(v: f64) -> Self {
+        Self::Float(v)
+    }
+}
+
+impl From<Pointer<u32>> for Literal {
+    fn from(v: Pointer<u32>) -> Self {
+        Self::Pointer(v)
+    }
+}
+
+impl From<&str> for Literal {
+    fn from(v: &str) -> Self {
+        Self::String(v.to_string())
+    }
+}
+
+pub struct OperandFmtWrap<'a> {
+    tree: &'a ast::Operand<Literal>,
+}
+
+impl<'a> OperandFmtWrap<'a> {
+    pub fn wrap(tree: &'a ast::Operand<Literal>) -> Self {
         OperandFmtWrap { tree }
     }
 }
 
-impl<'a, I, S, F, P> OperandFmtWrap<'a, I, S, F, P>
-where
-    I: fmt::Display,
-    S: fmt::Display,
-    F: fmt::Display,
-    P: fmt::Display + fmt::LowerHex,
-{
+impl<'a> OperandFmtWrap<'a> {
     fn write_operand(
         &self,
-        operand: &ast::Operand<I, S, F, P>,
+        operand: &ast::Operand<Literal>,
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
         match operand {
             ast::Operand::Symbol(s) => write!(f, "{}", s)?,
-            ast::Operand::Literal(ast::Literal::Integer(i)) => write!(f, "{}", i)?,
-            ast::Operand::Literal(ast::Literal::SignedInteger(i)) => write!(f, "{}", i)?,
-            ast::Operand::Literal(ast::Literal::Float(fl)) => write!(f, "{}", fl)?,
-            ast::Operand::Literal(ast::Literal::Pointer(p)) => write!(f, "0x{:x}", p.as_pointer())?,
-            ast::Operand::Literal(ast::Literal::String(s)) => write!(f, "{}", s)?,
-            ast::Operand::Literal(ast::Literal::Missing) => write!(f, "?")?,
+            ast::Operand::Literal(Literal::Integer(i)) => write!(f, "{}", i)?,
+            ast::Operand::Literal(Literal::SignedInteger(i)) => write!(f, "{}", i)?,
+            ast::Operand::Literal(Literal::Float(fl)) => write!(f, "{}", fl)?,
+            ast::Operand::Literal(Literal::Pointer(p)) => write!(f, "0x{:x}", p.as_pointer())?,
+            ast::Operand::Literal(Literal::String(s)) => write!(f, "{}", s)?,
+            ast::Operand::Missing => write!(f, "?")?,
             ast::Operand::Label(lbl) if lbl.parent_name() == None => write!(f, "{}", lbl.name())?,
             ast::Operand::Label(lbl) => write!(f, "@@{}", lbl.name())?,
             ast::Operand::DataReference(op) => self.write_operand(&op, f)?,
@@ -78,45 +137,27 @@ where
     }
 }
 
-impl<'a, I, S, F, P> fmt::Display for OperandFmtWrap<'a, I, S, F, P>
-where
-    I: fmt::Display,
-    S: fmt::Display,
-    F: fmt::Display,
-    P: fmt::Display + fmt::LowerHex,
-{
+impl<'a> fmt::Display for OperandFmtWrap<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.write_operand(self.tree, f)
     }
 }
 
-pub struct InstrFmtWrap<'a, I, S, F, P> {
-    tree: &'a ast::Instruction<I, S, F, P>,
+pub struct InstrFmtWrap<'a> {
+    tree: &'a ast::Instruction<Literal>,
 }
 
-impl<'a, I, S, F, P> InstrFmtWrap<'a, I, S, F, P> {
-    pub fn wrap(tree: &'a ast::Instruction<I, S, F, P>) -> Self {
+impl<'a> InstrFmtWrap<'a> {
+    pub fn wrap(tree: &'a ast::Instruction<Literal>) -> Self {
         InstrFmtWrap { tree }
     }
 }
 
-pub fn format_instr<'a, I, S, F, P>(tree: &'a ast::Instruction<I, S, F, P>) -> String
-where
-    I: fmt::Display,
-    S: fmt::Display,
-    F: fmt::Display,
-    P: Clone + From<u16> + fmt::Display + PartialOrd + fmt::LowerHex + fmt::UpperHex,
-{
+pub fn format_instr(tree: &ast::Instruction<Literal>) -> String {
     format!("{}", InstrFmtWrap::wrap(tree))
 }
 
-impl<'a, I, S, F, P> fmt::Display for InstrFmtWrap<'a, I, S, F, P>
-where
-    I: fmt::Display,
-    S: fmt::Display,
-    F: fmt::Display,
-    P: Clone + From<u16> + fmt::Display + cmp::PartialOrd + fmt::LowerHex + fmt::UpperHex,
-{
+impl<'a> fmt::Display for InstrFmtWrap<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.tree.opcode())?;
 
@@ -136,21 +177,18 @@ where
     }
 }
 
-pub struct SectionFmtWrap<'a, I, SI, F, P, MV, S> {
-    tree: &'a ast::Section<I, SI, F, P, MV, S>,
+pub struct SectionFmtWrap<'a, P, MV, S> {
+    tree: &'a ast::Section<Literal, P, MV, S>,
 }
 
-impl<'a, I, SI, F, P, MV, S> SectionFmtWrap<'a, I, SI, F, P, MV, S> {
-    pub fn wrap(tree: &'a ast::Section<I, SI, F, P, MV, S>) -> Self {
+impl<'a, P, MV, S> SectionFmtWrap<'a, P, MV, S> {
+    pub fn wrap(tree: &'a ast::Section<Literal, P, MV, S>) -> Self {
         SectionFmtWrap { tree }
     }
 }
 
-impl<'a, I, SI, F, P, MV, S> fmt::Display for SectionFmtWrap<'a, I, SI, F, P, MV, S>
+impl<'a, P, MV, S> fmt::Display for SectionFmtWrap<'a, P, MV, S>
 where
-    I: fmt::Display,
-    SI: fmt::Display,
-    F: fmt::Display,
     P: Clone + From<u16> + fmt::Display + cmp::PartialOrd + fmt::LowerHex + fmt::UpperHex,
     MV: fmt::UpperHex,
     S: fmt::Display,
@@ -198,11 +236,8 @@ where
     }
 }
 
-pub fn format_section<'a, I, SI, F, P, MV, S>(tree: &'a ast::Section<I, SI, F, P, MV, S>) -> String
+pub fn format_section<'a, P, MV, S>(tree: &'a ast::Section<Literal, P, MV, S>) -> String
 where
-    I: fmt::Display,
-    SI: fmt::Display,
-    F: fmt::Display,
     P: Clone + From<u16> + fmt::Display + cmp::PartialOrd + fmt::LowerHex + fmt::UpperHex,
     MV: fmt::UpperHex,
     S: fmt::Display,

@@ -3,7 +3,7 @@
 use crate::analysis::{
     analyze_trace_log, trace_until_fork, Disassembler, Mappable, Prerequisite, Trace, TraceEvent,
 };
-use crate::ast::Instruction;
+use crate::ast::{Instruction, Literal};
 use crate::cli::Nameable;
 use crate::input::parse_ptr;
 use crate::maths::FromStrRadix;
@@ -77,20 +77,21 @@ where
 }
 
 /// Print a tracelog out to the console as a table.
-fn print_tracelog<RK, I, LI, SI, F, P, MV, S, IO, DIS, FMTI>(
+fn print_tracelog<L, RK, I, P, MV, S, IO, DIS, FMTI>(
     trace: Trace<RK, I, P, MV>,
     bus: &Memory<P, MV, S, IO>,
     dis: DIS,
     fmt_i: FMTI,
 ) -> io::Result<()>
 where
+    L: Literal<PtrVal = P>,
     RK: Display,
     I: Nameable,
     Symbolic<I>: UpperHex,
     P: Mappable + Nameable,
     Symbolic<MV>: UpperHex,
-    DIS: Disassembler<LI, SI, F, P, MV, S, IO>,
-    FMTI: Fn(&Instruction<LI, SI, F, P>) -> String,
+    DIS: Disassembler<L, P, MV, S, IO>,
+    FMTI: Fn(&Instruction<L>) -> String,
 {
     let mut pc_list = vec![];
     let mut instr_list = vec![];

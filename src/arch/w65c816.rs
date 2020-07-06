@@ -6,8 +6,8 @@
 //! Used as the main CPU for Apple ][gs and Super Famicom platforms.
 //! Also used as accelerator chips for Commodore 64 and Super Famicom.
 
-use crate::ast::Instruction as inst;
-use crate::ast::Operand as op;
+use crate::ast::{Instruction, Instruction as inst};
+use crate::ast::{Operand, Operand as op};
 use crate::maths::u24;
 use crate::{analysis, ast, memory};
 
@@ -73,29 +73,47 @@ pub type Data = u8;
 /// The compatible memory model type necessary to analyze 65C816 programs.
 pub type Bus = memory::Memory<Pointer, Data, Offset>;
 
-/// The AST type which represents a disassembled operand.
-///
-/// TODO: When ! is stable, replace the floating-point type with !.
-pub type Operand = ast::Operand<Offset, SignedValue, f32, Pointer>;
+/// A trait which defines what assembler literals we need support for.
+pub trait Literal:
+    ast::Literal
+    + From<Value>
+    + From<SignedValue>
+    + From<Offset>
+    + From<Data>
+    + From<memory::Pointer<Pointer>>
+{
+}
 
-/// The AST type which represents a disassembled instruction.
-///
-/// TODO: When ! is stable, replace the floating-point type with !.
-pub type Instruction = ast::Instruction<Offset, SignedValue, f32, Pointer>;
+impl<L> Literal for L where
+    L: ast::Literal
+        + From<Value>
+        + From<SignedValue>
+        + From<Offset>
+        + From<Data>
+        + From<memory::Pointer<Pointer>>
+{
+}
 
 /// The AST type which represents disassembled code.
 ///
-/// TODO: When ! is stable, replace the floating-point type with !.
-pub type Section = ast::Section<Offset, SignedValue, f32, Pointer, Data, Offset>;
+/// Generic parameter `L` *must* match the Literal trait defined above, which
+/// is an extension of the generic AST literal trait.
+pub type Section<L> = ast::Section<L, Pointer, Data, Offset>;
 
-fn op_lit(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_lit<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_unit(p).into_concrete() {
-        Some(litval) => vec![op::int(litval)],
+        Some(litval) => vec![op::lit(litval)],
         None => vec![op::miss()],
     }
 }
 
-fn op_zpage_ptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_zpage_ptr<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_unit(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
@@ -106,7 +124,10 @@ fn op_zpage_ptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_zpage_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_zpage_index_x<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_unit(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
@@ -117,7 +138,10 @@ fn op_zpage_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_zpage_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_zpage_index_y<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_unit(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
@@ -128,7 +152,10 @@ fn op_zpage_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_stack(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_stack<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_unit(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
@@ -139,7 +166,10 @@ fn op_stack(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_ptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_ptr<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_leword::<u16>(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
@@ -150,7 +180,10 @@ fn op_ptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_ptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_ptr_index_x<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_leword::<u16>(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
@@ -161,7 +194,10 @@ fn op_ptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_ptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_ptr_index_y<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_leword::<u16>(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
@@ -172,7 +208,10 @@ fn op_ptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_fullptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_fullptr<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_leword::<u24>(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
@@ -183,7 +222,10 @@ fn op_fullptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_fullptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_fullptr_index_x<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_leword::<u24>(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
@@ -194,7 +236,10 @@ fn op_fullptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_fullptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_fullptr_index_y<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_leword::<u24>(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "",
@@ -205,7 +250,10 @@ fn op_fullptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_zpage_dblptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_zpage_dblptr<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_unit(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "(",
@@ -224,7 +272,10 @@ fn op_zpage_dblptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_zpage_dblptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_zpage_dblptr_index_x<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_unit(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "(",
@@ -243,7 +294,10 @@ fn op_zpage_dblptr_index_x(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Opera
     }
 }
 
-fn op_zpage_dblptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_zpage_dblptr_index_y<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_unit(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "(",
@@ -265,7 +319,10 @@ fn op_zpage_dblptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Opera
     }
 }
 
-fn op_stack_dblptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_stack_dblptr_index_y<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_unit(p).into_concrete() {
         Some(litval) => vec![
             op::indir(op::wrap(
@@ -290,7 +347,10 @@ fn op_stack_dblptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Opera
     }
 }
 
-fn op_zpage_dblfarptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_zpage_dblfarptr<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_unit(p).into_concrete() {
         Some(litval) => vec![op::indir(op::wrap(
             "[",
@@ -309,7 +369,10 @@ fn op_zpage_dblfarptr(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
     }
 }
 
-fn op_zpage_dblfarptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand> {
+fn op_zpage_dblfarptr_index_y<L>(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Operand<L>>
+where
+    L: Literal,
+{
     match bus.read_unit(p).into_concrete() {
         Some(litval) => vec![
             op::indir(op::wrap(
@@ -350,16 +413,19 @@ fn op_zpage_dblfarptr_index_y(p: &memory::Pointer<Pointer>, bus: &Bus) -> Vec<Op
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
-pub fn disassemble(
+pub fn disassemble<L>(
     p: &memory::Pointer<Pointer>,
     mem: &Bus,
 ) -> (
-    Option<Instruction>,
+    Option<Instruction<L>>,
     Offset,
     bool,
     bool,
     Vec<analysis::Reference<Pointer>>,
-) {
+)
+where
+    L: Literal,
+{
     match mem.read_unit(p).as_concrete() {
         Some(0x1B) => (
             Some(inst::new("TCS", vec![])),

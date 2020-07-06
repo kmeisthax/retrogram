@@ -108,34 +108,39 @@ pub type Data = u8;
 /// The compatible memory model type necessary to analyze GBz80 programs.
 pub type Bus = memory::Memory<Pointer, Data, Offset>;
 
-/// The AST type which represents a disassembled operand.
-///
-/// TODO: When ! is stable, replace the floating-point type with !.
-pub type Operand = ast::Operand<Offset, SignedValue, f32, Pointer>;
+/// A trait which defines what assembler literals we need support for.
+pub trait Literal:
+    ast::Literal + From<Value> + From<Offset> + From<memory::Pointer<Pointer>>
+{
+}
 
-/// The AST type which represents a disassembled instruction.
-///
-/// TODO: When ! is stable, replace the floating-point type with !.
-pub type Instruction = ast::Instruction<Offset, SignedValue, f32, Pointer>;
+impl<L> Literal for L where
+    L: ast::Literal + From<Value> + From<Offset> + From<memory::Pointer<Pointer>>
+{
+}
 
 /// The AST type which represents disassembled code.
 ///
-/// TODO: When ! is stable, replace the floating-point type with !.
-pub type Section = ast::Section<Offset, SignedValue, f32, Pointer, Data, Offset>;
+/// Generic parameter `L` *must* match the Literal trait defined above, which
+/// is an extension of the generic AST literal trait.
+pub type Section<L> = ast::Section<L, Pointer, Data, Offset>;
 
 /// The register state type which represents the execution state of a given
 /// SM83 program.
-pub type State = reg::State<Register, Value, Pointer, Value>;
+pub type State = reg::State<Register, Value, Pointer, Data>;
 
 /// The prerequisites necessary to execute a given SM83 program.
-pub type Prerequisite = analysis::Prerequisite<Register, Value, Pointer, Value, Offset>;
+pub type Prerequisite = analysis::Prerequisite<Register, Value, Pointer, Data, Offset>;
 
 /// The trace log type which represents the past execution of a given SM83
 /// program.
-pub type Trace = analysis::Trace<Register, Value, Pointer, Value>;
+pub type Trace = analysis::Trace<Register, Value, Pointer, Data>;
 
 /// The disasm type which represents a successful disassembly of a single
 /// instruction.
-pub type Disasm = analysis::Disasm<Offset, SignedValue, f32, Pointer, Offset>;
+///
+/// Generic parameter `L` *must* match the Literal trait defined above, which
+/// is an extension of the generic AST literal trait.
+pub type Disasm<L> = analysis::Disasm<L, Pointer, Offset>;
 
 pub type Result<T> = analysis::Result<T, Pointer, Offset>;

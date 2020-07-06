@@ -7,8 +7,8 @@ use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32;
 use crate::arch::aarch32::arm::condcode;
 use crate::arch::aarch32::Aarch32Register as A32Reg;
-use crate::arch::aarch32::{Bus, Disasm, Instruction, Offset, Operand, Pointer, THUMB_STATE};
-use crate::ast::Operand as op;
+use crate::arch::aarch32::{Bus, Disasm, Literal, Offset, Pointer, THUMB_STATE};
+use crate::ast::{Instruction, Operand, Operand as op};
 use crate::{analysis, ast, memory, reg};
 
 fn shift_symbol(shift: u32, shift_imm: u32) -> analysis::Result<&'static str, Pointer, Offset> {
@@ -22,7 +22,7 @@ fn shift_symbol(shift: u32, shift_imm: u32) -> analysis::Result<&'static str, Po
     }
 }
 
-fn shifter_operand(
+fn shifter_operand<L>(
     immediate_bit: u32,
     rn: A32Reg,
     rd: A32Reg,
@@ -32,14 +32,17 @@ fn shifter_operand(
     rm: A32Reg,
     rs: A32Reg,
     immed_8: u32,
-) -> analysis::Result<Vec<Operand>, Pointer, Offset> {
+) -> analysis::Result<Vec<Operand<L>>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rotate_imm = shift_imm & 0xFFFF_FFFE;
 
     Ok(match (immediate_bit, shift_imm, regshift) {
         (1, _, _) => vec![
             op::sym(&rd.to_string()),
             op::sym(&rn.to_string()),
-            op::int(immed_8 << rotate_imm),
+            op::lit(immed_8 << rotate_imm),
         ],
         (0, 0, 0) => vec![
             op::sym(&rd.to_string()),
@@ -52,7 +55,7 @@ fn shifter_operand(
             op::sym(&rn.to_string()),
             op::sym(&rm.to_string()),
             op::sym(shift_symbol(shift, shift_imm)?),
-            op::int(shift_imm),
+            op::lit(shift_imm),
         ],
         (0, _, 1) => vec![
             op::sym(&rd.to_string()),
@@ -66,7 +69,7 @@ fn shifter_operand(
 }
 
 /// Decode a 5-bit opcode field as if it was for a data processing instruction
-fn dpinst(
+fn dpinst<L>(
     p: &memory::Pointer<Pointer>,
     cond: u32,
     immediate_bit: u32,
@@ -79,7 +82,10 @@ fn dpinst(
     rm: A32Reg,
     rs: A32Reg,
     immed_8: u32,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let dp_opcode = match opcode {
         0 => "AND",
         1 => "ANDS",
@@ -148,7 +154,7 @@ fn dpinst(
     ))
 }
 
-fn ldst(
+fn ldst<L>(
     p: &memory::Pointer<Pointer>,
     cond: u32,
     immediate_bit: u32,
@@ -163,7 +169,10 @@ fn ldst(
     shift: u32,
     rm: A32Reg,
     address_operand: u32,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let is_shifted = shift_imm != 0 || shift != 0;
 
     let is_load = load != 0;
@@ -204,10 +213,7 @@ fn ldst(
     let address_operand = match (immediate_bit, is_preindex, is_wbit, is_shifted) {
         (0, true, true, _) => vec![
             rd_operand,
-            op::suff(
-                op::wrap("[", vec![rn_operand, op::sint(offset12)], "]"),
-                "!",
-            ),
+            op::suff(op::wrap("[", vec![rn_operand, op::lit(offset12)], "]"), "!"),
         ],
         (1, true, true, true) => vec![
             rd_operand,
@@ -218,7 +224,7 @@ fn ldst(
                         rn_operand,
                         rm_operand,
                         op::sym(shift_symbol(shift, shift_imm)?),
-                        op::int(shift_imm),
+                        op::lit(shift_imm),
                     ],
                     "]",
                 ),
@@ -231,7 +237,7 @@ fn ldst(
         ],
         (0, true, false, _) => vec![
             rd_operand,
-            op::wrap("[", vec![rn_operand, op::sint(offset12)], "]"),
+            op::wrap("[", vec![rn_operand, op::lit(offset12)], "]"),
         ],
         (1, true, false, true) => vec![
             rd_operand,
@@ -241,7 +247,7 @@ fn ldst(
                     rn_operand,
                     rm_operand,
                     op::sym(shift_symbol(shift, shift_imm)?),
-                    op::int(shift_imm),
+                    op::lit(shift_imm),
                 ],
                 "]",
             ),
@@ -252,14 +258,14 @@ fn ldst(
         (0, false, _, _) => vec![
             rd_operand,
             op::wrap("[", vec![rn_operand], "]"),
-            op::sint(offset12),
+            op::lit(offset12),
         ],
         (1, false, _, true) => vec![
             rd_operand,
             op::wrap("[", vec![rn_operand], "]"),
             rm_operand,
             op::sym(shift_symbol(shift, shift_imm)?),
-            op::int(shift_imm),
+            op::lit(shift_imm),
         ],
         (1, false, _, false) => vec![rd_operand, op::wrap("[", vec![rn_operand], "]"), rm_operand],
         _ => return Err(analysis::Error::Misinterpretation(4, false)),
@@ -289,7 +295,7 @@ fn ldst(
 
 /// Decode an instruction in the LDM/STM instruction space.
 #[allow(clippy::many_single_char_names)]
-fn ldmstm(
+fn ldmstm<L>(
     p: &memory::Pointer<Pointer>,
     cond: u32,
     q: u32,
@@ -299,7 +305,10 @@ fn ldmstm(
     load: u32,
     rn: A32Reg,
     reglist: u32,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     //TODO: This got refactored, ensure these are still valid
     let op = if load == 1 { "LDM" } else { "STM" };
 
@@ -356,12 +365,15 @@ fn ldmstm(
     ))
 }
 
-fn bl(
+fn bl<L>(
     pc: &memory::Pointer<Pointer>,
     cond: u32,
     l: u32,
     offset: u32,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let is_link = l != 0;
     let signbit = if ((offset & 0x0080_0000) >> 23) != 0 {
         0xFF80_0000
@@ -405,16 +417,19 @@ fn bl(
     }
 }
 
-fn swi(
+fn swi<L>(
     pc: &memory::Pointer<Pointer>,
     cond: u32,
     offset: u32,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let target = offset & 0x00FF_FFFF;
 
     //TODO: The jump target can be in high RAM, how do we handle that?
     Ok(Disasm::new(
-        ast::Instruction::new(&format!("SWI{}", condcode(cond)?), vec![op::int(target)]),
+        ast::Instruction::new(&format!("SWI{}", condcode(cond)?), vec![op::lit(target)]),
         4,
         analysis::Flow::Normal,
         vec![refr::new_static_ref(
@@ -430,7 +445,7 @@ fn swi(
 /// Please note that the instruction space for multiplies specifies the
 /// registers in a different order from most instructions. Specifically, `rn`
 /// and `rd` are swapped.
-fn mul(
+fn mul<L>(
     p: &memory::Pointer<Pointer>,
     cond: u32,
     opcode: u32,
@@ -438,7 +453,10 @@ fn mul(
     rn: A32Reg,
     rs: A32Reg,
     rm: A32Reg,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_operand = op::sym(&rd.to_string());
     let rn_operand = op::sym(&rn.to_string());
     let rs_operand = op::sym(&rs.to_string());
@@ -587,7 +605,7 @@ fn mul(
 }
 
 #[allow(clippy::many_single_char_names)]
-fn msr(
+fn msr<L>(
     cond: u32,
     immediate_bit: u32,
     r: u32,
@@ -595,7 +613,10 @@ fn msr(
     shift_imm: u32,
     data_immed: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let c = if (rn_val & 0x1) != 0 { "c" } else { "" };
     let x = if (rn_val & 0x2) >> 1 != 0 { "x" } else { "" };
     let s = if (rn_val & 0x4) >> 2 != 0 { "s" } else { "" };
@@ -605,7 +626,7 @@ fn msr(
     let xpsr = op::sym(&format!("{}_{}{}{}{}", xpsr, c, x, s, f));
 
     let op_list = match immediate_bit {
-        1 => vec![xpsr, op::int(data_immed << (shift_imm & 0xFFFF_FFFE))],
+        1 => vec![xpsr, op::lit(data_immed << (shift_imm & 0xFFFF_FFFE))],
         0 => vec![xpsr, op::sym(&rm.to_string())],
         _ => vec![op::miss()],
     };
@@ -618,7 +639,10 @@ fn msr(
     ))
 }
 
-fn mrs(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
+fn mrs<L>(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let xpsr = if r != 0 { "CPSR" } else { "SPSR" };
 
     let op_list = vec![op::sym(&rd.to_string()), op::sym(xpsr)];
@@ -631,11 +655,14 @@ fn mrs(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm, Pointer, Offse
     ))
 }
 
-fn bx(
+fn bx<L>(
     p: &memory::Pointer<Pointer>,
     cond: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     //BX PC is completely valid! And also dumb.
     let target_pc = p.contextualize(*p.as_pointer() + 8);
     let jumpref = match rm {
@@ -654,7 +681,10 @@ fn bx(
     ))
 }
 
-fn bxj(cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
+fn bxj<L>(cond: u32, rm: A32Reg) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     //TODO: Find a better status than "Returning"
     let flow = match cond {
         15 => analysis::Flow::Returning,
@@ -677,7 +707,10 @@ fn bxj(cond: u32, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
     ))
 }
 
-fn clz(cond: u32, rd: A32Reg, rm: A32Reg) -> analysis::Result<Disasm, Pointer, Offset> {
+fn clz<L>(cond: u32, rd: A32Reg, rm: A32Reg) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     Ok(Disasm::new(
         Instruction::new(
             &format!("CLZ{}", condcode(cond)?),
@@ -689,11 +722,14 @@ fn clz(cond: u32, rd: A32Reg, rm: A32Reg) -> analysis::Result<Disasm, Pointer, O
     ))
 }
 
-fn blx_register(
+fn blx_register<L>(
     p: &memory::Pointer<Pointer>,
     cond: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     //BX PC is completely valid! And also dumb.
     let target_pc = p.contextualize(*p.as_pointer() + 8);
     let jumpref = match rm {
@@ -712,11 +748,14 @@ fn blx_register(
     ))
 }
 
-fn blx_immediate(
+fn blx_immediate<L>(
     p: &memory::Pointer<Pointer>,
     h: u32,
     offset: u32,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let signbit = if ((offset & 0x0080_0000) >> 23) != 0 {
         0xFF80_0000
     } else {
@@ -737,20 +776,23 @@ fn blx_immediate(
     ))
 }
 
-fn bkpt(instr: u32) -> analysis::Result<Disasm, Pointer, Offset> {
+fn bkpt<L>(instr: u32) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let high_immed = (instr & 0x000F_FF00) >> 4;
     let low_immed = instr & 0x0000_000F;
     let immed = high_immed | low_immed;
 
     Ok(Disasm::new(
-        Instruction::new("BKPT", vec![op::int(immed)]),
+        Instruction::new("BKPT", vec![op::lit(immed)]),
         4,
         analysis::Flow::Normal,
         vec![],
     ))
 }
 
-fn cdp(
+fn cdp<L>(
     cond: u32,
     opcode_1: u32,
     crn: u32,
@@ -758,13 +800,16 @@ fn cdp(
     cp_num: u32,
     opcode_2: u32,
     crm: u32,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let crn_sym = op::sym(&format!("CR{}", crn));
     let crd_sym = op::sym(&format!("CR{}", crd));
     let crm_sym = op::sym(&format!("CR{}", crm));
     let cp_sym = op::sym(&format!("p{}", cp_num));
-    let cop1_sym = op::int(opcode_1);
-    let cop2_sym = op::int(opcode_2);
+    let cop1_sym = op::lit(opcode_1);
+    let cop2_sym = op::lit(opcode_2);
 
     let arm_opcode = match cond {
         16 => "CDP2".to_string(),
@@ -782,7 +827,7 @@ fn cdp(
     ))
 }
 
-fn crt(
+fn crt<L>(
     cond: u32,
     opcode_1: u32,
     d: u32,
@@ -791,13 +836,16 @@ fn crt(
     cp_num: u32,
     opcode_2: u32,
     crm: u32,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let crn_sym = op::sym(&format!("CR{}", crn));
     let crm_sym = op::sym(&format!("CR{}", crm));
     let rd_sym = op::sym(&rd.to_string());
     let cp_sym = op::sym(&format!("p{}", cp_num));
-    let cop1_sym = op::int(opcode_1);
-    let cop2_sym = op::int(opcode_2);
+    let cop1_sym = op::lit(opcode_1);
+    let cop2_sym = op::lit(opcode_2);
 
     let is_toarm = d != 0;
     let arm_opcode = match (cond, is_toarm) {
@@ -818,7 +866,7 @@ fn crt(
     ))
 }
 
-fn crt_double(
+fn crt_double<L>(
     cond: u32,
     d: u32,
     rn: A32Reg,
@@ -826,12 +874,15 @@ fn crt_double(
     cp_num: u32,
     opcode: u32,
     crm: u32,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rn_sym = op::sym(&rn.to_string());
     let crm_sym = op::sym(&format!("CR{}", crm));
     let rd_sym = op::sym(&rd.to_string());
     let cp_sym = op::sym(&format!("p{}", cp_num));
-    let cop_sym = op::int(opcode);
+    let cop_sym = op::lit(opcode);
 
     let is_toarm = d != 0;
     let arm_opcode = match (cond, is_toarm) {
@@ -849,7 +900,10 @@ fn crt_double(
     ))
 }
 
-fn cps(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm, Pointer, Offset> {
+fn cps<L>(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let immod = (rn_val & 0xC) >> 2;
     //let mmod = (rn_val & 0x2) >> 1;
     let abit = (lsimmed & 0x100) >> 8;
@@ -889,7 +943,7 @@ fn cps(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm, Pointer, Offset> {
             vec![],
         )),
         (_, "") => Ok(Disasm::new(
-            Instruction::new(&format!("CPS{}", effect), vec![op::int(mode)]),
+            Instruction::new(&format!("CPS{}", effect), vec![op::lit(mode)]),
             4,
             analysis::Flow::Normal,
             vec![],
@@ -903,7 +957,7 @@ fn cps(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm, Pointer, Offset> {
         (_, _) => Ok(Disasm::new(
             Instruction::new(
                 &format!("CPS{}", effect),
-                vec![op::sym(&iflags), op::int(mode)],
+                vec![op::sym(&iflags), op::lit(mode)],
             ),
             4,
             analysis::Flow::Normal,
@@ -912,7 +966,7 @@ fn cps(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm, Pointer, Offset> {
     }
 }
 
-fn ldstmisc(
+fn ldstmisc<L>(
     cond: u32,
     pbit: u32,
     ubit: u32,
@@ -924,7 +978,10 @@ fn ldstmisc(
     rs_val: u32,
     shiftop: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let sbit = (shiftop & 0x2) >> 1;
     let hbit = shiftop & 0x1;
 
@@ -965,12 +1022,12 @@ fn ldstmisc(
         (false, false, false, true) => vec![
             op::sym(&rd.to_string()),
             op::wrap("[", vec![op::sym(&rn.to_string())], "]"),
-            op::sint(-(immedoffset as i32)),
+            op::lit(-(immedoffset as i32)),
         ],
         (false, true, false, true) => vec![
             op::sym(&rd.to_string()),
             op::wrap("[", vec![op::sym(&rn.to_string())], "]"),
-            op::sint(immedoffset as i32),
+            op::lit(immedoffset as i32),
         ],
         (true, false, false, false) => vec![
             op::sym(&rd.to_string()),
@@ -995,7 +1052,7 @@ fn ldstmisc(
             op::sym(&rd.to_string()),
             op::wrap(
                 "[",
-                vec![op::sym(&rn.to_string()), op::sint(-(immedoffset as i32))],
+                vec![op::sym(&rn.to_string()), op::lit(-(immedoffset as i32))],
                 "]",
             ),
         ],
@@ -1003,7 +1060,7 @@ fn ldstmisc(
             op::sym(&rd.to_string()),
             op::wrap(
                 "[",
-                vec![op::sym(&rn.to_string()), op::sint(immedoffset as i32)],
+                vec![op::sym(&rn.to_string()), op::lit(immedoffset as i32)],
                 "]",
             ),
         ],
@@ -1037,7 +1094,7 @@ fn ldstmisc(
             op::suff(
                 op::wrap(
                     "[",
-                    vec![op::sym(&rn.to_string()), op::sint(-(immedoffset as i32))],
+                    vec![op::sym(&rn.to_string()), op::lit(-(immedoffset as i32))],
                     "]",
                 ),
                 "!",
@@ -1048,7 +1105,7 @@ fn ldstmisc(
             op::suff(
                 op::wrap(
                     "[",
-                    vec![op::sym(&rn.to_string()), op::sint(immedoffset as i32)],
+                    vec![op::sym(&rn.to_string()), op::lit(immedoffset as i32)],
                     "]",
                 ),
                 "!",
@@ -1070,7 +1127,7 @@ fn ldstmisc(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn ldst_coproc(
+fn ldst_coproc<L>(
     _p: &memory::Pointer<Pointer>,
     cond: u32,
     preindex: u32,
@@ -1082,7 +1139,10 @@ fn ldst_coproc(
     crd: u32,
     cp_num: u32,
     uoffset: u32,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let is_load = load != 0;
     let is_wbit = wbit != 0;
     let is_nbit = nbit != 0;
@@ -1100,24 +1160,24 @@ fn ldst_coproc(
             cp_op,
             crd_op,
             op::wrap("[", vec![rn_operand], "]"),
-            op::wrap("{", vec![op::int(uoffset)], "}"),
+            op::wrap("{", vec![op::lit(uoffset)], "}"),
         ],
         (false, true) => vec![
             cp_op,
             crd_op,
             op::wrap("[", vec![rn_operand], "]"),
-            op::sint(offset * 4),
+            op::lit(offset * 4),
         ],
         (true, false) => vec![
             cp_op,
             crd_op,
-            op::wrap("[", vec![rn_operand, op::sint(offset * 4)], "]"),
+            op::wrap("[", vec![rn_operand, op::lit(offset * 4)], "]"),
         ],
         (true, true) => vec![
             cp_op,
             crd_op,
             op::suff(
-                op::wrap("[", vec![rn_operand, op::sint(offset * 4)], "]"),
+                op::wrap("[", vec![rn_operand, op::lit(offset * 4)], "]"),
                 "!",
             ),
         ],
@@ -1143,13 +1203,16 @@ fn ldst_coproc(
     ))
 }
 
-pub fn ldstrex(
+pub fn ldstrex<L>(
     cond: u32,
     l: u32,
     rn: A32Reg,
     rd: A32Reg,
     rm: A32Reg,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let is_load = l != 0;
     let opname = if is_load {
         format!("LDREX{}", condcode(cond)?)
@@ -1179,14 +1242,17 @@ pub fn ldstrex(
     ))
 }
 
-pub fn pkh(
+pub fn pkh<L>(
     cond: u32,
     rn: A32Reg,
     rd: A32Reg,
     shift_imm: u32,
     d: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let opname = match d {
         0 => format!("PKHBT{}", condcode(cond)?),
         2 => format!("PKHTB{}", condcode(cond)?),
@@ -1198,8 +1264,8 @@ pub fn pkh(
     let rm_sym = op::sym(&rm.to_string());
 
     let operands = match d {
-        0 => vec![rd_sym, rn_sym, rm_sym, op::pref("LSL", op::int(shift_imm))],
-        2 => vec![rd_sym, rn_sym, rm_sym, op::pref("ASR", op::int(shift_imm))],
+        0 => vec![rd_sym, rn_sym, rm_sym, op::pref("LSL", op::lit(shift_imm))],
+        2 => vec![rd_sym, rn_sym, rm_sym, op::pref("ASR", op::lit(shift_imm))],
         _ => return Err(analysis::Error::Misinterpretation(4, false)),
     };
 
@@ -1211,7 +1277,7 @@ pub fn pkh(
     ))
 }
 
-pub fn pld(
+pub fn pld<L>(
     immediate_bit: u32,
     offsetadd: u32,
     rn: A32Reg,
@@ -1219,7 +1285,10 @@ pub fn pld(
     shift: u32,
     rm: A32Reg,
     address_operand: u32,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let is_shifted = shift_imm != 0 || shift != 0;
     let is_offsetadd = offsetadd != 0;
 
@@ -1237,14 +1306,14 @@ pub fn pld(
     };
 
     let address_operand = match (immediate_bit, is_shifted) {
-        (0, false) => vec![op::wrap("[", vec![rn_operand, op::sint(offset12)], "]")],
+        (0, false) => vec![op::wrap("[", vec![rn_operand, op::lit(offset12)], "]")],
         (1, true) => vec![op::wrap(
             "[",
             vec![
                 rn_operand,
                 rm_operand,
                 op::sym(shift_symbol(shift, shift_imm)?),
-                op::int(shift_imm),
+                op::lit(shift_imm),
             ],
             "]",
         )],
@@ -1277,7 +1346,10 @@ pub fn pld(
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
 #[allow(clippy::many_single_char_names)]
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> aarch32::Result<Disasm> {
+pub fn disassemble<L>(p: &memory::Pointer<Pointer>, mem: &Bus) -> aarch32::Result<Disasm<L>>
+where
+    L: Literal,
+{
     let instr: reg::Symbolic<u32> = mem.read_leword(&p);
 
     if let Some(instr) = instr.into_concrete() {

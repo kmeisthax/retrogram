@@ -1,18 +1,25 @@
 //! Instruction AST type
 
-use crate::ast::Operand;
+use crate::ast::{Literal, Operand};
 use std::{slice, str};
 
 #[derive(Clone, Debug)]
-pub struct Instruction<I, S, F, P> {
+pub struct Instruction<L>
+where
+    L: Literal,
+{
     /// The instruction being executed
     opcode: String,
+
     /// Operands for the instruction, if any
-    operands: Vec<Operand<I, S, F, P>>,
+    operands: Vec<Operand<L>>,
 }
 
-impl<I, S, F, P> Instruction<I, S, F, P> {
-    pub fn new(opcode: &str, operands: Vec<Operand<I, S, F, P>>) -> Self {
+impl<L> Instruction<L>
+where
+    L: Literal,
+{
+    pub fn new(opcode: &str, operands: Vec<Operand<L>>) -> Self {
         Instruction {
             opcode: opcode.to_string(),
             operands,
@@ -23,7 +30,7 @@ impl<I, S, F, P> Instruction<I, S, F, P> {
         &self.opcode
     }
 
-    pub fn iter_operands(&self) -> slice::Iter<Operand<I, S, F, P>> {
+    pub fn iter_operands(&self) -> slice::Iter<Operand<L>> {
         self.operands.iter()
     }
 }

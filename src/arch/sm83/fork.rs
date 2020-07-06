@@ -1,9 +1,8 @@
 //! Symbolic fork analysis for SM83
 
 use crate::arch::sm83;
-use crate::arch::sm83::dis::{ALU_TARGET_MEM, ALU_TARGET_REGS};
+use crate::arch::sm83::dis::{AbstractOperand, ALU_TARGET_MEM, ALU_TARGET_REGS};
 use crate::arch::sm83::{Bus, Pointer, Prerequisite, Register, State};
-use crate::ast::Operand as op;
 use crate::{analysis, memory};
 
 /// Return a prerequisite list for an instruction that reads or writes the
@@ -131,14 +130,9 @@ pub fn prereq(
 ) -> sm83::Result<(Vec<Prerequisite>, bool)> {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => match mem.read_unit(&(p.clone() + 1)).into_concrete() {
-            Some(subop) => match ALU_TARGET_REGS[(subop & 0x07) as usize].clone() {
-                op::Symbol(_) => Ok((vec![], true)),
-                op::Indirect(sym) => match *sym {
-                    op::Symbol(ref name) if name == "hl" => {
-                        Ok((Register::prereqs_from_sym("hl"), true))
-                    }
-                    _ => Ok((vec![], false)),
-                },
+            Some(subop) => match ALU_TARGET_REGS[(subop & 0x07) as usize] {
+                AbstractOperand::Symbol(_) => Ok((vec![], true)),
+                AbstractOperand::Indirect("hl") => Ok((Register::prereqs_from_sym("hl"), true)),
                 _ => Ok((vec![], false)),
             },
             _ => Ok((vec![Prerequisite::memory(p.clone() + 1, 1)], false)),

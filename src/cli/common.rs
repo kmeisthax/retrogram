@@ -221,21 +221,13 @@ macro_rules! with_architecture {
                 crate::asm::AssemblerName::RGBDS,
             ) => {
                 let $bus = &crate::platform::gb::construct_platform(&mut $image_file)?;
-                let $dis = crate::arch::sm83::disassemble;
+                let $dis = crate::arch::sm83::disassemble::<crate::asm::rgbds::Literal>;
                 let $fmt_section = crate::asm::rgbds::format_section::<
-                    crate::arch::sm83::Offset,
-                    crate::arch::sm83::SignedValue,
-                    f32,
                     crate::arch::sm83::Pointer,
                     crate::arch::sm83::Data,
                     crate::arch::sm83::Offset,
                 >;
-                let $fmt_instr = crate::asm::rgbds::format_instr::<
-                    crate::arch::sm83::Offset,
-                    crate::arch::sm83::SignedValue,
-                    f32,
-                    crate::arch::sm83::Pointer,
-                >;
+                let $fmt_instr = crate::asm::rgbds::format_instr;
                 let $aparse = crate::arch::sm83::architectural_ctxt_parse;
                 let $prereq = crate::arch::sm83::prereq;
                 let $tracer = crate::arch::sm83::trace;
@@ -247,21 +239,13 @@ macro_rules! with_architecture {
                 crate::asm::AssemblerName::ARMIPS,
             ) => {
                 let $bus = &crate::platform::agb::construct_platform(&mut $image_file)?;
-                let $dis = crate::arch::aarch32::disassemble;
+                let $dis = crate::arch::aarch32::disassemble::<crate::asm::armips::Literal>;
                 let $fmt_section = crate::asm::armips::format_section::<
-                    crate::arch::aarch32::Offset,
-                    crate::arch::aarch32::Value,
-                    f32,
                     crate::arch::aarch32::Pointer,
                     crate::arch::aarch32::Data,
                     crate::arch::aarch32::Offset,
                 >;
-                let $fmt_instr = crate::asm::armips::format_instr::<
-                    crate::arch::aarch32::Offset,
-                    crate::arch::aarch32::Value,
-                    f32,
-                    crate::arch::aarch32::Pointer,
-                >;
+                let $fmt_instr = crate::asm::armips::format_instr;
                 let $aparse = crate::arch::aarch32::architectural_ctxt_parse;
                 let $prereq = crate::arch::aarch32::prereq;
                 let $tracer = crate::arch::aarch32::trace;

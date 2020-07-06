@@ -1,18 +1,23 @@
 use crate::arch::sm83;
-use crate::arch::sm83::{Bus, Disasm, Operand, Pointer};
-use crate::ast::Instruction as inst;
-use crate::ast::Operand as op;
+use crate::arch::sm83::{Bus, Disasm, Literal, Pointer};
+use crate::ast::{Instruction as inst, Operand, Operand as op};
 use crate::{analysis, memory};
 
-fn int_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
+fn int_op16<L>(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand<L>
+where
+    L: Literal,
+{
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
-        return op::int(val);
+        return op::lit(val);
     }
 
     op::miss()
 }
 
-fn dptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
+fn dptr_op16<L>(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand<L>
+where
+    L: Literal,
+{
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
         return op::dptr(p.contextualize(val));
     }
@@ -32,16 +37,22 @@ fn cptr_target(
     analysis::Reference::new_dyn_ref(p.clone() - 1, kind)
 }
 
-fn cptr_op16(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
+fn cptr_op16<L>(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand<L>
+where
+    L: Literal,
+{
     match mem.read_leword::<u16>(p).into_concrete() {
         Some(target) => op::cptr(p.contextualize(target)),
         None => op::miss(),
     }
 }
 
-fn int_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
+fn int_op8<L>(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand<L>
+where
+    L: Literal,
+{
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
-        return op::int(lobit);
+        return op::lit(lobit);
     }
 
     op::miss()
@@ -60,7 +71,10 @@ fn pcrel_target(
     analysis::Reference::new_dyn_ref(p.clone() - 1, kind)
 }
 
-fn pcrel_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
+fn pcrel_op8<L>(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand<L>
+where
+    L: Literal,
+{
     match mem.read_unit(p).into_concrete() {
         Some(target) => {
             op::cptr(p.contextualize(((p.as_pointer() + 1) as i16 + (target as i8) as i16) as u16))
@@ -69,7 +83,10 @@ fn pcrel_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     }
 }
 
-fn hram_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
+fn hram_op8<L>(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand<L>
+where
+    L: Literal,
+{
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         return op::dptr(p.contextualize(0xFF00 + lobit as u16));
     }
@@ -77,10 +94,28 @@ fn hram_op8(p: &memory::Pointer<Pointer>, mem: &Bus) -> Operand {
     op::miss()
 }
 
+#[derive(Clone)]
+pub enum AbstractOperand {
+    Symbol(&'static str),
+    Indirect(&'static str),
+}
+
+impl<L> Into<Operand<L>> for AbstractOperand
+where
+    L: Literal,
+{
+    fn into(self) -> Operand<L> {
+        match self {
+            Self::Symbol(s) => op::sym(s),
+            Self::Indirect(is) => op::indir(op::sym(is)),
+        }
+    }
+}
+
 lazy_static! {
     /// z80 instruction encoding uses this 3-bit enumeration to encode the target of
     /// 8-bit ALU or register transfer operations.
-    pub static ref ALU_TARGET_REGS: [Operand; 8] = [op::sym("b"), op::sym("c"), op::sym("d"), op::sym("e"), op::sym("h"), op::sym("l"), op::indir(op::sym("hl")), op::sym("a")];
+    pub static ref ALU_TARGET_REGS: [AbstractOperand; 8] = [AbstractOperand::Symbol("b"), AbstractOperand::Symbol("c"), AbstractOperand::Symbol("d"), AbstractOperand::Symbol("e"), AbstractOperand::Symbol("h"), AbstractOperand::Symbol("l"), AbstractOperand::Indirect("hl"), AbstractOperand::Symbol("a")];
 }
 
 /// z80 instruction encoding uses this 2-bit enumeration to encode the target of
@@ -125,11 +160,14 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
-pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> sm83::Result<Disasm> {
+pub fn disassemble<L>(p: &memory::Pointer<Pointer>, mem: &Bus) -> sm83::Result<Disasm<L>>
+where
+    L: Literal,
+{
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => match mem.read_unit(&(p.clone() + 1)).into_concrete() {
             Some(subop) => {
-                let targetreg = ALU_TARGET_REGS[(subop & 0x07) as usize].clone();
+                let targetreg = ALU_TARGET_REGS[(subop & 0x07) as usize].clone().into();
                 let new_bitop = NEW_ALU_BITOPS[((subop >> 3) & 0x07) as usize];
 
                 match ((subop >> 6) & 0x03, (subop >> 3) & 0x07, subop & 0x07) {
@@ -140,19 +178,19 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> sm83::Result<Disa
                         vec![],
                     )),
                     (1, bit, _) => Ok(Disasm::new(
-                        inst::new("bit", vec![op::int(bit), targetreg]),
+                        inst::new("bit", vec![op::lit(bit), targetreg]),
                         2,
                         analysis::Flow::Normal,
                         vec![],
                     )),
                     (2, bit, _) => Ok(Disasm::new(
-                        inst::new("res", vec![op::int(bit), targetreg]),
+                        inst::new("res", vec![op::lit(bit), targetreg]),
                         2,
                         analysis::Flow::Normal,
                         vec![],
                     )),
                     (3, bit, _) => Ok(Disasm::new(
-                        inst::new("set", vec![op::int(bit), targetreg]),
+                        inst::new("set", vec![op::lit(bit), targetreg]),
                         2,
                         analysis::Flow::Normal,
                         vec![],
@@ -333,10 +371,10 @@ pub fn disassemble(p: &memory::Pointer<Pointer>, mem: &Bus) -> sm83::Result<Disa
         Some(op) => {
             let condcode = ALU_CONDCODE[((op >> 3) & 0x03) as usize];
             let targetpair = ALU_TARGET_PAIRS[((op >> 4) & 0x03) as usize];
-            let targetreg = ALU_TARGET_REGS[((op >> 3) & 0x07) as usize].clone();
+            let targetreg = ALU_TARGET_REGS[((op >> 3) & 0x07) as usize].clone().into();
             let targetmem = ALU_TARGET_MEM[((op >> 4) & 0x03) as usize];
             let bitop = ALU_BITOPS[((op >> 3) & 0x07) as usize];
-            let targetreg2 = ALU_TARGET_REGS[(op & 0x07) as usize].clone();
+            let targetreg2 = ALU_TARGET_REGS[(op & 0x07) as usize].clone().into();
             let aluop = ALU_OPS[((op >> 3) & 0x07) as usize];
             let stackpair = STACK_TARGET_PAIRS[((op >> 4) & 0x03) as usize];
 

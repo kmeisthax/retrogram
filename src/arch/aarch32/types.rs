@@ -144,14 +144,22 @@ pub type BusAddress = memory::Pointer<Pointer>;
 /// The compatible memory model type necessary to analyze AArch32 programs.
 pub type Bus = memory::Memory<Pointer, Data, Offset>;
 
-/// The AST type which represents a disassembled operand.
-pub type Operand = ast::Operand<Offset, Value, f32, Pointer>;
+/// A trait which defines what assembler literals we need support for.
+pub trait Literal:
+    ast::Literal + From<Value> + From<Offset> + From<u16> + From<BusAddress>
+{
+}
 
-/// The AST type which represents a disassembled instruction.
-pub type Instruction = ast::Instruction<Offset, Value, f32, Pointer>;
+impl<L> Literal for L where
+    L: ast::Literal + From<Value> + From<Offset> + From<u16> + From<BusAddress>
+{
+}
 
 /// The AST type which represents disassembled code.
-pub type Section = ast::Section<Offset, Value, f32, Pointer, Data, Offset>;
+///
+/// Generic parameter `L` *must* match the Literal trait defined above, which
+/// is an extension of the generic AST literal trait.
+pub type Section<L> = ast::Section<L, Pointer, Data, Offset>;
 
 /// The register state type which represents the execution state of a given
 /// AArch32 program.
@@ -166,7 +174,10 @@ pub type Prerequisite = analysis::Prerequisite<Aarch32Register, Value, Pointer, 
 pub type Trace = analysis::Trace<Aarch32Register, Value, Pointer, Data>;
 
 /// The type which represents a single disassembled instruction.
-pub type Disasm = analysis::Disasm<Offset, Value, f32, Pointer, Offset>;
+///
+/// Generic parameter `L` *must* match the Literal trait defined above, which
+/// is an extension of the generic AST literal trait.
+pub type Disasm<L> = analysis::Disasm<L, Pointer, Offset>;
 
-/// The type which represents any analysis result for this architecture
+/// The type which represents any analysis result for this architecture.
 pub type Result<T> = analysis::Result<T, Pointer, Offset>;

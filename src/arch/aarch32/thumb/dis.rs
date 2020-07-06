@@ -5,15 +5,18 @@ use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32::arm::condcode;
 use crate::arch::aarch32::thumb::THUMB_STATE;
 use crate::arch::aarch32::Aarch32Register as A32Reg;
-use crate::arch::aarch32::Operand as op;
-use crate::arch::aarch32::{Bus, Disasm, Instruction, Offset, Pointer};
+use crate::arch::aarch32::{Bus, Disasm, Literal, Offset, Pointer};
+use crate::ast::{Instruction, Operand as op};
 use crate::{analysis, memory, reg};
 
-fn cond_branch(
+fn cond_branch<L>(
     p: &memory::Pointer<Pointer>,
     cond: u16,
     offset: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     // signed_offset = (target - base + 4) / 2
     // therefore target = signed_offset * 2 - 4 + base
     let signed_offset = (((offset as u8) as i8) as i32) << 1;
@@ -28,7 +31,7 @@ fn cond_branch(
 
         //TODO: The jump target can be in high RAM, how do we handle that?
         16 => Ok(Disasm::new(
-            Instruction::new("SWI", vec![op::int(offset as u32)]),
+            Instruction::new("SWI", vec![op::lit(offset as u32)]),
             2,
             analysis::Flow::Normal,
             vec![refr::new_static_ref(
@@ -49,10 +52,13 @@ fn cond_branch(
     }
 }
 
-fn uncond_branch(
+fn uncond_branch<L>(
     p: &memory::Pointer<Pointer>,
     offset: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     // signed_offset = (target - base + 4) / 2
     // therefore target = signed_offset * 2 - 4 + base
     let sign_extend = if offset & 0x0400 != 0 { 0xF800 } else { 0x0000 };
@@ -67,12 +73,15 @@ fn uncond_branch(
     ))
 }
 
-fn special_data(
+fn special_data<L>(
     p: &memory::Pointer<Pointer>,
     dp_opcode: u16,
     low_rm: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let opcode = (dp_opcode & 0xC) >> 2;
     let h1 = (dp_opcode & 0x2) << 2;
     let h2 = (dp_opcode & 0x1) << 3;
@@ -129,11 +138,14 @@ fn special_data(
     }
 }
 
-fn data_processing(
+fn data_processing<L>(
     dp_opcode: u16,
     low_rm: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
@@ -240,12 +252,15 @@ fn data_processing(
     }
 }
 
-fn add_sub_register(
+fn add_sub_register<L>(
     add_sub_bit: u16,
     low_rm: u16,
     low_rn: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
     let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
@@ -270,17 +285,20 @@ fn add_sub_register(
     }
 }
 
-fn add_sub_immed(
+fn add_sub_immed<L>(
     add_sub_bit: u16,
     immed: u16,
     low_rn: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rn_operand = op::sym(&rn_reg.to_string());
-    let immed_operand = op::int(immed);
+    let immed_operand = op::lit(immed);
 
     match add_sub_bit {
         0 => Ok(Disasm::new(
@@ -299,12 +317,15 @@ fn add_sub_immed(
     }
 }
 
-fn shifter_immed(
+fn shifter_immed<L>(
     shift_opcode: u16,
     immed: u16,
     low_rm: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
@@ -316,19 +337,19 @@ fn shifter_immed(
 
     match shift_opcode {
         0 => Ok(Disasm::new(
-            Instruction::new("LSL", vec![rd_operand, rm_operand, op::int(immed)]),
+            Instruction::new("LSL", vec![rd_operand, rm_operand, op::lit(immed)]),
             2,
             analysis::Flow::Normal,
             vec![],
         )),
         1 => Ok(Disasm::new(
-            Instruction::new("LSR", vec![rd_operand, rm_operand, op::int(nz_immed)]),
+            Instruction::new("LSR", vec![rd_operand, rm_operand, op::lit(nz_immed)]),
             2,
             analysis::Flow::Normal,
             vec![],
         )),
         2 => Ok(Disasm::new(
-            Instruction::new("ASR", vec![rd_operand, rm_operand, op::int(nz_immed)]),
+            Instruction::new("ASR", vec![rd_operand, rm_operand, op::lit(nz_immed)]),
             2,
             analysis::Flow::Normal,
             vec![],
@@ -337,14 +358,17 @@ fn shifter_immed(
     }
 }
 
-fn math_immed(
+fn math_immed<L>(
     math_opcode: u16,
     low_rd: u16,
     immed: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
-    let immed_operand = op::int(immed);
+    let immed_operand = op::lit(immed);
 
     match math_opcode {
         0 => Ok(Disasm::new(
@@ -375,15 +399,18 @@ fn math_immed(
     }
 }
 
-fn load_pool_constant(
+fn load_pool_constant<L>(
     p: &memory::Pointer<Pointer>,
     low_rd: u16,
     immed: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let target_ptr = p.contextualize((*p.as_pointer() & 0xFFFF_FFFC) + 4 + (immed as u32 * 4));
-    let immed_operand = op::int(immed as u32 * 4);
+    let immed_operand = op::lit(immed as u32 * 4);
     let ast = Instruction::new(
         "LDR",
         vec![
@@ -400,12 +427,15 @@ fn load_pool_constant(
     ))
 }
 
-fn load_store_register_offset(
+fn load_store_register_offset<L>(
     opcode: u16,
     low_rm: u16,
     low_rn: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
     let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
@@ -433,13 +463,16 @@ fn load_store_register_offset(
     ))
 }
 
-fn load_store_immed_offset_word(
+fn load_store_immed_offset_word<L>(
     b: u16,
     l: u16,
     offset: u16,
     low_rn: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
@@ -449,7 +482,7 @@ fn load_store_immed_offset_word(
         1 => 1,
         _ => return Err(analysis::Error::Misinterpretation(2, false)),
     };
-    let offset_operand = op::int(offset * size);
+    let offset_operand = op::lit(offset * size);
 
     let opcode_name = match (b, l) {
         (0, 0) => "STR",
@@ -471,17 +504,20 @@ fn load_store_immed_offset_word(
     ))
 }
 
-fn load_store_immed_offset_halfword(
+fn load_store_immed_offset_halfword<L>(
     l: u16,
     offset: u16,
     low_rn: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
     let rn_operand = op::sym(&rn_reg.to_string());
-    let offset_operand = op::int(offset * 2);
+    let offset_operand = op::lit(offset * 2);
 
     let opcode_name = match l {
         0 => "STRH",
@@ -501,14 +537,17 @@ fn load_store_immed_offset_halfword(
     ))
 }
 
-fn load_store_stack_offset(
+fn load_store_stack_offset<L>(
     l: u16,
     low_rd: u16,
     offset: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
-    let offset_operand = op::int(offset * 4);
+    let offset_operand = op::lit(offset * 4);
 
     let opcode_name = match l {
         0 => "STRH",
@@ -528,10 +567,17 @@ fn load_store_stack_offset(
     ))
 }
 
-fn compute_rel_addr(s: u16, low_rd: u16, offset: u16) -> analysis::Result<Disasm, Pointer, Offset> {
+fn compute_rel_addr<L>(
+    s: u16,
+    low_rd: u16,
+    offset: u16,
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rd_operand = op::sym(&rd_reg.to_string());
-    let offset_operand = op::int(offset * 4);
+    let offset_operand = op::lit(offset * 4);
 
     let s_operand = op::sym(match s {
         0 => "PC",
@@ -547,11 +593,14 @@ fn compute_rel_addr(s: u16, low_rd: u16, offset: u16) -> analysis::Result<Disasm
     ))
 }
 
-fn load_store_multiple(
+fn load_store_multiple<L>(
     l: u16,
     low_rn: u16,
     register_list: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let rn_reg = A32Reg::from_instr(low_rn as u32).expect("Invalid register");
     let rn_operand = op::sym(&rn_reg.to_string());
     let instr = match l {
@@ -582,11 +631,14 @@ fn load_store_multiple(
     ))
 }
 
-fn uncond_branch_link(
+fn uncond_branch_link<L>(
     p: &memory::Pointer<Pointer>,
     mem: &Bus,
     high_offset: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     match mem.read_leword::<u16>(&(p.clone() + 2)).into_concrete() {
         Some(low_instr) if low_instr & 0xE000 == 0xE000 => {
             let h = (low_instr & 0x1800) >> 11;
@@ -626,19 +678,22 @@ fn uncond_branch_link(
     }
 }
 
-fn sp_adjust(immed: u16) -> analysis::Result<Disasm, Pointer, Offset> {
+fn sp_adjust<L>(immed: u16) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let opbit = (immed & 0x80) >> 7;
     let target = (immed & 0x7F) << 2;
 
     match opbit {
         0 => Ok(Disasm::new(
-            Instruction::new("ADD", vec![op::sym("SP"), op::int(target)]),
+            Instruction::new("ADD", vec![op::sym("SP"), op::lit(target)]),
             2,
             analysis::Flow::Normal,
             vec![],
         )),
         1 => Ok(Disasm::new(
-            Instruction::new("SUB", vec![op::sym("SP"), op::int(target)]),
+            Instruction::new("SUB", vec![op::sym("SP"), op::lit(target)]),
             2,
             analysis::Flow::Normal,
             vec![],
@@ -647,11 +702,14 @@ fn sp_adjust(immed: u16) -> analysis::Result<Disasm, Pointer, Offset> {
     }
 }
 
-fn sign_zero_extend(
+fn sign_zero_extend<L>(
     immed: u16,
     low_rm: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let opcode = (immed & 0xC0) >> 6;
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
@@ -687,11 +745,14 @@ fn sign_zero_extend(
     }
 }
 
-fn endian_reverse(
+fn endian_reverse<L>(
     immed: u16,
     low_rm: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let opcode = (immed & 0xC0) >> 6;
     let rd_reg = A32Reg::from_instr(low_rd as u32).expect("Invalid register");
     let rm_reg = A32Reg::from_instr(low_rm as u32).expect("Invalid register");
@@ -722,7 +783,10 @@ fn endian_reverse(
     }
 }
 
-fn push_pop(l: u16, r: u16, register_list: u16) -> analysis::Result<Disasm, Pointer, Offset> {
+fn push_pop<L>(l: u16, r: u16, register_list: u16) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let mut register_list_operand = vec![];
 
     for i in 0..7 {
@@ -766,10 +830,13 @@ fn push_pop(l: u16, r: u16, register_list: u16) -> analysis::Result<Disasm, Poin
     }
 }
 
-fn breakpoint(
+fn breakpoint<L>(
     p: &memory::Pointer<Pointer>,
     immed: u16,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     let mut bkpt_target = p.contextualize(0x0000_000C);
     bkpt_target.set_arch_context(THUMB_STATE, reg::Symbolic::from(0));
 
@@ -780,7 +847,7 @@ fn breakpoint(
     )];
 
     Ok(Disasm::new(
-        Instruction::new("BKPT", vec![op::int(immed as u32)]),
+        Instruction::new("BKPT", vec![op::lit(immed as u32)]),
         2,
         analysis::Flow::Normal,
         targets,
@@ -804,10 +871,13 @@ fn breakpoint(
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
 #[allow(clippy::many_single_char_names)]
-pub fn disassemble(
+pub fn disassemble<L>(
     p: &memory::Pointer<Pointer>,
     mem: &Bus,
-) -> analysis::Result<Disasm, Pointer, Offset> {
+) -> analysis::Result<Disasm<L>, Pointer, Offset>
+where
+    L: Literal,
+{
     match mem.read_leword::<u16>(p).into_concrete() {
         Some(instr) => {
             let rd = instr & 0x0007; //sometimes also sbz

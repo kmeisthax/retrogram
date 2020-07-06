@@ -4,6 +4,7 @@ use crate::analysis::{
     Disasm, Disassembler, Mappable, Prerequisite, PrerequisiteAnalysis, Reference, ReferenceKind,
     Trace, TraceEvent, Tracer,
 };
+use crate::ast::Literal;
 use crate::database::Database;
 use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, Symbolic};
@@ -113,19 +114,20 @@ where
 /// This function returns a set of blocks that the trace has passed through. At
 /// the end of trace execution, all of these sets must be merged, and any block
 /// within them must have their trace couts incremented by one.
-pub fn analyze_trace_log<LI, LSI, LF, RK, I, P, MV, S, IO, DISASM>(
+pub fn analyze_trace_log<L, RK, I, P, MV, S, IO, DISASM>(
     trace: &Trace<RK, I, P, MV>,
     bus: &Memory<P, MV, S, IO>,
     database: &mut Database<P, S>,
     disasm: DISASM,
 ) -> analysis::Result<HashSet<usize>, P, S>
 where
+    L: Literal,
     P: Mappable + PtrNum<S>,
     S: Offset<P>,
-    DISASM: Disassembler<LI, LSI, LF, P, MV, S, IO>,
+    DISASM: Disassembler<L, P, MV, S, IO>,
 {
     let mut last_pc: Option<Pointer<P>> = None;
-    let mut last_disasm: Option<Disasm<LI, LSI, LF, P, S>> = None;
+    let mut last_disasm: Option<Disasm<L, P, S>> = None;
     let mut traced_blocks = HashSet::new();
 
     for event in trace.iter() {

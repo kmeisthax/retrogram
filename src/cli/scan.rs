@@ -19,20 +19,21 @@ use std::{fmt, fs, io};
 
 /// Scan a specific starting PC and add the results of the analysis to the
 /// database.
-fn scan_pc_for_arch<I, SI, F, P, MV, S, IO, DIS>(
+fn scan_pc_for_arch<L, P, MV, S, IO, DIS>(
     db: &mut database::Database<P, S>,
     start_pc: &memory::Pointer<P>,
     disassembler: &DIS,
     bus: &memory::Memory<P, MV, S, IO>,
 ) -> io::Result<()>
 where
+    L: ast::Literal<PtrVal = P>,
     P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
     S: memory::Offset<P> + cli::Nameable + Zero + One,
     IO: One,
     MV: reg::Bitwise + fmt::UpperHex,
     reg::Symbolic<MV>: Default,
-    ast::Instruction<I, SI, F, P>: Clone,
-    DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO>,
+    ast::Instruction<L>: Clone,
+    DIS: analysis::Disassembler<L, P, MV, S, IO>,
 {
     let (orig_asm, xrefs, pc_offset, blocks, terminating_error) =
         analysis::disassemble_block(start_pc.clone(), bus, disassembler);
@@ -127,19 +128,20 @@ where
 ///
 /// This function yields false if it's execution yielded no additional code. It
 /// will also yield the addresses of any code that threw errors when analyzed.
-fn exhaust_all_static_scans<I, SI, F, P, MV, S, IO, DIS>(
+fn exhaust_all_static_scans<L, P, MV, S, IO, DIS>(
     db: &mut Database<P, S>,
     bus: &memory::Memory<P, MV, S, IO>,
     disassembler: &DIS,
 ) -> (bool, HashSet<Pointer<P>>)
 where
+    L: ast::Literal<PtrVal = P>,
     P: PtrNum<S> + Mappable + Nameable,
     S: Offset<P> + Nameable + Zero + One,
     IO: One,
     MV: reg::Bitwise + fmt::UpperHex,
     reg::Symbolic<MV>: Default,
-    ast::Instruction<I, SI, F, P>: Clone,
-    DIS: analysis::Disassembler<I, SI, F, P, MV, S, IO>,
+    ast::Instruction<L>: Clone,
+    DIS: analysis::Disassembler<L, P, MV, S, IO>,
 {
     let mut failed_analysis = HashSet::new();
     let mut any_analysis_done = false;
@@ -188,7 +190,7 @@ where
 /// This function yields true if any dynamic analysis was done. You will need
 /// to check for any new unanalyzed static references after the tracing has
 /// completed.
-fn exhaust_all_dynamic_scans<LI, LSI, LF, RK, I, P, MV, S, IO, PREREQ, TRACER, DISASM>(
+fn exhaust_all_dynamic_scans<L, RK, I, P, MV, S, IO, PREREQ, TRACER, DISASM>(
     db: &mut Database<P, S>,
     bus: &memory::Memory<P, MV, S, IO>,
     prereq: &PREREQ,
@@ -196,6 +198,7 @@ fn exhaust_all_dynamic_scans<LI, LSI, LF, RK, I, P, MV, S, IO, PREREQ, TRACER, D
     disasm: &DISASM,
 ) -> analysis::Result<bool, P, S>
 where
+    L: ast::Literal<PtrVal = P>,
     RK: Mappable,
     I: Bitwise + Numerical + TryInto<u64> + Popcount<Output = I>,
     P: Mappable + PtrNum<S> + Numerical,
@@ -208,7 +211,7 @@ where
     State<RK, I, P, MV>: Clone + Eq + Hash,
     PREREQ: PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
     TRACER: Tracer<RK, I, P, MV, S, IO>,
-    DISASM: Disassembler<LI, LSI, LF, P, MV, S, IO>,
+    DISASM: Disassembler<L, P, MV, S, IO>,
 {
     let mut did_trace = false;
 
@@ -266,7 +269,7 @@ where
 ///
 /// TODO: The current set of lifetime bounds preclude the use of zero-copy
 /// deserialization. We should figure out a way around that.
-fn scan_for_arch<LI, LSI, LF, RK, I, P, MV, S, IO, DIS, APARSE, PREREQ, TRACER>(
+fn scan_for_arch<L, RK, I, P, MV, S, IO, DIS, APARSE, PREREQ, TRACER>(
     prog: &project::Program,
     start_spec: &str,
     disassembler: DIS,
@@ -276,6 +279,7 @@ fn scan_for_arch<LI, LSI, LF, RK, I, P, MV, S, IO, DIS, APARSE, PREREQ, TRACER>(
     tracer: TRACER,
 ) -> io::Result<()>
 where
+    L: ast::Literal<PtrVal = P>,
     RK: Mappable,
     I: Bitwise + Numerical + TryInto<u64> + Popcount<Output = I>,
     for<'dw> P: memory::PtrNum<S>
@@ -295,10 +299,10 @@ where
     IO: One,
     reg::Symbolic<I>: Bitwise,
     reg::Symbolic<MV>: Default + Bitwise,
-    ast::Instruction<LI, LSI, LF, P>: Clone,
+    ast::Instruction<L>: Clone,
     Fork<RK, I, P, MV>: Ord,
     State<RK, I, P, MV>: Clone + Eq + Hash,
-    DIS: analysis::Disassembler<LI, LSI, LF, P, MV, S, IO>,
+    DIS: analysis::Disassembler<L, P, MV, S, IO>,
     PREREQ: PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
     TRACER: Tracer<RK, I, P, MV, S, IO>,
     APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()>,
