@@ -221,16 +221,16 @@ macro_rules! with_architecture {
                 crate::asm::AssemblerName::RGBDS,
             ) => {
                 let $bus = &crate::platform::gb::construct_platform(&mut $image_file)?;
-                let $dis = crate::arch::sm83::disassemble::<crate::asm::rgbds::Literal>;
+                let $dis = crate::arch::sm83::disassemble::<crate::asm::rgbds::Literal, usize>;
                 let $fmt_section = crate::asm::rgbds::format_section::<
-                    crate::arch::sm83::Pointer,
+                    crate::arch::sm83::PtrVal,
                     crate::arch::sm83::Data,
                     crate::arch::sm83::Offset,
                 >;
                 let $fmt_instr = crate::asm::rgbds::format_instr;
                 let $aparse = crate::arch::sm83::architectural_ctxt_parse;
-                let $prereq = crate::arch::sm83::prereq;
-                let $tracer = crate::arch::sm83::trace;
+                let $prereq = crate::arch::sm83::prereq::<usize>;
+                let $tracer = crate::arch::sm83::trace::<usize>;
                 $callback
             }
             (

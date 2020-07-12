@@ -2,22 +2,26 @@
 
 use crate::arch::sm83;
 use crate::arch::sm83::dis::{AbstractOperand, ALU_TARGET_MEM, ALU_TARGET_REGS};
-use crate::arch::sm83::{Bus, Pointer, Prerequisite, Register, State};
+use crate::arch::sm83::{Bus, Prerequisite, PtrVal, Register, State};
 use crate::{analysis, memory};
+use num::One;
 
 /// Return a prerequisite list for an instruction that reads or writes the
 /// address situated in the opcode of this instruction.
-fn memlist_rw_op16(p: &memory::Pointer<Pointer>) -> sm83::Result<(Vec<Prerequisite>, bool)> {
+fn memlist_rw_op16(p: &memory::Pointer<PtrVal>) -> sm83::Result<(Vec<Prerequisite>, bool)> {
     Ok((vec![Prerequisite::memory(p.clone(), 2)], true))
 }
 
 /// Return a prerequisite list for an instruction that jumps to or calls the
 /// address situated in the opcode of this instruction.
-fn memlist_call_op16(
+fn memlist_call_op16<IO>(
     mut preq: Vec<Prerequisite>,
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
-) -> sm83::Result<(Vec<Prerequisite>, bool)> {
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
+) -> sm83::Result<(Vec<Prerequisite>, bool)>
+where
+    IO: One,
+{
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
         preq.push(Prerequisite::memory(
             mem.minimize_context(p.contextualize(val)),
@@ -33,16 +37,19 @@ fn memlist_call_op16(
 
 /// Return a prerequisite list for an instruction that reads or writes the
 /// high memory address situated in the opcode of this instruction.
-fn memlist_rw_hi8(p: &memory::Pointer<Pointer>) -> sm83::Result<(Vec<Prerequisite>, bool)> {
+fn memlist_rw_hi8(p: &memory::Pointer<PtrVal>) -> sm83::Result<(Vec<Prerequisite>, bool)> {
     Ok((vec![Prerequisite::memory(p.clone(), 1)], true))
 }
 
 /// Return a prerequisite list for a PC-relative jump.
-fn memlist_pc8(
+fn memlist_pc8<IO>(
     mut preq: Vec<Prerequisite>,
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
-) -> sm83::Result<(Vec<Prerequisite>, bool)> {
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
+) -> sm83::Result<(Vec<Prerequisite>, bool)>
+where
+    IO: One,
+{
     let is_complete = match mem
         .read_unit(p)
         .into_concrete()
@@ -69,13 +76,16 @@ fn memlist_pc8(
 ///
 /// Flags should be indicated with `include_flags` rather than `Register::F` so
 /// that only the `z` and `c` flags are actually counted as prerequisites.
-fn memlist_call_indir16(
+fn memlist_call_indir16<IO>(
     regs: Vec<Register>,
     include_flags: bool,
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     state: &State,
-) -> sm83::Result<(Vec<Prerequisite>, bool)> {
+) -> sm83::Result<(Vec<Prerequisite>, bool)>
+where
+    IO: One,
+{
     let mut preqs: Vec<Prerequisite> = regs.iter().map(|r| Prerequisite::from(*r)).collect();
     if include_flags {
         preqs.push(Prerequisite::register(Register::F, 0x90));
@@ -88,7 +98,7 @@ fn memlist_call_indir16(
         ) {
             (Some(h), Some(l)) => {
                 preqs.push(Prerequisite::memory(
-                    mem.minimize_context(p.contextualize((h as Pointer) << 8 | l as Pointer)),
+                    mem.minimize_context(p.contextualize((h as PtrVal) << 8 | l as PtrVal)),
                     1,
                 ));
                 Ok((preqs, true))
@@ -123,11 +133,14 @@ fn memlist_call_indir16(
 /// registers or memory locations, the tracing routine must consider how many
 /// forks will be created and if such forking is "worth it". This is a heuristic
 /// policy not covered by the tracing implementation of this architecture.
-pub fn prereq(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+pub fn prereq<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     state: &State,
-) -> sm83::Result<(Vec<Prerequisite>, bool)> {
+) -> sm83::Result<(Vec<Prerequisite>, bool)>
+where
+    IO: One,
+{
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => match mem.read_unit(&(p.clone() + 1)).into_concrete() {
             Some(subop) => match ALU_TARGET_REGS[(subop & 0x07) as usize] {

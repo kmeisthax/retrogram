@@ -5,16 +5,20 @@ use crate::reg::{Convertable, TryConvertable};
 use crate::{analysis, memory, reg};
 use std::cmp::PartialEq;
 //use crate::arch::sm83::dis::{ALU_BITOPS, ALU_CONDCODE, ALU_OPS, ALU_TARGET_MEM, ALU_TARGET_PAIRS, ALU_TARGET_REGS, STACK_TARGET_PAIRS};
-use crate::arch::sm83::{Bus, Offset, Pointer, Register, State, Trace, Value};
+use crate::arch::sm83::{Bus, Offset, PtrVal, Register, State, Trace, Value};
+use num::One;
 
 /// Given a targetreg operand, produce a symbolic value of what that target reg
 /// would be given the current state.
-fn read_value_from_targetreg(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn read_value_from_targetreg<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     state: &State,
     targetreg: u8,
-) -> sm83::Result<reg::Symbolic<Value>> {
+) -> sm83::Result<reg::Symbolic<Value>>
+where
+    IO: One,
+{
     match targetreg {
         0 => Ok(state.get_register(&Register::B)),
         1 => Ok(state.get_register(&Register::C)),
@@ -23,8 +27,8 @@ fn read_value_from_targetreg(
         4 => Ok(state.get_register(&Register::H)),
         5 => Ok(state.get_register(&Register::L)),
         6 => {
-            let hl = reg::Symbolic::<Pointer>::convert_from(state.get_register(&Register::H)) << 8
-                | reg::Symbolic::<Pointer>::convert_from(state.get_register(&Register::L));
+            let hl = reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::H)) << 8
+                | reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::L));
             if let Some(hl) = hl.into_concrete() {
                 let ptr_hl = mem.minimize_context(p.contextualize(hl)); //TODO: Attempt to pull context from state
                 Ok(mem.read_unit(&ptr_hl)) //TODO: Should respond to memory state
@@ -39,9 +43,9 @@ fn read_value_from_targetreg(
 
 /// Given a targetreg operand, manipulate the given state to incorporate the
 /// effect of writing a given value to that operand.
-fn write_value_to_targetreg(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn write_value_to_targetreg<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     state: &mut State,
     trace: &mut Trace,
     targetreg: u8,
@@ -55,8 +59,8 @@ fn write_value_to_targetreg(
         4 => trace.register_set(Register::H, value, state),
         5 => trace.register_set(Register::L, value, state),
         6 => {
-            let hl = reg::Symbolic::<Pointer>::convert_from(state.get_register(&Register::H)) << 8
-                | reg::Symbolic::<Pointer>::convert_from(state.get_register(&Register::L));
+            let hl = reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::H)) << 8
+                | reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::L));
             if let Some(hl) = hl.into_concrete() {
                 let ptr_hl = mem.minimize_context(p.contextualize(hl)); //TODO: Attempt to pull context from state
                 trace.memory_write(ptr_hl, &[value], state);
@@ -76,7 +80,7 @@ fn read_value_from_targetpair(
     state: &State,
     targetpair: u8,
     is_stackpair: bool,
-) -> sm83::Result<reg::Symbolic<Pointer>> {
+) -> sm83::Result<reg::Symbolic<PtrVal>> {
     let hival: reg::Symbolic<u16> = reg::Symbolic::convert_from(match (targetpair, is_stackpair) {
         (0, _) => state.get_register(&Register::B),
         (1, _) => state.get_register(&Register::D),
@@ -104,7 +108,7 @@ fn write_value_to_targetpair(
     trace: &mut Trace,
     targetpair: u8,
     is_stackpair: bool,
-    value: reg::Symbolic<Pointer>,
+    value: reg::Symbolic<PtrVal>,
 ) -> sm83::Result<()> {
     //TODO: Some kind of "regsegment" method?
     let loval: reg::Symbolic<u8> =
@@ -147,12 +151,15 @@ fn write_value_to_targetpair(
 ///
 /// Will fail if SP isn't set. No support currently exists for tracing relative
 /// registers yet.
-fn pop_value_from_sp(
-    ptr: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn pop_value_from_sp<IO>(
+    ptr: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     state: &mut State,
     trace: &mut Trace,
-) -> sm83::Result<reg::Symbolic<u16>> {
+) -> sm83::Result<reg::Symbolic<u16>>
+where
+    IO: One,
+{
     match read_value_from_targetpair(&state, 3, false)?.into_concrete() {
         Some(sp) => {
             let next_sp = sp + 2;
@@ -179,10 +186,10 @@ fn pop_value_from_sp(
 /// Will fail if SP isn't set. No support currently exists for tracing relative
 /// registers yet.
 fn push_value_to_sp(
-    ptr: &memory::Pointer<Pointer>,
+    ptr: &memory::Pointer<PtrVal>,
     state: &mut State,
     trace: &mut Trace,
-    value: reg::Symbolic<Pointer>,
+    value: reg::Symbolic<PtrVal>,
 ) -> sm83::Result<()> {
     match read_value_from_targetpair(&state, 3, false)?.into_concrete() {
         Some(sp) => {
@@ -340,14 +347,17 @@ fn aluop(
 
 /// Trace a CB-prefix bit rotate operation (RLC, RRC, RL, RR, SLA, SRA, SWAP,
 /// or SRL).
-fn trace_bitop(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_bitop<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     bitop: u8,
     targetreg: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let flags = state.get_register(&Register::F);
     let carry = flags & reg::Symbolic::from(0x10);
     let val = read_value_from_targetreg(p, mem, &state, targetreg)?;
@@ -375,14 +385,17 @@ fn trace_bitop(
 }
 
 /// Trace a CB-prefix bit test instruction (e.g. BIT n, reg).
-fn trace_bittest(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_bittest<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     targetbit: u8,
     targetreg: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let flags = state.get_register(&Register::F);
     let val = read_value_from_targetreg(p, mem, &state, targetreg)? >> targetbit
         & reg::Symbolic::from(0x01);
@@ -397,14 +410,17 @@ fn trace_bittest(
 }
 
 /// Trace a CB-prefix bit reset instruction (e.g. RES n, reg).
-fn trace_bitreset(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_bitreset<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     targetbit: u8,
     targetreg: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let mask = reg::Symbolic::from(!(1 << targetbit));
     let val = read_value_from_targetreg(p, mem, &state, targetreg)?;
 
@@ -414,14 +430,17 @@ fn trace_bitreset(
 }
 
 /// Trace a CB-prefix bit set instruction (e.g. SET n, reg).
-fn trace_bitset(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_bitset<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     targetbit: u8,
     targetreg: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let bit = reg::Symbolic::from(1 << targetbit);
     let val = read_value_from_targetreg(p, mem, &state, targetreg)?;
 
@@ -431,15 +450,18 @@ fn trace_bitset(
 }
 
 /// Trace writing the stack pointer to a memory location
-fn trace_sp_storage(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_sp_storage<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let op_ptr = p.contextualize(*p.as_pointer() + 1);
     let memloc = mem
-        .read_leword::<Pointer>(&op_ptr)
+        .read_leword::<PtrVal>(&op_ptr)
         .into_concrete()
         .ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
 
@@ -456,12 +478,15 @@ fn trace_sp_storage(
 }
 
 /// Trace full jumps
-fn trace_jump(
+fn trace_jump<IO>(
     condcode: Option<u8>,
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     state: State,
-) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
+) -> sm83::Result<(State, memory::Pointer<PtrVal>)>
+where
+    IO: One,
+{
     if flag_test(condcode, state.get_register(&Register::F))? {
         let op_ptr = p.contextualize(*p.as_pointer() + 1);
         let target = mem
@@ -476,13 +501,16 @@ fn trace_jump(
 }
 
 /// Trace full calls
-fn trace_call(
+fn trace_call<IO>(
     condcode: Option<u8>,
-    ptr: &memory::Pointer<Pointer>,
-    mem: &Bus,
+    ptr: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
-) -> analysis::Result<(State, memory::Pointer<Pointer>), Pointer, Offset> {
+) -> analysis::Result<(State, memory::Pointer<PtrVal>), PtrVal, Offset>
+where
+    IO: One,
+{
     if flag_test(condcode, state.get_register(&Register::F))? {
         let op_ptr = ptr.contextualize(*ptr.as_pointer() + 1);
         let target = mem
@@ -500,13 +528,16 @@ fn trace_call(
 }
 
 /// Trace return
-fn trace_return(
+fn trace_return<IO>(
     condcode: Option<u8>,
-    ptr: &memory::Pointer<Pointer>,
-    mem: &Bus,
+    ptr: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
-) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
+) -> sm83::Result<(State, memory::Pointer<PtrVal>)>
+where
+    IO: One,
+{
     if flag_test(condcode, state.get_register(&Register::F))? {
         let old_spval = read_value_from_targetpair(&state, 3, false)?
             .into_concrete()
@@ -523,12 +554,15 @@ fn trace_return(
 }
 
 /// Trace relative jumps
-fn trace_jump_relative(
+fn trace_jump_relative<IO>(
     condcode: Option<u8>,
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     state: State,
-) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
+) -> sm83::Result<(State, memory::Pointer<PtrVal>)>
+where
+    IO: One,
+{
     let op_ptr = p.contextualize((*p.as_pointer()).overflowing_add(1).0);
     let offset = state
         .get_memory(&op_ptr, mem)
@@ -552,9 +586,9 @@ fn trace_jump_relative(
 
 /// Trace dynamic jumps
 fn trace_jump_dynamic(
-    p: &memory::Pointer<Pointer>,
+    p: &memory::Pointer<PtrVal>,
     state: State,
-) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
+) -> sm83::Result<(State, memory::Pointer<PtrVal>)> {
     match read_value_from_targetpair(&state, 2, false)?.into_concrete() {
         Some(hl) => Ok((state, p.contextualize(hl))),
         _ => Err(analysis::Error::UnconstrainedRegister),
@@ -570,12 +604,15 @@ fn trace_sp_set(mut state: State, trace: &mut Trace) -> State {
 }
 
 /// Trace high memory store
-fn trace_himem_store(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_himem_store<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let op_ptr = p.contextualize(*p.as_pointer() + 1);
     match mem.read_unit(&op_ptr).into_concrete() {
         Some(hi) => {
@@ -592,12 +629,15 @@ fn trace_himem_store(
 }
 
 /// Trace SP adjustment
-fn trace_sp_adjust(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_sp_adjust<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
-) -> State {
+) -> State
+where
+    IO: One,
+{
     let adjust: reg::Symbolic<u16> =
         reg::Symbolic::convert_from(mem.read_unit(&p.contextualize(*p.as_pointer() + 1)));
     let hi_sp: reg::Symbolic<u16> = reg::Symbolic::convert_from(state.get_register(&Register::S));
@@ -617,12 +657,15 @@ fn trace_sp_adjust(
 }
 
 /// Trace high memory load
-fn trace_himem_load(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_himem_load<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let op_ptr = p.contextualize(*p.as_pointer() + 1);
     match mem.read_unit(&op_ptr).into_concrete() {
         Some(hi) => {
@@ -636,12 +679,15 @@ fn trace_himem_load(
 }
 
 /// Trace SP offset calculation
-fn trace_sp_offset_calc(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_sp_offset_calc<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let op_ptr = p.clone() + 1;
     let r8: reg::Symbolic<u16> = reg::Symbolic::convert_from(mem.read_unit(&op_ptr));
     let sign = match (r8 & reg::Symbolic::from(0x0080 as u16)).into_concrete() {
@@ -668,7 +714,7 @@ fn trace_sp_offset_calc(
 
 /// Trace himem indirect store
 fn trace_himem_indir_store(
-    p: &memory::Pointer<Pointer>,
+    p: &memory::Pointer<PtrVal>,
     mut state: State,
     trace: &mut Trace,
 ) -> sm83::Result<State> {
@@ -687,15 +733,18 @@ fn trace_himem_indir_store(
 }
 
 /// Trace writing the accumulator to a memory location
-fn trace_mem_store(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_mem_store<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let op_ptr = p.contextualize(*p.as_pointer() + 1);
     let memloc = mem
-        .read_leword::<Pointer>(&op_ptr)
+        .read_leword::<PtrVal>(&op_ptr)
         .into_concrete()
         .ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
 
@@ -709,12 +758,15 @@ fn trace_mem_store(
 }
 
 /// Trace himem indirect load
-fn trace_himem_indir_load(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_himem_indir_load<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     match state.get_register(&Register::C).into_concrete() {
         Some(c) => {
             let op_ptr = 0xFF00 | c as u16;
@@ -730,15 +782,18 @@ fn trace_himem_indir_load(
 }
 
 /// Trace loading the accumulator from a memory location
-fn trace_mem_load(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_mem_load<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let op_ptr = p.contextualize(*p.as_pointer() + 1);
     let memloc = mem
-        .read_leword::<Pointer>(&op_ptr)
+        .read_leword::<PtrVal>(&op_ptr)
         .into_concrete()
         .ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
 
@@ -751,14 +806,17 @@ fn trace_mem_load(
     Ok(state)
 }
 
-fn trace_regpair_set(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_regpair_set<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     targetpair: u8,
-) -> sm83::Result<State> {
-    let value: reg::Symbolic<Pointer> = mem.read_leword(&(p.clone() + 1));
+) -> sm83::Result<State>
+where
+    IO: One,
+{
+    let value: reg::Symbolic<PtrVal> = mem.read_leword(&(p.clone() + 1));
 
     write_value_to_targetpair(&mut state, trace, targetpair, false, value)?;
 
@@ -777,7 +835,7 @@ fn trace_wide_add(mut state: State, trace: &mut Trace, targetpair: u8) -> sm83::
 }
 
 fn trace_targetmem_store(
-    p: &memory::Pointer<Pointer>,
+    p: &memory::Pointer<PtrVal>,
     mut state: State,
     trace: &mut Trace,
     targetmem: u8,
@@ -823,13 +881,16 @@ fn trace_targetmem_store(
     Ok(state)
 }
 
-fn trace_targetmem_load(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_targetmem_load<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     targetmem: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let ptr = match targetmem {
         2 => {
             let ptr = read_value_from_targetpair(&state, 2, false)?;
@@ -895,13 +956,16 @@ fn trace_targetpair_dec(
     Ok(state)
 }
 
-fn trace_targetreg_inc(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_targetreg_inc<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     targetreg: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let pairval = read_value_from_targetreg(p, mem, &state, targetreg)?;
     let newval = pairval + reg::Symbolic::from(1);
     write_value_to_targetreg(p, mem, &mut state, trace, targetreg, newval)?;
@@ -909,13 +973,16 @@ fn trace_targetreg_inc(
     Ok(state)
 }
 
-fn trace_targetreg_dec(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_targetreg_dec<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     targetreg: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let pairval = read_value_from_targetreg(p, mem, &state, targetreg)?;
     let newval = pairval - reg::Symbolic::from(1);
     write_value_to_targetreg(p, mem, &mut state, trace, targetreg, newval)?;
@@ -923,13 +990,16 @@ fn trace_targetreg_dec(
     Ok(state)
 }
 
-fn trace_targetreg_set(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_targetreg_set<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     targetreg: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let op_ptr = p.clone() + 1;
     let operand = state.get_memory(&op_ptr, mem);
     write_value_to_targetreg(p, mem, &mut state, trace, targetreg, operand)?;
@@ -937,14 +1007,17 @@ fn trace_targetreg_set(
     Ok(state)
 }
 
-fn trace_targetreg_copy(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_targetreg_copy<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     targetreg_src: u8,
     targetreg_dst: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let value = read_value_from_targetreg(p, mem, &state, targetreg_src)?;
     write_value_to_targetreg(p, mem, &mut state, trace, targetreg_dst, value)?;
 
@@ -952,7 +1025,7 @@ fn trace_targetreg_copy(
 }
 
 fn trace_stackpair_push(
-    p: &memory::Pointer<Pointer>,
+    p: &memory::Pointer<PtrVal>,
     mut state: State,
     trace: &mut Trace,
     stackpair: u8,
@@ -963,27 +1036,33 @@ fn trace_stackpair_push(
     Ok(state)
 }
 
-fn trace_stackpair_pop(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_stackpair_pop<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     stackpair: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let value = pop_value_from_sp(p, mem, &mut state, trace)?;
     write_value_to_targetpair(&mut state, trace, stackpair, true, value)?;
 
     Ok(state)
 }
 
-fn trace_aluop_register(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_aluop_register<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     the_aluop: u8,
     targetreg: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let operand = read_value_from_targetreg(p, mem, &state, targetreg)?;
     let (new_accum, new_flags) = aluop(
         the_aluop,
@@ -998,13 +1077,16 @@ fn trace_aluop_register(
     Ok(state)
 }
 
-fn trace_aluop_immediate(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+fn trace_aluop_immediate<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
     the_aluop: u8,
-) -> sm83::Result<State> {
+) -> sm83::Result<State>
+where
+    IO: One,
+{
     let op_ptr = p.clone() + 1;
     let operand = mem.read_unit(&op_ptr);
     let (new_accum, new_flags) = aluop(
@@ -1058,11 +1140,11 @@ fn trace_oldbitops(mut state: State, trace: &mut Trace, op: u8) -> sm83::Result<
 }
 
 fn trace_rst(
-    ptr: &memory::Pointer<Pointer>,
+    ptr: &memory::Pointer<PtrVal>,
     mut state: State,
     trace: &mut Trace,
     op: u8,
-) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
+) -> sm83::Result<(State, memory::Pointer<PtrVal>)> {
     let target = (op & 0x38) as u16;
     let ret_pc = *ptr.as_pointer() + 3;
 
@@ -1086,12 +1168,15 @@ fn trace_rst(
 ///
 ///  * The new state after the execution has been traced
 ///  * The address of the next instruction to execute
-pub fn trace(
-    p: &memory::Pointer<Pointer>,
-    mem: &Bus,
+pub fn trace<IO>(
+    p: &memory::Pointer<PtrVal>,
+    mem: &Bus<IO>,
     state: State,
     trace: &mut Trace,
-) -> sm83::Result<(State, memory::Pointer<Pointer>)> {
+) -> sm83::Result<(State, memory::Pointer<PtrVal>)>
+where
+    IO: One,
+{
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => match mem.read_unit(&(p.clone() + 1)).into_concrete() {
             Some(subop) => {

@@ -7,7 +7,7 @@ use std::io;
 /// Any type which decodes the banked memory region (0x4000) of a Game Boy ROM
 /// image.
 trait Mapper {
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize>;
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize>;
 }
 
 /// Mapper type which does not support banking.
@@ -22,7 +22,7 @@ impl LinearMapper {
 }
 
 impl Mapper for LinearMapper {
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize> {
         Some(((ptr.as_pointer() & 0x3FFF) + 0x4000) as usize)
     }
 }
@@ -36,7 +36,7 @@ impl MBC1Mapper {
 }
 
 impl Mapper for MBC1Mapper {
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(0x00) => None,
             Some(0x20) => None,
@@ -57,7 +57,7 @@ impl MBC2Mapper {
 }
 
 impl Mapper for MBC2Mapper {
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => {
                 Some(((*ptr.as_pointer() as usize) & 0x3FFF) + ((b & 0xF) * 0x4000) as usize)
@@ -76,7 +76,7 @@ impl MBC3Mapper {
 }
 
 impl Mapper for MBC3Mapper {
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None,
@@ -93,7 +93,7 @@ impl MBC5Mapper {
 }
 
 impl Mapper for MBC5Mapper {
-    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::Pointer>) -> Option<usize> {
+    fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None,
@@ -136,7 +136,7 @@ impl<M> memory::Image for GameBoyROMImage<M>
 where
     M: Mapper,
 {
-    type Pointer = sm83::Pointer;
+    type Pointer = sm83::PtrVal;
     type Offset = usize;
     type Data = sm83::Data;
 
@@ -202,13 +202,13 @@ impl Default for PlatformVariant {
     }
 }
 
-pub fn create_context<V>(values: &[V]) -> Option<memory::Pointer<sm83::Pointer>>
+pub fn create_context<V>(values: &[V]) -> Option<memory::Pointer<sm83::PtrVal>>
 where
-    V: Clone + PartialOrd + From<sm83::Pointer>,
-    sm83::Pointer: From<V>,
+    V: Clone + PartialOrd + From<sm83::PtrVal>,
+    sm83::PtrVal: From<V>,
     u64: From<V>,
 {
-    let mut context = memory::Pointer::from(sm83::Pointer::from(values[values.len() - 1].clone()));
+    let mut context = memory::Pointer::from(sm83::PtrVal::from(values[values.len() - 1].clone()));
 
     if values.len() > 1 {
         if values[values.len() - 1] >= V::from(0xE000) {
@@ -248,7 +248,7 @@ where
 /// You may optionally specify a `PlatformVariant` to control which MBC behavior
 /// is used to analyze the image. If unspecified, the ROM header will be used to
 /// determine which MBC was intended to be used alongside this program.
-pub fn construct_platform<F>(file: &mut F) -> io::Result<sm83::Bus>
+pub fn construct_platform<F>(file: &mut F) -> io::Result<sm83::Bus<usize>>
 where
     F: io::Read + io::Seek,
 {
