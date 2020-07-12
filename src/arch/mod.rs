@@ -33,6 +33,10 @@ pub mod aarch32;
 pub mod sm83;
 pub mod w65c816;
 
+mod traits;
+
+pub use traits::Architecture;
+
 use crate::asm;
 use serde::Serialize;
 use std::str;
