@@ -1,6 +1,10 @@
 //! Types used by aarch32
 
+use crate::arch::aarch32::{architectural_ctxt_parse, disassemble, prereq, trace};
+use crate::arch::Architecture;
+use crate::memory::Pointer;
 use crate::{analysis, ast, memory, reg};
+use num::One;
 use std::{fmt, result, str};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -130,7 +134,7 @@ impl str::FromStr for Aarch32Register {
 pub type Value = i32;
 
 /// The type which represents an ARM AArch32 memory address.
-pub type Pointer = u32;
+pub type PtrVal = u32;
 
 /// The type which represents a positive memory offset.
 pub type Offset = u32;
@@ -139,45 +143,93 @@ pub type Offset = u32;
 pub type Data = u8;
 
 /// The compatible contextual pointer type for AArch32
-pub type BusAddress = memory::Pointer<Pointer>;
+pub type BusAddress = memory::Pointer<PtrVal>;
 
 /// The compatible memory model type necessary to analyze AArch32 programs.
-pub type Bus = memory::Memory<Pointer, Data, Offset>;
+pub type Bus<IO> = memory::Memory<PtrVal, Data, Offset, IO>;
 
 /// A trait which defines what assembler literals we need support for.
-pub trait Literal:
-    ast::Literal + From<Value> + From<Offset> + From<u16> + From<BusAddress>
-{
-}
+pub trait Literal: ast::Literal + From<Value> + From<Offset> + From<BusAddress> {}
 
-impl<L> Literal for L where
-    L: ast::Literal + From<Value> + From<Offset> + From<u16> + From<BusAddress>
-{
-}
+impl<L> Literal for L where L: ast::Literal + From<Value> + From<Offset> + From<BusAddress> {}
 
 /// The AST type which represents disassembled code.
 ///
 /// Generic parameter `L` *must* match the Literal trait defined above, which
 /// is an extension of the generic AST literal trait.
-pub type Section<L> = ast::Section<L, Pointer, Data, Offset>;
+pub type Section<L> = ast::Section<L, PtrVal, Data, Offset>;
 
 /// The register state type which represents the execution state of a given
 /// AArch32 program.
-pub type State = reg::State<Aarch32Register, Value, Pointer, Data>;
+pub type State = reg::State<Aarch32Register, Value, PtrVal, Data>;
 
 /// The type which represents an execution prerequisite of a given AArch32
 /// program.
-pub type Prerequisite = analysis::Prerequisite<Aarch32Register, Value, Pointer, Data, Offset>;
+pub type Prerequisite = analysis::Prerequisite<Aarch32Register, Value, PtrVal, Data, Offset>;
 
 /// The trace log type which represents the past execution of a given AArch32
 /// program.
-pub type Trace = analysis::Trace<Aarch32Register, Value, Pointer, Data>;
+pub type Trace = analysis::Trace<Aarch32Register, Value, PtrVal, Data>;
 
 /// The type which represents a single disassembled instruction.
 ///
 /// Generic parameter `L` *must* match the Literal trait defined above, which
 /// is an extension of the generic AST literal trait.
-pub type Disasm<L> = analysis::Disasm<L, Pointer, Offset>;
+pub type Disasm<L> = analysis::Disasm<L, PtrVal, Offset>;
 
 /// The type which represents any analysis result for this architecture.
-pub type Result<T> = analysis::Result<T, Pointer, Offset>;
+pub type Result<T> = analysis::Result<T, PtrVal, Offset>;
+
+pub struct AArch32();
+
+impl Architecture for AArch32 {
+    type Register = Aarch32Register;
+    type Word = Value;
+    type Byte = Data;
+    type PtrVal = PtrVal;
+    type Offset = Offset;
+
+    fn parse_architectural_contexts(
+        contexts: &mut &[&str],
+        ptr: &mut Pointer<Self::PtrVal>,
+    ) -> Option<()> {
+        architectural_ctxt_parse(contexts, ptr)
+    }
+
+    fn disassemble<L, IO>(&self, at: &Pointer<Self::PtrVal>, bus: &Bus<IO>) -> Result<Disasm<L>>
+    where
+        L: Literal
+            + From<Self::Word>
+            + From<Self::Byte>
+            + From<Self::Offset>
+            + From<Pointer<Self::PtrVal>>,
+        IO: One,
+    {
+        disassemble(at, bus)
+    }
+
+    fn prerequisites<IO>(
+        &self,
+        at: &Pointer<Self::PtrVal>,
+        bus: &Bus<IO>,
+        state: &State,
+    ) -> Result<(Vec<Prerequisite>, bool)>
+    where
+        IO: One,
+    {
+        prereq(at, bus, state)
+    }
+
+    fn trace<IO>(
+        &self,
+        at: &Pointer<Self::PtrVal>,
+        bus: &Bus<IO>,
+        state: State,
+        this_trace: &mut Trace,
+    ) -> Result<(State, Pointer<Self::PtrVal>)>
+    where
+        IO: One,
+    {
+        trace(at, bus, state, this_trace)
+    }
+}

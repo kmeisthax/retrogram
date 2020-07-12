@@ -4,7 +4,7 @@ use crate::arch::aarch32;
 use crate::memory::Behavior;
 use std::io;
 
-pub fn construct_platform<F>(file: &mut F) -> io::Result<aarch32::Bus>
+pub fn construct_platform<F>(file: &mut F) -> io::Result<aarch32::Bus<usize>>
 where
     F: io::Read + io::Seek,
 {

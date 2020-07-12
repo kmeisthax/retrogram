@@ -7,11 +7,12 @@ use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32;
 use crate::arch::aarch32::arm::condcode;
 use crate::arch::aarch32::Aarch32Register as A32Reg;
-use crate::arch::aarch32::{Bus, Disasm, Literal, Offset, Pointer, THUMB_STATE};
+use crate::arch::aarch32::{Bus, Disasm, Literal, Offset, PtrVal, THUMB_STATE};
 use crate::ast::{Instruction, Operand, Operand as op};
 use crate::{analysis, ast, memory, reg};
+use num::One;
 
-fn shift_symbol(shift: u32, shift_imm: u32) -> analysis::Result<&'static str, Pointer, Offset> {
+fn shift_symbol(shift: u32, shift_imm: u32) -> analysis::Result<&'static str, PtrVal, Offset> {
     match (shift, shift_imm) {
         (0, _) => Ok("LSL"),
         (1, _) => Ok("LSR"),
@@ -32,7 +33,7 @@ fn shifter_operand<L>(
     rm: A32Reg,
     rs: A32Reg,
     immed_8: u32,
-) -> analysis::Result<Vec<Operand<L>>, Pointer, Offset>
+) -> analysis::Result<Vec<Operand<L>>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -70,7 +71,7 @@ where
 
 /// Decode a 5-bit opcode field as if it was for a data processing instruction
 fn dpinst<L>(
-    p: &memory::Pointer<Pointer>,
+    p: &memory::Pointer<PtrVal>,
     cond: u32,
     immediate_bit: u32,
     opcode: u32,
@@ -82,7 +83,7 @@ fn dpinst<L>(
     rm: A32Reg,
     rs: A32Reg,
     immed_8: u32,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -155,7 +156,7 @@ where
 }
 
 fn ldst<L>(
-    p: &memory::Pointer<Pointer>,
+    p: &memory::Pointer<PtrVal>,
     cond: u32,
     immediate_bit: u32,
     preindex: u32,
@@ -169,7 +170,7 @@ fn ldst<L>(
     shift: u32,
     rm: A32Reg,
     address_operand: u32,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -296,7 +297,7 @@ where
 /// Decode an instruction in the LDM/STM instruction space.
 #[allow(clippy::many_single_char_names)]
 fn ldmstm<L>(
-    p: &memory::Pointer<Pointer>,
+    p: &memory::Pointer<PtrVal>,
     cond: u32,
     q: u32,
     u: u32,
@@ -305,7 +306,7 @@ fn ldmstm<L>(
     load: u32,
     rn: A32Reg,
     reglist: u32,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -366,11 +367,11 @@ where
 }
 
 fn bl<L>(
-    pc: &memory::Pointer<Pointer>,
+    pc: &memory::Pointer<PtrVal>,
     cond: u32,
     l: u32,
     offset: u32,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -418,10 +419,10 @@ where
 }
 
 fn swi<L>(
-    pc: &memory::Pointer<Pointer>,
+    pc: &memory::Pointer<PtrVal>,
     cond: u32,
     offset: u32,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -446,14 +447,14 @@ where
 /// registers in a different order from most instructions. Specifically, `rn`
 /// and `rd` are swapped.
 fn mul<L>(
-    p: &memory::Pointer<Pointer>,
+    p: &memory::Pointer<PtrVal>,
     cond: u32,
     opcode: u32,
     rd: A32Reg,
     rn: A32Reg,
     rs: A32Reg,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -613,7 +614,7 @@ fn msr<L>(
     shift_imm: u32,
     data_immed: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -639,7 +640,7 @@ where
     ))
 }
 
-fn mrs<L>(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm<L>, Pointer, Offset>
+fn mrs<L>(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -656,10 +657,10 @@ where
 }
 
 fn bx<L>(
-    p: &memory::Pointer<Pointer>,
+    p: &memory::Pointer<PtrVal>,
     cond: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -681,7 +682,7 @@ where
     ))
 }
 
-fn bxj<L>(cond: u32, rm: A32Reg) -> analysis::Result<Disasm<L>, Pointer, Offset>
+fn bxj<L>(cond: u32, rm: A32Reg) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -707,7 +708,7 @@ where
     ))
 }
 
-fn clz<L>(cond: u32, rd: A32Reg, rm: A32Reg) -> analysis::Result<Disasm<L>, Pointer, Offset>
+fn clz<L>(cond: u32, rd: A32Reg, rm: A32Reg) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -723,10 +724,10 @@ where
 }
 
 fn blx_register<L>(
-    p: &memory::Pointer<Pointer>,
+    p: &memory::Pointer<PtrVal>,
     cond: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -749,10 +750,10 @@ where
 }
 
 fn blx_immediate<L>(
-    p: &memory::Pointer<Pointer>,
+    p: &memory::Pointer<PtrVal>,
     h: u32,
     offset: u32,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -776,7 +777,7 @@ where
     ))
 }
 
-fn bkpt<L>(instr: u32) -> analysis::Result<Disasm<L>, Pointer, Offset>
+fn bkpt<L>(instr: u32) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -800,7 +801,7 @@ fn cdp<L>(
     cp_num: u32,
     opcode_2: u32,
     crm: u32,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -836,7 +837,7 @@ fn crt<L>(
     cp_num: u32,
     opcode_2: u32,
     crm: u32,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -874,7 +875,7 @@ fn crt_double<L>(
     cp_num: u32,
     opcode: u32,
     crm: u32,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -900,7 +901,7 @@ where
     ))
 }
 
-fn cps<L>(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm<L>, Pointer, Offset>
+fn cps<L>(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -978,7 +979,7 @@ fn ldstmisc<L>(
     rs_val: u32,
     shiftop: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -1128,7 +1129,7 @@ where
 
 #[allow(clippy::too_many_arguments)]
 fn ldst_coproc<L>(
-    _p: &memory::Pointer<Pointer>,
+    _p: &memory::Pointer<PtrVal>,
     cond: u32,
     preindex: u32,
     offsetadd: u32,
@@ -1139,7 +1140,7 @@ fn ldst_coproc<L>(
     crd: u32,
     cp_num: u32,
     uoffset: u32,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -1209,7 +1210,7 @@ pub fn ldstrex<L>(
     rn: A32Reg,
     rd: A32Reg,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -1249,7 +1250,7 @@ pub fn pkh<L>(
     shift_imm: u32,
     d: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -1285,7 +1286,7 @@ pub fn pld<L>(
     shift: u32,
     rm: A32Reg,
     address_operand: u32,
-) -> analysis::Result<Disasm<L>, Pointer, Offset>
+) -> analysis::Result<Disasm<L>, PtrVal, Offset>
 where
     L: Literal,
 {
@@ -1346,9 +1347,10 @@ where
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
 #[allow(clippy::many_single_char_names)]
-pub fn disassemble<L>(p: &memory::Pointer<Pointer>, mem: &Bus) -> aarch32::Result<Disasm<L>>
+pub fn disassemble<L, IO>(p: &memory::Pointer<PtrVal>, mem: &Bus<IO>) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
+    IO: One,
 {
     let instr: reg::Symbolic<u32> = mem.read_leword(&p);
 
