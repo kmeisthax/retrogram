@@ -149,7 +149,8 @@ pub type Disasm<L> = analysis::Disasm<L, PtrVal, Offset>;
 
 pub type Result<T> = analysis::Result<T, PtrVal, Offset>;
 
-/// Architectural type for
+/// Architectural type for SM83
+#[derive(Copy, Clone)]
 pub struct SM83();
 
 impl Architecture for SM83 {

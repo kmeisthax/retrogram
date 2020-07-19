@@ -1,42 +1,36 @@
 //! CLI command: scan
 
-use crate::analysis::{
-    analyze_trace_log, trace_until_fork, Disassembler, Fork, Mappable, PrerequisiteAnalysis, Trace,
-    Tracer,
-};
-use crate::cli::Nameable;
+use crate::analysis::{analyze_trace_log, trace_until_fork, Fork, Trace};
+use crate::arch::{Architecture, CompatibleLiteral};
+use crate::ast::Instruction;
 use crate::database::Database;
-use crate::maths::{Numerical, Popcount};
-use crate::memory::{Offset, Pointer, PtrNum};
-use crate::reg::{Bitwise, State, Symbolic};
-use crate::{analysis, ast, cli, database, input, maths, memory, project, reg};
+use crate::memory::{Offset, Pointer};
+use crate::reg::Bitwise;
+use crate::{analysis, ast, database, input, maths, memory, project, reg};
 use clap::ArgMatches;
 use num_traits::{One, Zero};
 use std::collections::{BinaryHeap, HashSet};
-use std::convert::TryInto;
-use std::hash::Hash;
+use std::convert::{TryFrom, TryInto};
 use std::{fmt, fs, io};
 
 /// Scan a specific starting PC and add the results of the analysis to the
 /// database.
-fn scan_pc_for_arch<L, P, MV, S, IO, DIS>(
-    db: &mut database::Database<P, S>,
-    start_pc: &memory::Pointer<P>,
-    disassembler: &DIS,
-    bus: &memory::Memory<P, MV, S, IO>,
+fn scan_pc_for_arch<L, AR, IO>(
+    db: &mut database::Database<AR::PtrVal, AR::Offset>,
+    start_pc: &memory::Pointer<AR::PtrVal>,
+    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    arch: AR,
 ) -> io::Result<()>
 where
-    L: ast::Literal<PtrVal = P>,
-    P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable,
-    S: memory::Offset<P> + cli::Nameable + Zero + One,
+    L: CompatibleLiteral<AR>,
+    AR: Architecture,
+    AR::Offset: Offset<AR::PtrVal>, //I shouldn't have to do this.
     IO: One,
-    MV: reg::Bitwise + fmt::UpperHex,
-    reg::Symbolic<MV>: Default,
+    reg::Symbolic<AR::Byte>: Default,
     ast::Instruction<L>: Clone,
-    DIS: analysis::Disassembler<L, P, MV, S, IO>,
 {
     let (orig_asm, xrefs, pc_offset, blocks, terminating_error) =
-        analysis::disassemble_block(start_pc.clone(), bus, disassembler);
+        analysis::disassemble_block::<L, IO, AR>(start_pc.clone(), bus, arch);
 
     if let Some(err) = terminating_error {
         match (pc_offset, err) {
@@ -55,7 +49,7 @@ where
                         values = format!("{}??", &values);
                     }
 
-                    iv_offset = iv_offset + S::one();
+                    iv_offset = iv_offset + AR::Offset::one();
                 }
 
                 return Err(io::Error::new(io::ErrorKind::Other, format!("Decoding error at {:X} (from {:X}) on value {}", bad_pc, start_pc, values)));
@@ -75,12 +69,12 @@ where
                         values = format!("??{}", &values);
                     }
 
-                    iv_offset = iv_offset + S::one();
+                    iv_offset = iv_offset + AR::Offset::one();
                 }
 
                 return Err(io::Error::new(io::ErrorKind::Other, format!("Decoding error at {:X} (from {:X}) on value {}", bad_pc, start_pc, values)));
             },
-            (Some(ref s), ref e) if *s == S::zero() => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("There is no valid code at {:X} due to {}", start_pc, e))),
+            (Some(ref s), ref e) if *s == AR::Offset::zero() => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("There is no valid code at {:X} due to {}", start_pc, e))),
             (None, _) => return Err(io::Error::new(io::ErrorKind::Other, format!("Disassembly size cannot be expressed in current type system, caused by analysis of {:X}", start_pc))),
             _ => eprintln!("Improperly terminated block discovered in {:X}", start_pc)
         };
@@ -97,16 +91,16 @@ where
             }
 
             if let Some(id) = db.find_block_membership(target) {
-                let mut xref_offset = S::zero();
+                let mut xref_offset = AR::Offset::zero();
 
                 if let Some(block) = db.block(id) {
-                    xref_offset = S::try_from(
+                    xref_offset = AR::Offset::try_from(
                         target.as_pointer().clone() - block.as_start().as_pointer().clone(),
                     )
-                    .unwrap_or_else(|_| S::zero());
+                    .unwrap_or_else(|_| AR::Offset::zero());
                 }
 
-                if xref_offset > S::zero() {
+                if xref_offset > AR::Offset::zero() {
                     db.split_block(id, xref_offset);
                 }
             }
@@ -128,20 +122,17 @@ where
 ///
 /// This function yields false if it's execution yielded no additional code. It
 /// will also yield the addresses of any code that threw errors when analyzed.
-fn exhaust_all_static_scans<L, P, MV, S, IO, DIS>(
-    db: &mut Database<P, S>,
-    bus: &memory::Memory<P, MV, S, IO>,
-    disassembler: &DIS,
-) -> (bool, HashSet<Pointer<P>>)
+fn exhaust_all_static_scans<L, AR, IO>(
+    db: &mut Database<AR::PtrVal, AR::Offset>,
+    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    arch: AR,
+) -> (bool, HashSet<Pointer<AR::PtrVal>>)
 where
-    L: ast::Literal<PtrVal = P>,
-    P: PtrNum<S> + Mappable + Nameable,
-    S: Offset<P> + Nameable + Zero + One,
+    L: CompatibleLiteral<AR>,
+    AR: Architecture,
     IO: One,
-    MV: reg::Bitwise + fmt::UpperHex,
-    reg::Symbolic<MV>: Default,
+    AR::Byte: reg::Bitwise + fmt::UpperHex,
     ast::Instruction<L>: Clone,
-    DIS: analysis::Disassembler<L, P, MV, S, IO>,
 {
     let mut failed_analysis = HashSet::new();
     let mut any_analysis_done = false;
@@ -160,7 +151,7 @@ where
 
             if let Some(target_pc) = target_pc {
                 if !failed_analysis.contains(&target_pc) {
-                    match scan_pc_for_arch(db, &target_pc, &disassembler, bus) {
+                    match scan_pc_for_arch(db, &target_pc, bus, arch) {
                         Ok(_) => {
                             eprintln!("Found additional code at {:X}", target_pc);
                             more_analysis_done = true;
@@ -190,28 +181,18 @@ where
 /// This function yields true if any dynamic analysis was done. You will need
 /// to check for any new unanalyzed static references after the tracing has
 /// completed.
-fn exhaust_all_dynamic_scans<L, RK, I, P, MV, S, IO, PREREQ, TRACER, DISASM>(
-    db: &mut Database<P, S>,
-    bus: &memory::Memory<P, MV, S, IO>,
-    prereq: &PREREQ,
-    tracer: &TRACER,
-    disasm: &DISASM,
-) -> analysis::Result<bool, P, S>
+fn exhaust_all_dynamic_scans<L, AR, IO>(
+    db: &mut Database<AR::PtrVal, AR::Offset>,
+    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    arch: AR,
+) -> analysis::Result<bool, AR::PtrVal, AR::Offset>
 where
-    L: ast::Literal<PtrVal = P>,
-    RK: Mappable,
-    I: Bitwise + Numerical + TryInto<u64> + Popcount<Output = I>,
-    P: Mappable + Nameable + PtrNum<S> + Numerical,
-    MV: Bitwise + Numerical + TryInto<u64> + Popcount<Output = MV>,
-    S: Offset<P> + TryInto<usize>,
+    L: CompatibleLiteral<AR>,
+    AR: Architecture,
+    AR::Word: TryInto<u64>,
+    AR::Byte: TryInto<u64>,
+    AR::Offset: TryInto<usize>,
     IO: One,
-    Symbolic<I>: Bitwise,
-    Symbolic<MV>: Bitwise,
-    Fork<RK, I, P, MV>: Ord,
-    State<RK, I, P, MV>: Clone + Eq + Hash,
-    PREREQ: PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
-    TRACER: Tracer<RK, I, P, MV, S, IO>,
-    DISASM: Disassembler<L, P, MV, S, IO>,
 {
     let mut did_trace = false;
 
@@ -236,11 +217,11 @@ where
             }
 
             let (new_pc, trace, post_state, prerequisites) =
-                trace_until_fork(&pc, trace, bus, &state, prereq, tracer)?;
+                trace_until_fork(&pc, trace, bus, &state, arch)?;
 
             did_trace = true;
 
-            let traced_blocks = analyze_trace_log(&trace, bus, db, disasm)?;
+            let traced_blocks = analyze_trace_log::<L, AR, IO>(&trace, bus, db, arch)?;
 
             db.insert_trace_counts(traced_blocks, 1);
 
@@ -269,44 +250,25 @@ where
 ///
 /// TODO: The current set of lifetime bounds preclude the use of zero-copy
 /// deserialization. We should figure out a way around that.
-fn scan_for_arch<L, RK, I, P, MV, S, IO, DIS, APARSE, PREREQ, TRACER>(
+fn scan_for_arch<L, AR, IO, FMTI>(
     prog: &project::Program,
     start_spec: &str,
-    disassembler: DIS,
-    bus: &memory::Memory<P, MV, S, IO>,
-    architectural_ctxt_parse: APARSE,
-    prereq: PREREQ,
-    tracer: TRACER,
+    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    arch: AR,
+    _fmt_i: FMTI, // This shouldn't be necessary...
 ) -> io::Result<()>
 where
-    L: ast::Literal<PtrVal = P>,
-    RK: Mappable,
-    I: Bitwise + Numerical + TryInto<u64> + Popcount<Output = I>,
-    for<'dw> P: memory::PtrNum<S>
-        + analysis::Mappable
-        + cli::Nameable
-        + serde::Deserialize<'dw>
-        + serde::Serialize
-        + maths::FromStrRadix
-        + Numerical,
-    MV: Bitwise + Numerical + TryInto<u64> + Popcount<Output = MV> + fmt::UpperHex,
-    for<'dw> S: memory::Offset<P>
-        + cli::Nameable
-        + serde::Deserialize<'dw>
-        + serde::Serialize
-        + One
-        + TryInto<usize>,
+    L: CompatibleLiteral<AR>,
+    AR: Architecture,
+    AR::Word: TryInto<u64>,
+    for<'dw> AR::PtrVal: serde::Deserialize<'dw> + serde::Serialize + maths::FromStrRadix,
+    AR::Byte: TryInto<u64>,
+    for<'dw> AR::Offset: serde::Deserialize<'dw> + serde::Serialize + TryInto<usize>,
     IO: One,
-    reg::Symbolic<I>: Bitwise,
-    reg::Symbolic<MV>: Default + Bitwise,
-    ast::Instruction<L>: Clone,
-    Fork<RK, I, P, MV>: Ord,
-    State<RK, I, P, MV>: Clone + Eq + Hash,
-    DIS: analysis::Disassembler<L, P, MV, S, IO>,
-    PREREQ: PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
-    TRACER: Tracer<RK, I, P, MV, S, IO>,
-    APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()>,
-    analysis::Error<P, S>: Into<io::Error>,
+    reg::Symbolic<AR::Word>: Bitwise,
+    reg::Symbolic<AR::Byte>: Default + Bitwise,
+    analysis::Error<AR::PtrVal, AR::Offset>: Into<io::Error>,
+    FMTI: Fn(&Instruction<L>) -> String,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
@@ -320,10 +282,10 @@ where
     let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
     db.update_indexes();
 
-    let start_pc = input::parse_ptr(start_spec, db, bus, architectural_ctxt_parse)
+    let start_pc = input::parse_ptr(start_spec, db, bus, arch)
         .expect("Must specify a valid address to analyze");
     eprintln!("Starting scan from {:X}", start_pc);
-    match scan_pc_for_arch(&mut db, &start_pc, &disassembler, bus) {
+    match scan_pc_for_arch::<L, AR, IO>(&mut db, &start_pc, bus, arch) {
         Ok(_) => {}
         Err(e) => {
             eprintln!("Initial scan failed due to {}", e);
@@ -333,14 +295,13 @@ where
     };
 
     loop {
-        let (did_find_code, _) = exhaust_all_static_scans(&mut db, bus, &disassembler);
+        let (did_find_code, _) = exhaust_all_static_scans::<L, AR, IO>(&mut db, bus, arch);
         if !did_find_code {
             break;
         }
 
-        let did_trace_branches =
-            exhaust_all_dynamic_scans(&mut db, bus, &prereq, &tracer, &disassembler)
-                .map_err(Into::<io::Error>::into)?;
+        let did_trace_branches = exhaust_all_dynamic_scans::<L, AR, IO>(&mut db, bus, arch)
+            .map_err(Into::<io::Error>::into)?;
         if !did_trace_branches {
             break;
         }
@@ -364,13 +325,7 @@ pub fn scan<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus,
-                                    dis,
-                                    _fmt_s,
-                                    _fmt_i,
-                                    aparse,
-                                    prereq,
-                                    tracer| {
-        scan_for_arch(prog, start_spec, dis, bus, aparse, prereq, tracer)
+    with_architecture!(prog, file, |bus, _fmt_s, fmt_i, arch| {
+        scan_for_arch(prog, start_spec, bus, arch, fmt_i)
     })
 }

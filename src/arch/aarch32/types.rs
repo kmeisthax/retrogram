@@ -180,6 +180,8 @@ pub type Disasm<L> = analysis::Disasm<L, PtrVal, Offset>;
 /// The type which represents any analysis result for this architecture.
 pub type Result<T> = analysis::Result<T, PtrVal, Offset>;
 
+/// Architectural type for AArch32
+#[derive(Copy, Clone)]
 pub struct AArch32();
 
 impl Architecture for AArch32 {

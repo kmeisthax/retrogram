@@ -1,6 +1,8 @@
 //! Input utility functions
 
-use crate::{analysis, ast, cli, database, maths, memory};
+use crate::arch::Architecture;
+use crate::maths::FromStrRadix;
+use crate::{ast, database, maths, memory};
 use std::str::FromStr;
 
 /// Parse any pointer specification entered in by a user.
@@ -28,16 +30,15 @@ use std::str::FromStr;
 ///
 /// Architectures are allowed to provide their own context parse function which
 /// can consume contexts from the list and assign contexts to the pointer.
-pub fn parse_ptr<P, MV, S, IO, APARSE>(
+pub fn parse_ptr<AR, IO>(
     text_str: &str,
-    db: &database::Database<P, S>,
-    bus: &memory::Memory<P, MV, S, IO>,
-    architecture_parse: APARSE,
-) -> Option<memory::Pointer<P>>
+    db: &database::Database<AR::PtrVal, AR::Offset>,
+    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    _arch: AR,
+) -> Option<memory::Pointer<AR::PtrVal>>
 where
-    P: memory::PtrNum<S> + analysis::Mappable + cli::Nameable + maths::FromStrRadix,
-    S: memory::Offset<P>,
-    APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()>,
+    AR: Architecture,
+    AR::PtrVal: maths::FromStrRadix,
 {
     if let Ok(text_lbl) = ast::Label::from_str(text_str) {
         if let Some(sym_id) = db.label_symbol(&text_lbl) {
@@ -66,11 +67,11 @@ where
     }
 
     if let Some(pival) = v.last() {
-        let pval = P::from_str_radix(pival, 16).ok()?;
+        let pval = AR::PtrVal::from_str_radix(pival, 16).ok()?;
         let mut ptr = memory::Pointer::from(pval);
         let mut context_slice = &v[..v.len() - 1];
 
-        architecture_parse(&mut context_slice, &mut ptr)?;
+        AR::parse_architectural_contexts(&mut context_slice, &mut ptr)?;
 
         Some(bus.insert_user_context(ptr, context_slice))
     } else {

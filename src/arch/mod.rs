@@ -36,6 +36,7 @@ pub mod w65c816;
 mod traits;
 
 pub use traits::Architecture;
+pub use traits::CompatibleLiteral;
 
 use crate::asm;
 use serde::Serialize;

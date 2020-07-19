@@ -1,17 +1,16 @@
 //! Single-run tracing command
 
-use crate::analysis::{
-    analyze_trace_log, trace_until_fork, Disassembler, Mappable, Prerequisite, Trace, TraceEvent,
-};
-use crate::ast::{Instruction, Literal};
-use crate::cli::Nameable;
+use crate::analysis::{analyze_trace_log, trace_until_fork, Prerequisite, Trace, TraceEvent};
+use crate::arch::{Architecture, CompatibleLiteral};
+use crate::ast::Instruction;
 use crate::input::parse_ptr;
-use crate::maths::FromStrRadix;
+use crate::maths::{FromStrRadix, Numerical};
 use crate::memory::{Memory, Pointer};
 use crate::project;
 use crate::reg::{State, Symbolic};
 use clap::{ArgMatches, Values};
-use num_traits::Num;
+use num::One;
+use serde::Deserialize;
 use std::cmp::max;
 use std::collections::HashSet;
 use std::fmt::{Display, UpperHex};
@@ -49,7 +48,7 @@ impl NextAction {
 fn reg_parse<RK, RV, P, MV>(state: &mut State<RK, RV, P, MV>, regs: Values<'_>) -> io::Result<()>
 where
     RK: Eq + Hash + FromStr,
-    RV: Num,
+    RV: Numerical + FromStrRadix,
     Symbolic<RV>: From<RV>,
     P: Eq + Hash,
 {
@@ -77,20 +76,16 @@ where
 }
 
 /// Print a tracelog out to the console as a table.
-fn print_tracelog<L, RK, I, P, MV, S, IO, DIS, FMTI>(
-    trace: Trace<RK, I, P, MV>,
-    bus: &Memory<P, MV, S, IO>,
-    dis: DIS,
+fn print_tracelog<L, AR, IO, FMTI>(
+    trace: Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+    bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    arch: AR,
     fmt_i: FMTI,
 ) -> io::Result<()>
 where
-    L: Literal<PtrVal = P>,
-    RK: Display,
-    I: Nameable,
-    Symbolic<I>: UpperHex,
-    P: Mappable + Nameable,
-    Symbolic<MV>: UpperHex,
-    DIS: Disassembler<L, P, MV, S, IO>,
+    L: CompatibleLiteral<AR>,
+    AR: Architecture,
+    IO: One,
     FMTI: Fn(&Instruction<L>) -> String,
 {
     let mut pc_list = vec![];
@@ -100,7 +95,7 @@ where
     for event in trace.iter() {
         match event {
             TraceEvent::Execute(pc) => {
-                let disasm = dis(pc, bus).map_err(Into::<io::Error>::into)?;
+                let disasm = arch.disassemble(pc, bus).map_err(Into::<io::Error>::into)?;
 
                 pc_list.push(format!("${:X}", pc));
                 instr_list.push(fmt_i(disasm.as_instr()).to_string());
@@ -346,6 +341,107 @@ where
     Ok(())
 }
 
+fn trace_for_arch<'a, L, AR, IO, FMTI>(
+    prog: &project::Program,
+    argv: &ArgMatches<'a>,
+    start_spec: &str,
+    bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    fmt_i: FMTI,
+    arch: AR,
+) -> io::Result<()>
+where
+    AR: Architecture,
+    AR::Word: FromStrRadix,
+    AR::Byte: FromStrRadix,
+    for<'dw> AR::PtrVal: Deserialize<'dw> + FromStrRadix,
+    for<'dw> AR::Offset: Deserialize<'dw>,
+    L: CompatibleLiteral<AR>,
+    IO: One,
+    FMTI: Copy + Fn(&Instruction<L>) -> String,
+{
+    let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
+        Ok(pjdb) => pjdb,
+        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+            eprintln!("Creating new database for project");
+            project::ProjectDatabase::new()
+        }
+        Err(e) => return Err(e),
+    };
+
+    let db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "You did not specify a name for the program to disassemble.",
+        )
+    })?);
+    db.update_indexes();
+
+    let mut pc = parse_ptr(start_spec, db, bus, arch).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Must specify a valid address to analyze",
+        )
+    })?;
+
+    let mut action = NextAction::Trace;
+    let mut state = State::default();
+    let mut missing = Vec::new();
+    let mut traced_blocks = HashSet::new();
+
+    if let Some(regs) = argv.values_of("register") {
+        reg_parse(&mut state, regs)?;
+    }
+
+    loop {
+        match action {
+            NextAction::Trace => {
+                let (halt_pc, trace, new_state, new_missing) =
+                    trace_until_fork(&pc, Trace::begin_at(pc.clone()), bus, &state, arch)
+                        .map_err(Into::<io::Error>::into)?;
+
+                traced_blocks = traced_blocks
+                    .union(
+                        &analyze_trace_log::<L, AR, IO>(&trace, bus, db, arch)
+                            .map_err(Into::<io::Error>::into)?,
+                    )
+                    .copied()
+                    .collect();
+
+                state = new_state;
+                missing = new_missing;
+                pc = halt_pc.clone();
+
+                print_tracelog(trace, bus, arch, fmt_i)?;
+
+                print_prereqs(halt_pc, &missing);
+            }
+            NextAction::Ask => {
+                action = get_next_action()?;
+                continue;
+            }
+            NextAction::SetRegister => set_register(&mut state, &missing)?,
+            NextAction::SetMemory => set_memory(&mut state, &missing)?,
+            NextAction::Quit => break,
+            NextAction::Help => {
+                println!("All of the listed prerequisites must be resolved before continuing.");
+                println!("Use the following commands to do so:");
+                println!(" R = Resolve a register to a concrete value");
+                println!(" M = Resolve memory to a concrete value");
+                println!(" T = Continue trace (if all values have been resolved)");
+                println!(" ? = Print help screen");
+                println!(" Q = End tracing");
+            }
+            NextAction::Invalid => println!("Please type a valid command."),
+        }
+
+        action = action.step();
+    }
+
+    db.insert_trace_counts(traced_blocks, 1);
+
+    Ok(())
+}
+
 /// Trace execution of a particular program and display the results to the
 /// user.
 ///
@@ -361,99 +457,7 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus,
-                                    dis,
-                                    _fmt_s,
-                                    fmt_i,
-                                    aparse,
-                                    prereq,
-                                    tracer| {
-        let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
-            Ok(pjdb) => pjdb,
-            Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-                eprintln!("Creating new database for project");
-                project::ProjectDatabase::new()
-            }
-            Err(e) => return Err(e),
-        };
-
-        let db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "You did not specify a name for the program to disassemble.",
-            )
-        })?);
-        db.update_indexes();
-
-        let mut pc = parse_ptr(start_spec, db, bus, aparse).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Must specify a valid address to analyze",
-            )
-        })?;
-
-        let mut action = NextAction::Trace;
-        let mut state = State::default();
-        let mut missing = Vec::new();
-        let mut traced_blocks = HashSet::new();
-
-        if let Some(regs) = argv.values_of("register") {
-            reg_parse(&mut state, regs)?;
-        }
-
-        loop {
-            match action {
-                NextAction::Trace => {
-                    let (halt_pc, trace, new_state, new_missing) = trace_until_fork(
-                        &pc,
-                        Trace::begin_at(pc.clone()),
-                        bus,
-                        &state,
-                        prereq,
-                        tracer,
-                    )
-                    .map_err(Into::<io::Error>::into)?;
-
-                    traced_blocks = traced_blocks
-                        .union(
-                            &analyze_trace_log(&trace, bus, db, dis)
-                                .map_err(Into::<io::Error>::into)?,
-                        )
-                        .copied()
-                        .collect();
-
-                    state = new_state;
-                    missing = new_missing;
-                    pc = halt_pc.clone();
-
-                    print_tracelog(trace, bus, dis, fmt_i)?;
-
-                    print_prereqs(halt_pc, &missing);
-                }
-                NextAction::Ask => {
-                    action = get_next_action()?;
-                    continue;
-                }
-                NextAction::SetRegister => set_register(&mut state, &missing)?,
-                NextAction::SetMemory => set_memory(&mut state, &missing)?,
-                NextAction::Quit => break,
-                NextAction::Help => {
-                    println!("All of the listed prerequisites must be resolved before continuing.");
-                    println!("Use the following commands to do so:");
-                    println!(" R = Resolve a register to a concrete value");
-                    println!(" M = Resolve memory to a concrete value");
-                    println!(" T = Continue trace (if all values have been resolved)");
-                    println!(" ? = Print help screen");
-                    println!(" Q = End tracing");
-                }
-                NextAction::Invalid => println!("Please type a valid command."),
-            }
-
-            action = action.step();
-        }
-
-        db.insert_trace_counts(traced_blocks, 1);
-
-        Ok(())
+    with_architecture!(prog, file, |bus, _fmt_s, fmt_i, arch| {
+        trace_for_arch(prog, argv, start_spec, bus, fmt_i, arch)
     })
 }

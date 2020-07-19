@@ -1,16 +1,12 @@
 //! Dynamic analysis passes
 
-use crate::analysis::{
-    Disasm, Disassembler, Mappable, Prerequisite, PrerequisiteAnalysis, Reference, ReferenceKind,
-    Trace, TraceEvent, Tracer,
-};
-use crate::ast::Literal;
-use crate::cli::Nameable;
+use crate::analysis::{Disasm, Prerequisite, Reference, ReferenceKind, Trace, TraceEvent};
+use crate::arch::{Architecture, CompatibleLiteral};
 use crate::database::Database;
-use crate::memory::{Memory, Offset, Pointer, PtrNum};
-use crate::reg::{Bitwise, Symbolic};
+use crate::memory::{Memory, Pointer};
+use crate::reg::State;
 use crate::{analysis, memory, reg};
-use num_traits::One;
+use num::{One, Zero};
 use std::collections::HashSet;
 use std::convert::TryInto;
 
@@ -31,33 +27,23 @@ type TraceResult<RK, I, P, MV, S> = analysis::Result<
 /// This function returns the precondition state and a pointer to the first
 /// instruction which requires parallel tracing and cannot be executed
 /// symbolically.
-pub fn trace_until_fork<RK, I, P, MV, S, IO, PREREQ, TRACER>(
-    pc: &memory::Pointer<P>,
-    mut trace: analysis::Trace<RK, I, P, MV>,
-    bus: &memory::Memory<P, MV, S, IO>,
-    pre_state: &reg::State<RK, I, P, MV>,
-    prereq: PREREQ,
-    tracer: TRACER,
-) -> TraceResult<RK, I, P, MV, S>
+pub fn trace_until_fork<AR, IO>(
+    pc: &Pointer<AR::PtrVal>,
+    mut trace: Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+    bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    pre_state: &State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+    arch: AR,
+) -> TraceResult<AR::Register, AR::Word, AR::PtrVal, AR::Byte, AR::Offset>
 where
-    RK: Mappable,
-    P: Mappable + PtrNum<S>,
-    S: Offset<P> + TryInto<usize>,
-    I: Bitwise,
-    MV: Bitwise,
+    AR: Architecture,
+    AR::Offset: TryInto<usize>, //This shouldn't be necessary.
     IO: One,
-    memory::Pointer<P>: Clone,
-    reg::State<RK, I, P, MV>: Clone,
-    Symbolic<I>: Clone + Default,
-    Symbolic<MV>: Clone + Default,
-    PREREQ: PrerequisiteAnalysis<RK, I, P, MV, S, IO>,
-    TRACER: Tracer<RK, I, P, MV, S, IO>,
 {
     let mut new_pc = pc.clone();
     let mut new_state = pre_state.clone();
 
     loop {
-        let (prerequisites, _is_complete) = prereq(&new_pc, bus, &new_state)?;
+        let (prerequisites, _is_complete) = arch.prerequisites(&new_pc, bus, &new_state)?;
         let mut missing = vec![];
 
         for pr in prerequisites {
@@ -71,17 +57,14 @@ where
                     }
                 }
                 Prerequisite::Memory { ptr, length, mask } => {
-                    let mut i = S::zero();
+                    let mut i = AR::Offset::zero();
 
                     while i < length.clone() {
-                        let mask = mask
-                            .get(
-                                i.clone()
-                                    .try_into()
-                                    .map_err(|_| analysis::Error::BlockSizeOverflow)?,
-                            )
-                            .cloned()
-                            .unwrap_or_else(MV::zero);
+                        let index: usize = i
+                            .clone()
+                            .try_into()
+                            .map_err(|_| analysis::Error::BlockSizeOverflow)?;
+                        let mask = mask.get(index).cloned().unwrap_or_else(AR::Byte::zero);
 
                         if !new_state
                             .get_memory(&(ptr.clone() + length.clone()), bus)
@@ -91,7 +74,7 @@ where
                             break;
                         }
 
-                        i = i + S::one();
+                        i = i + AR::Offset::one();
                     }
                 }
             }
@@ -101,7 +84,7 @@ where
             return Ok((new_pc, trace, new_state, missing));
         }
 
-        let (next_state, next_pc) = tracer(&new_pc, bus, new_state, &mut trace)?;
+        let (next_state, next_pc) = arch.trace(&new_pc, bus, new_state, &mut trace)?;
 
         new_state = next_state;
         trace.traced_to(next_pc.clone());
@@ -115,20 +98,19 @@ where
 /// This function returns a set of blocks that the trace has passed through. At
 /// the end of trace execution, all of these sets must be merged, and any block
 /// within them must have their trace couts incremented by one.
-pub fn analyze_trace_log<L, RK, I, P, MV, S, IO, DISASM>(
-    trace: &Trace<RK, I, P, MV>,
-    bus: &Memory<P, MV, S, IO>,
-    database: &mut Database<P, S>,
-    disasm: DISASM,
-) -> analysis::Result<HashSet<usize>, P, S>
+pub fn analyze_trace_log<L, AR, IO>(
+    trace: &Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+    bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    database: &mut Database<AR::PtrVal, AR::Offset>,
+    arch: AR,
+) -> analysis::Result<HashSet<usize>, AR::PtrVal, AR::Offset>
 where
-    L: Literal,
-    P: Mappable + Nameable + PtrNum<S>,
-    S: Offset<P>,
-    DISASM: Disassembler<L, P, MV, S, IO>,
+    L: CompatibleLiteral<AR>,
+    AR: Architecture,
+    IO: One,
 {
-    let mut last_pc: Option<Pointer<P>> = None;
-    let mut last_disasm: Option<Disasm<L, P, S>> = None;
+    let mut last_pc: Option<Pointer<AR::PtrVal>> = None;
+    let mut last_disasm: Option<Disasm<L, AR::PtrVal, AR::Offset>> = None;
     let mut traced_blocks = HashSet::new();
 
     for event in trace.iter() {
@@ -149,7 +131,7 @@ where
                 }
 
                 last_pc = Some(pc.clone());
-                last_disasm = Some(disasm(pc, bus)?);
+                last_disasm = Some(arch.disassemble(pc, bus)?);
             }
             TraceEvent::RegisterSet(_, _) => {}
             TraceEvent::MemoryWrite(p, _) => {

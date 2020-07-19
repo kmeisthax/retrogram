@@ -60,7 +60,7 @@ impl<RK, I, P, MV, S> Prerequisite<RK, I, P, MV, S>
 where
     RK: Mappable,
     I: Bitwise + TryInto<u64> + Popcount<Output = I>,
-    P: Mappable + Numerical + PtrNum<S>,
+    P: Mappable + PtrNum<S>,
     S: Numerical + Offset<P> + TryInto<usize>,
     MV: Bitwise + TryInto<u64> + Popcount<Output = MV>,
 {

@@ -43,7 +43,7 @@ impl<RK, I, P, MV> Fork<RK, I, P, MV>
 where
     RK: Mappable,
     I: Bitwise + Numerical + TryInto<u64> + Popcount<Output = I>,
-    P: Mappable + Numerical,
+    P: Mappable,
     MV: Bitwise + Numerical + TryInto<u64> + Popcount<Output = MV>,
     Symbolic<I>: Bitwise,
     Symbolic<MV>: Bitwise,

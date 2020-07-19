@@ -3,16 +3,41 @@
 use crate::analysis::{Disasm, Mappable, Prerequisite, Result, Trace};
 use crate::ast::Literal;
 use crate::cli::Nameable;
-use crate::memory::{Memory, Pointer};
-use crate::reg::State;
-use num::One;
+use crate::maths::{Numerical, Popcount};
+use crate::memory::{Memory, Offset, Pointer, PtrNum};
+use crate::reg::{Bitwise, State};
+use num::{Bounded, One};
+use std::fmt::Display;
+use std::str::FromStr;
+
+/// Indicates a `Literal` that is specifically compatible with a given
+/// architecture's formatting needs.
+pub trait CompatibleLiteral<AR>:
+    Literal + From<AR::Word> + From<AR::Byte> + From<AR::Offset> + From<Pointer<AR::PtrVal>>
+where
+    AR: Architecture,
+{
+}
+
+impl<T, AR> CompatibleLiteral<AR> for T
+where
+    AR: Architecture,
+    T: Literal + From<AR::Word> + From<AR::Byte> + From<AR::Offset> + From<Pointer<AR::PtrVal>>,
+{
+}
 
 /// Trait which represents all of the analysis methods an architecture
 /// must provide in order to be supported.
 pub trait Architecture
 where
-    Self::Register: Mappable,
-    Self::PtrVal: Mappable + Nameable,
+    Self: Copy,
+    Self::Register: Mappable + Display + FromStr,
+    Self::Word:
+        Bitwise + Numerical + Popcount<Output = Self::Word> + Mappable + Nameable + Ord + Bounded,
+    Self::Byte:
+        Bitwise + Numerical + Popcount<Output = Self::Byte> + Mappable + Nameable + Ord + Bounded,
+    Self::PtrVal: PtrNum<Self::Offset> + Mappable + Nameable,
+    Self::Offset: Offset<Self::PtrVal> + Mappable + Nameable + Numerical,
 {
     /// The type which represents all possible register names in a given
     /// architecture.

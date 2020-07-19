@@ -33,6 +33,12 @@ impl ast::Literal for Literal {
     }
 }
 
+impl From<u8> for Literal {
+    fn from(v: u8) -> Self {
+        Self::Integer(v.into())
+    }
+}
+
 impl From<u16> for Literal {
     fn from(v: u16) -> Self {
         Self::Integer(v.into())

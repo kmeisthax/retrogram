@@ -1,32 +1,27 @@
 //! High-level CLI routines
 
-use crate::analysis::Mappable;
-use crate::cli::Nameable;
+use crate::arch::{Architecture, CompatibleLiteral};
 use crate::{analysis, ast, input, maths, memory, project};
 use clap::ArgMatches;
+use num::One;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::{fs, io};
 
-fn dis_inner<L, P, MV, MS, IO, DIS, FMT, APARSE>(
+fn dis_inner<L, IO, FMT, AR>(
     prog: &project::Program,
     start_spec: &str,
-    bus: &memory::Memory<P, MV, MS, IO>,
-    disassemble: DIS,
+    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
     format: FMT,
-    architectural_ctxt_parse: APARSE,
+    arch: AR,
 ) -> io::Result<()>
 where
-    L: ast::Literal<PtrVal = P>,
-    for<'dw> P:
-        memory::PtrNum<MS> + Mappable + Nameable + serde::Deserialize<'dw> + maths::FromStrRadix,
-    for<'dw> MS: memory::Offset<P> + Mappable + Nameable + serde::Deserialize<'dw>,
-    ast::Operand<L>: Clone,
-    ast::Instruction<L>: Clone,
-    ast::Directive<L, P, MV, MS>: Clone,
-    DIS: analysis::Disassembler<L, P, MV, MS, IO>,
-    FMT: Fn(&ast::Section<L, P, MV, MS>) -> String,
-    APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()>,
+    L: CompatibleLiteral<AR, PtrVal = AR::PtrVal>,
+    AR: Architecture,
+    for<'dw> AR::PtrVal: serde::Deserialize<'dw> + maths::FromStrRadix,
+    for<'dw> AR::Offset: serde::Deserialize<'dw>,
+    FMT: Fn(&ast::Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
+    IO: One,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
@@ -45,13 +40,12 @@ where
     })?);
     db.update_indexes();
 
-    let start_pc =
-        input::parse_ptr(start_spec, db, bus, architectural_ctxt_parse).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Must specify a valid address to analyze",
-            )
-        })?;
+    let start_pc = input::parse_ptr(start_spec, db, bus, arch).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Must specify a valid address to analyze",
+        )
+    })?;
     let start_block_id = db.find_block_membership(&start_pc).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The given memory location has not yet been successfully analyzed. Please scan it first."))?;
 
     let mut disassembly_blocks = BTreeSet::new();
@@ -110,26 +104,24 @@ where
 
     for block in disassembly_blocks {
         let (orig_asm, _xrefs, pc_offset, _blocks, terminating_error) =
-            analysis::disassemble_block(block.as_start().clone(), bus, &disassemble);
+            analysis::disassemble_block(block.as_start().clone(), bus, arch);
         if let Some(pc_offset) = pc_offset {
             match pc_offset.cmp(&block.as_length()) {
                 Ordering::Greater => {
-                    if let Ok(too_big) = MS::try_from(pc_offset - block.as_length().clone()) {
-                        eprintln!(
-                            "WARN: Block at {} is too large by {}",
-                            block.as_start(),
-                            too_big
-                        );
-                    }
+                    let too_big = pc_offset - block.as_length().clone();
+                    eprintln!(
+                        "WARN: Block at {} is too large by {}",
+                        block.as_start(),
+                        too_big
+                    );
                 }
                 Ordering::Less => {
-                    if let Ok(too_small) = MS::try_from(block.as_length().clone() - pc_offset) {
-                        eprintln!(
-                            "WARN: Block at {} is too small by {}",
-                            block.as_start(),
-                            too_small
-                        );
-                    }
+                    let too_small = block.as_length().clone() - pc_offset;
+                    eprintln!(
+                        "WARN: Block at {} is too small by {}",
+                        block.as_start(),
+                        too_small
+                    );
                 }
                 Ordering::Equal => {}
             }
@@ -161,13 +153,7 @@ pub fn dis<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()>
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus,
-                                    dis,
-                                    fmt_section,
-                                    _fmt_instr,
-                                    aparse,
-                                    _prereq,
-                                    _tracer| {
-        dis_inner(prog, start_spec, bus, dis, fmt_section, aparse)
+    with_architecture!(prog, file, |bus, fmt_section, _fmt_instr, arch| {
+        dis_inner(prog, start_spec, bus, fmt_section, arch)
     })
 }

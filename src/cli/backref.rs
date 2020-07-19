@@ -1,33 +1,26 @@
 //! Backreference list command for retrogram
 
-use crate::ast::Literal;
+use crate::arch::{Architecture, CompatibleLiteral};
 use crate::{analysis, ast, cli, input, maths, memory, project};
 use clap::ArgMatches;
 use num_traits::One;
 use std::{fs, io};
 
-fn backref_inner<L, P, MV, S, IO, DIS, FMT, APARSE>(
+fn backref_inner<L, FMT, AR, IO>(
     prog: &project::Program,
     start_spec: &str,
-    bus: &memory::Memory<P, MV, S, IO>,
-    dis: DIS,
+    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
     fmt: FMT,
-    architectural_ctxt_parse: APARSE,
+    arch: AR,
 ) -> io::Result<()>
 where
-    L: Literal,
-    for<'dw> P: memory::PtrNum<S>
-        + analysis::Mappable
-        + cli::Nameable
-        + serde::Deserialize<'dw>
-        + serde::Serialize
-        + maths::FromStrRadix,
-    for<'dw> S:
-        memory::Offset<P> + cli::Nameable + serde::Deserialize<'dw> + serde::Serialize + One,
-    for<'dw> MV: serde::Deserialize<'dw>,
-    DIS: analysis::Disassembler<L, P, MV, S, IO>,
+    L: CompatibleLiteral<AR>,
+    AR: Architecture,
+    for<'dw> AR::PtrVal: serde::Deserialize<'dw> + serde::Serialize + maths::FromStrRadix,
+    for<'dw> AR::Offset: cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
+    for<'dw> AR::Byte: serde::Deserialize<'dw>,
     FMT: Fn(&ast::Instruction<L>) -> String,
-    APARSE: FnOnce(&mut &[&str], &mut memory::Pointer<P>) -> Option<()>,
+    IO: One,
 {
     let mut pjdb = project::ProjectDatabase::read(prog.as_database_path())?;
     let db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
@@ -38,19 +31,18 @@ where
     })?);
     db.update_indexes();
 
-    let start_pc =
-        input::parse_ptr(start_spec, db, bus, architectural_ctxt_parse).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Must specify a valid address to analyze",
-            )
-        })?;
+    let start_pc = input::parse_ptr(start_spec, db, bus, arch).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Must specify a valid address to analyze",
+        )
+    })?;
 
-    for xref_id in db.find_xrefs_to(&start_pc, S::one()) {
+    for xref_id in db.find_xrefs_to(&start_pc, AR::Offset::one()) {
         if let Some(xref) = db.xref(xref_id) {
             //let (instr_asm, _, _, _, _) = dis(xref.as_source(), bus);
 
-            match dis(xref.as_source(), bus) {
+            match arch.disassemble(xref.as_source(), bus) {
                 Ok(disasm) => {
                     let instr_asm = disasm.as_instr();
 
@@ -95,13 +87,7 @@ pub fn backref<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus,
-                                    dis,
-                                    _fmt_sec,
-                                    fmt_instr,
-                                    aparse,
-                                    _prereq,
-                                    _tracer| {
-        backref_inner(prog, start_spec, bus, dis, fmt_instr, aparse)
+    with_architecture!(prog, file, |bus, _fmt_sec, fmt_instr, arch| {
+        backref_inner(prog, start_spec, bus, fmt_instr, arch)
     })
 }

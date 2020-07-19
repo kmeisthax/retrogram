@@ -7,7 +7,7 @@ use crate::reg::{Bitwise, Convertable, TryConvertable};
 use num::traits::{Bounded, CheckedShl, CheckedShr, One, Zero};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::fmt::{Formatter, LowerHex, UpperHex};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Not, Shl, Shr, Sub};
@@ -491,16 +491,16 @@ where
     XOROut<T, R>: Clone
         + Zero
         + One
-        + BoundWidth<usize>
-        + Shl<usize, Output = XOROut<T, R>>
+        + BoundWidth<u32>
+        + Shl<u32, Output = XOROut<T, R>>
         + Not<Output = XOROut<T, R>>,
     Symbolic<T>: Clone
         + BitXor<Symbolic<R>, Output = SymXOROut<T, R>>
         + BitAnd<Symbolic<R>, Output = SymXOROut<T, R>>,
     Symbolic<R>: Clone,
     SymXOROut<T, R>: Clone
-        + BoundWidth<usize>
-        + Shl<usize, Output = SymXOROut<T, R>>
+        + BoundWidth<u32>
+        + Shl<u32, Output = SymXOROut<T, R>>
         + BitAnd<Output = SymXOROut<T, R>>
         + BitXor<Output = SymXOROut<T, R>>
         + BitOr<Output = SymXOROut<T, R>>
@@ -526,7 +526,7 @@ where
         //    we need this trait that we don't use.
         // 3. Clippy really hates that we're using binary operations in `Add`.
 
-        let bits: usize = XOROut::<T, R>::bound_width();
+        let bits: u32 = XOROut::<T, R>::bound_width();
         let half_adds = self.clone() ^ rhs.clone();
         let half_carries = self & rhs;
         let zero: XOROut<T, R> = XOROut::<T, R>::zero();
@@ -549,16 +549,16 @@ where
     XOROut<T, R>: Clone
         + Zero
         + One
-        + BoundWidth<usize>
-        + Shl<usize, Output = XOROut<T, R>>
+        + BoundWidth<u32>
+        + Shl<u32, Output = XOROut<T, R>>
         + Not<Output = XOROut<T, R>>,
     Symbolic<T>: Clone
         + BitXor<Symbolic<R>, Output = SymXOROut<T, R>>
         + BitAnd<Symbolic<R>, Output = SymXOROut<T, R>>,
     Symbolic<R>: Clone + Not<Output = Symbolic<R>>,
     SymXOROut<T, R>: Clone
-        + BoundWidth<usize>
-        + Shl<usize, Output = SymXOROut<T, R>>
+        + BoundWidth<u32>
+        + Shl<u32, Output = SymXOROut<T, R>>
         + BitAnd<Output = SymXOROut<T, R>>
         + BitXor<Output = SymXOROut<T, R>>
         + BitOr<Output = SymXOROut<T, R>>
@@ -579,7 +579,7 @@ where
         //    standard numerical type symbolically.
         // 3. Clippy really hates that we're using binary operations in `Sub`.
 
-        let bits: usize = XOROut::<T, R>::bound_width();
+        let bits: u32 = XOROut::<T, R>::bound_width();
         let half_adds = self.clone() ^ !rhs.clone();
         let half_carries = self & !rhs;
         let zero: XOROut<T, R> = XOROut::<T, R>::zero();
@@ -642,8 +642,7 @@ where
 
 impl<U> UpperHex for Symbolic<U>
 where
-    U: Bitwise + From<u8> + fmt::Debug,
-    u8: TryFrom<U>,
+    U: Bitwise + TryFrom<u8> + TryInto<u8> + fmt::Debug,
     Symbolic<U>: Bitwise,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -652,9 +651,9 @@ where
 
         for _i in 0..Self::bound_width() / 4 {
             hexes.push(
-                (val.clone() & Symbolic::from(U::from(0xF)))
+                (val.clone() & Symbolic::from(U::try_from(0xF).map_err(|_| fmt::Error)?))
                     .into_concrete()
-                    .and_then(|v| u8::try_from(v).ok()),
+                    .and_then(|v| v.try_into().ok()),
             );
             val = val.checked_shr(4).unwrap();
         }
@@ -687,8 +686,7 @@ where
 
 impl<U> LowerHex for Symbolic<U>
 where
-    U: Bitwise + From<u8>,
-    u8: TryFrom<U>,
+    U: Bitwise + TryFrom<u8> + TryInto<u8>,
     Symbolic<U>: Bitwise,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -697,9 +695,9 @@ where
 
         for _i in 0..Self::bound_width() / 4 {
             hexes.push(
-                (val.clone() & Symbolic::from(U::from(0xF)))
+                (val.clone() & Symbolic::from(U::try_from(0xF).map_err(|_| fmt::Error)?))
                     .into_concrete()
-                    .and_then(|v| u8::try_from(v).ok()),
+                    .and_then(|v| v.try_into().ok()),
             );
             val = val.checked_shr(4).unwrap();
         }

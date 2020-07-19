@@ -3,7 +3,7 @@
 use crate::maths::{u24, BoundWidth, CheckedAdd, CheckedSub};
 use crate::{memory, reg};
 use num::traits::{One, Zero};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::ops::Sub;
 
 /// Trait which represents all operations expected of a pointer value.
@@ -51,8 +51,9 @@ pub trait Offset<P>:
     + CheckedSub<Output = Self>
     + Zero
     + One
-    + TryFrom<<P as Sub>::Output>
     + TryFrom<usize>
+    + TryFrom<<P as Sub>::Output>
+    + TryInto<usize>
 where
     P: Sub,
 {
@@ -67,7 +68,8 @@ where
         + Zero
         + One
         + TryFrom<<P as Sub>::Output>
-        + TryFrom<usize>,
+        + TryFrom<usize>
+        + TryInto<usize>,
     P: Sub,
 {
 }
