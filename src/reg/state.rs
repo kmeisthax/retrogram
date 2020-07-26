@@ -44,6 +44,10 @@ where
 
     /// Non-architectural, or memory-related program state.
     mem_state: HashMap<Pointer<P>, Symbolic<MV>>,
+
+    /// All currently applicable contexts for memory reads and writes without
+    /// known contexts.
+    context_state: HashMap<String, Symbolic<u64>>
 }
 
 impl<RK, RV, P, MV> PartialEq for State<RK, RV, P, MV>
@@ -74,6 +78,18 @@ where
 
         for (p, mv) in other.mem_state.iter() {
             if mv != self.mem_state.get(p).unwrap_or(&Default::default()) {
+                return false;
+            }
+        }
+
+        for (s, cv) in self.context_state.iter() {
+            if cv != other.context_state.get(s).unwrap_or(&Default::default()) {
+                return false;
+            }
+        }
+
+        for (s, cv) in other.context_state.iter() {
+            if cv != self.context_state.get(s).unwrap_or(&Default::default()) {
                 return false;
             }
         }
@@ -124,6 +140,15 @@ where
 
             p.hash(state);
             mv.hash(state);
+        }
+
+        for (s, cv) in self.context_state.iter() {
+            if *cv == Default::default() {
+                continue;
+            }
+
+            s.hash(state);
+            cv.hash(state);
         }
     }
 }
@@ -179,6 +204,32 @@ where
                     &other
                         .mem_state
                         .get(p)
+                        .cloned()
+                        .unwrap_or_else(Default::default),
+                );
+
+            if cmp != Some(Ordering::Equal) {
+                return cmp;
+            }
+        }
+
+        let ctxt_list = self
+            .context_state
+            .keys()
+            .chain(other.context_state.keys())
+            .cloned()
+            .collect::<BTreeSet<String>>();
+        
+        for s in ctxt_list.iter() {
+            let cmp = self
+                .context_state
+                .get(s)
+                .cloned()
+                .unwrap_or_else(Default::default)
+                .partial_cmp(
+                    &other
+                        .context_state
+                        .get(s)
                         .cloned()
                         .unwrap_or_else(Default::default),
                 );
@@ -252,6 +303,32 @@ where
             }
         }
 
+        let ctxt_list = self
+            .context_state
+            .keys()
+            .chain(other.context_state.keys())
+            .cloned()
+            .collect::<BTreeSet<String>>();
+        
+        for s in ctxt_list.iter() {
+            let cmp = self
+                .context_state
+                .get(s)
+                .cloned()
+                .unwrap_or_else(Default::default)
+                .cmp(
+                    &other
+                        .context_state
+                        .get(s)
+                        .cloned()
+                        .unwrap_or_else(Default::default),
+                );
+
+            if cmp != Ordering::Equal {
+                return cmp;
+            }
+        }
+
         Ordering::Equal
     }
 }
@@ -289,6 +366,18 @@ where
     pub fn set_memory(&mut self, k: Pointer<P>, v: Symbolic<MV>) {
         self.mem_state.insert(k, v);
     }
+
+    pub fn set_context(&mut self, s: String, v: Symbolic<u64>) {
+        self.context_state.insert(s, v);
+    }
+
+    pub fn get_context(&mut self, s: &str) -> Symbolic<u64> {
+        if let Some(v) = self.context_state.get(s) {
+            return v.clone();
+        }
+
+        Symbolic::default()
+    }
 }
 
 impl<RK, RV, P, MV> Default for State<RK, RV, P, MV>
@@ -300,6 +389,7 @@ where
         State {
             cpu_state: HashMap::new(),
             mem_state: HashMap::new(),
+            context_state: HashMap::new()
         }
     }
 }
