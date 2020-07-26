@@ -11,7 +11,7 @@ mod traits;
 
 pub use behavior::Action;
 pub use behavior::Behavior;
-pub use cptr::Pointer;
+pub use cptr::{Contexts, Pointer};
 pub use endianness::Endianness;
 pub use image::Image;
 pub use region::Memory;

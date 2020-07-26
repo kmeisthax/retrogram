@@ -1,6 +1,6 @@
 //! A model of program state.
 
-use crate::memory::{Memory, Pointer};
+use crate::memory::{Contexts, Memory, Pointer};
 use crate::reg::Symbolic;
 use crate::{memory, reg};
 use num_traits::One;
@@ -47,7 +47,7 @@ where
 
     /// All currently applicable contexts for memory reads and writes without
     /// known contexts.
-    context_state: HashMap<String, Symbolic<u64>>
+    context_state: Contexts<String, u64>,
 }
 
 impl<RK, RV, P, MV> PartialEq for State<RK, RV, P, MV>
@@ -219,7 +219,7 @@ where
             .chain(other.context_state.keys())
             .cloned()
             .collect::<BTreeSet<String>>();
-        
+
         for s in ctxt_list.iter() {
             let cmp = self
                 .context_state
@@ -309,7 +309,7 @@ where
             .chain(other.context_state.keys())
             .cloned()
             .collect::<BTreeSet<String>>();
-        
+
         for s in ctxt_list.iter() {
             let cmp = self
                 .context_state
@@ -373,10 +373,16 @@ where
 
     pub fn get_context(&mut self, s: &str) -> Symbolic<u64> {
         if let Some(v) = self.context_state.get(s) {
-            return v.clone();
+            return *v;
         }
 
         Symbolic::default()
+    }
+
+    /// Construct a new pointer with all of the contexts known to the current
+    /// state.
+    pub fn contextualize_pointer(&self, ptrval: P) -> Pointer<P> {
+        Pointer::from_ptrval_and_contexts(ptrval, self.context_state.clone())
     }
 }
 
@@ -389,7 +395,7 @@ where
         State {
             cpu_state: HashMap::new(),
             mem_state: HashMap::new(),
-            context_state: HashMap::new()
+            context_state: HashMap::new(),
         }
     }
 }

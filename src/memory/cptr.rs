@@ -3,6 +3,7 @@
 
 use crate::maths::FromStrRadix;
 use crate::reg;
+use crate::reg::Symbolic;
 use num::traits::Bounded;
 use serde::de;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -14,28 +15,40 @@ use std::num::ParseIntError;
 use std::ops::{Add, AddAssign, BitAnd, Sub, SubAssign};
 use std::{fmt, str};
 
+pub type Contexts<CK, CV> = HashMap<CK, Symbolic<CV>>;
+
 /// A pointer bundled with the context necessary to resolve it to a concrete
 /// value.
 #[derive(Clone, Debug)]
 pub struct Pointer<P, CV = u64> {
     pointer: P,
-    context: HashMap<String, reg::Symbolic<CV>>,
+    context: Contexts<String, CV>,
 }
 
-impl<P, CV> Pointer<P, CV>
-where
-    CV: reg::Bitwise,
-{
+impl<P, CV> Pointer<P, CV> {
     /// Obtain a reference to the noncontextual pointer value.
     pub fn as_pointer(&self) -> &P {
         &self.pointer
     }
 
     /// Strip the context entirely and yield a pointer value.
-    pub fn into_pointer(self) -> P {
-        self.pointer
+    pub fn into_ptrval_and_contexts(self) -> (P, Contexts<String, CV>) {
+        (self.pointer, self.context)
     }
 
+    /// Construct a contextual pointer from
+    pub fn from_ptrval_and_contexts(ptrval: P, context: Contexts<String, CV>) -> Self {
+        Self {
+            pointer: ptrval,
+            context,
+        }
+    }
+}
+
+impl<P, CV> Pointer<P, CV>
+where
+    CV: reg::Bitwise,
+{
     /// Get an architecturally-defined context.
     ///
     /// Architectural contexts are prefixed with an `A` to avoid conflicts with

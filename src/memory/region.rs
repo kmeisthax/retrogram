@@ -1,10 +1,12 @@
 //! A special-purpose type for modeling the address decoding of a particular
 //! platform.
 
+use crate::analysis::Mappable;
 use crate::maths::CheckedSub;
 use crate::memory::bss::UnknownImage;
 use crate::memory::rombin::ROMBinaryImage;
 use crate::memory::{Behavior, Desegmentable, Endianness, Image, Pointer};
+use crate::reg::State;
 use crate::{memory, reg};
 use num::traits::One;
 use std::convert::{TryFrom, TryInto};
@@ -60,11 +62,18 @@ where
     P: memory::PtrNum<S>,
     S: memory::Offset<P>,
 {
+    /// Determine if a contextual pointer is within this region.
+    ///
+    /// This function will call `decode_addr` on the image with the given
+    /// pointer to validate that it can be decoded with the given contexts. If
+    /// the contexts this image depends on aren't valid for the given image
+    /// contents, then the contextual pointer will be treated as "outside" the
+    /// given image.
     pub fn is_ptr_within(&self, ptr: Pointer<P>) -> bool {
-        if let Some(maybe_offset) = ptr.clone().into_pointer().checked_sub(self.start.clone()) {
+        if let Some(maybe_offset) = ptr.as_pointer().clone().checked_sub(self.start.clone()) {
             if let Ok(offset) = S::try_from(maybe_offset) {
                 if let Some(_ms_offset) = self.image.decode_addr(&ptr, self.start.clone()) {
-                    return self.start <= ptr.clone().into_pointer() && offset < self.length;
+                    return self.start <= ptr.as_pointer().clone() && offset < self.length;
                 }
             }
         }
@@ -276,6 +285,29 @@ where
         }
 
         out
+    }
+}
+
+impl<P, MV, S, IO> Memory<P, MV, S, IO>
+where
+    P: memory::PtrNum<S> + Mappable,
+    S: memory::Offset<P> + Mappable,
+    MV: reg::Bitwise,
+    IO: One,
+    reg::Symbolic<MV>: Default,
+{
+    /// Simulate memory writes to a single location.
+    pub fn write_unit(&self, ptr: &mut Pointer<P>, data: MV, state: &mut State<P, MV, S, IO>) {}
+
+    /// Simulate memory writes to a particular location.
+    ///
+    /// Memory writes are free to change either pointer contexts or program
+    /// state as necessary.
+    ///
+    /// Memory writes will be made in order of increasing pointer values. This
+    /// means that multi-value writes that change contexts may change where
+    /// writes occur mid-write.
+    pub fn write_memory(&self, ptr: &mut Pointer<P>, data: &[MV], state: &mut State<P, MV, S, IO>) {
     }
 }
 
