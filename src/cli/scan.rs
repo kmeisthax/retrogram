@@ -185,7 +185,7 @@ fn exhaust_all_dynamic_scans<L, AR, IO>(
     db: &mut Database<AR::PtrVal, AR::Offset>,
     bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
     arch: AR,
-) -> analysis::Result<bool, AR::PtrVal, AR::Offset>
+) -> analysis::Result<bool, AR>
 where
     L: CompatibleLiteral<AR>,
     AR: Architecture,
@@ -267,7 +267,7 @@ where
     IO: One,
     reg::Symbolic<AR::Word>: Bitwise,
     reg::Symbolic<AR::Byte>: Default + Bitwise,
-    analysis::Error<AR::PtrVal, AR::Offset>: Into<io::Error>,
+    analysis::Error<AR>: Into<io::Error>,
     FMTI: Fn(&Instruction<L>) -> String,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {

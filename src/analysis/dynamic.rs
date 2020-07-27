@@ -21,8 +21,7 @@ where
         reg::State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
         Vec<Prerequisite<AR>>,
     ),
-    AR::PtrVal,
-    AR::Offset,
+    AR,
 >;
 
 /// Trace a given precondition state until it is necessary to fork the analysis
@@ -107,7 +106,7 @@ pub fn analyze_trace_log<L, AR, IO>(
     bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
     database: &mut Database<AR::PtrVal, AR::Offset>,
     arch: AR,
-) -> analysis::Result<HashSet<usize>, AR::PtrVal, AR::Offset>
+) -> analysis::Result<HashSet<usize>, AR>
 where
     L: CompatibleLiteral<AR>,
     AR: Architecture,

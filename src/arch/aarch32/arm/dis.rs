@@ -7,12 +7,12 @@ use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32;
 use crate::arch::aarch32::arm::condcode;
 use crate::arch::aarch32::Aarch32Register as A32Reg;
-use crate::arch::aarch32::{Bus, Disasm, Literal, Offset, PtrVal, THUMB_STATE};
+use crate::arch::aarch32::{Bus, Disasm, Literal, PtrVal, THUMB_STATE};
 use crate::ast::{Instruction, Operand, Operand as op};
 use crate::{analysis, ast, memory, reg};
 use num::One;
 
-fn shift_symbol(shift: u32, shift_imm: u32) -> analysis::Result<&'static str, PtrVal, Offset> {
+fn shift_symbol(shift: u32, shift_imm: u32) -> aarch32::Result<&'static str> {
     match (shift, shift_imm) {
         (0, _) => Ok("LSL"),
         (1, _) => Ok("LSR"),
@@ -33,7 +33,7 @@ fn shifter_operand<L>(
     rm: A32Reg,
     rs: A32Reg,
     immed_8: u32,
-) -> analysis::Result<Vec<Operand<L>>, PtrVal, Offset>
+) -> aarch32::Result<Vec<Operand<L>>>
 where
     L: Literal,
 {
@@ -83,7 +83,7 @@ fn dpinst<L>(
     rm: A32Reg,
     rs: A32Reg,
     immed_8: u32,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -170,7 +170,7 @@ fn ldst<L>(
     shift: u32,
     rm: A32Reg,
     address_operand: u32,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -306,7 +306,7 @@ fn ldmstm<L>(
     load: u32,
     rn: A32Reg,
     reglist: u32,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -366,12 +366,7 @@ where
     ))
 }
 
-fn bl<L>(
-    pc: &memory::Pointer<PtrVal>,
-    cond: u32,
-    l: u32,
-    offset: u32,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn bl<L>(pc: &memory::Pointer<PtrVal>, cond: u32, l: u32, offset: u32) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -418,11 +413,7 @@ where
     }
 }
 
-fn swi<L>(
-    pc: &memory::Pointer<PtrVal>,
-    cond: u32,
-    offset: u32,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn swi<L>(pc: &memory::Pointer<PtrVal>, cond: u32, offset: u32) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -454,7 +445,7 @@ fn mul<L>(
     rn: A32Reg,
     rs: A32Reg,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -614,7 +605,7 @@ fn msr<L>(
     shift_imm: u32,
     data_immed: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -640,7 +631,7 @@ where
     ))
 }
 
-fn mrs<L>(cond: u32, r: u32, rd: A32Reg) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn mrs<L>(cond: u32, r: u32, rd: A32Reg) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -656,11 +647,7 @@ where
     ))
 }
 
-fn bx<L>(
-    p: &memory::Pointer<PtrVal>,
-    cond: u32,
-    rm: A32Reg,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn bx<L>(p: &memory::Pointer<PtrVal>, cond: u32, rm: A32Reg) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -682,7 +669,7 @@ where
     ))
 }
 
-fn bxj<L>(cond: u32, rm: A32Reg) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn bxj<L>(cond: u32, rm: A32Reg) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -708,7 +695,7 @@ where
     ))
 }
 
-fn clz<L>(cond: u32, rd: A32Reg, rm: A32Reg) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn clz<L>(cond: u32, rd: A32Reg, rm: A32Reg) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -723,11 +710,7 @@ where
     ))
 }
 
-fn blx_register<L>(
-    p: &memory::Pointer<PtrVal>,
-    cond: u32,
-    rm: A32Reg,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn blx_register<L>(p: &memory::Pointer<PtrVal>, cond: u32, rm: A32Reg) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -749,11 +732,7 @@ where
     ))
 }
 
-fn blx_immediate<L>(
-    p: &memory::Pointer<PtrVal>,
-    h: u32,
-    offset: u32,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn blx_immediate<L>(p: &memory::Pointer<PtrVal>, h: u32, offset: u32) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -777,7 +756,7 @@ where
     ))
 }
 
-fn bkpt<L>(instr: u32) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn bkpt<L>(instr: u32) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -801,7 +780,7 @@ fn cdp<L>(
     cp_num: u32,
     opcode_2: u32,
     crm: u32,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -837,7 +816,7 @@ fn crt<L>(
     cp_num: u32,
     opcode_2: u32,
     crm: u32,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -875,7 +854,7 @@ fn crt_double<L>(
     cp_num: u32,
     opcode: u32,
     crm: u32,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -901,7 +880,7 @@ where
     ))
 }
 
-fn cps<L>(rn_val: u32, lsimmed: u32) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn cps<L>(rn_val: u32, lsimmed: u32) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -979,7 +958,7 @@ fn ldstmisc<L>(
     rs_val: u32,
     shiftop: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -1140,7 +1119,7 @@ fn ldst_coproc<L>(
     crd: u32,
     cp_num: u32,
     uoffset: u32,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -1210,7 +1189,7 @@ pub fn ldstrex<L>(
     rn: A32Reg,
     rd: A32Reg,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -1250,7 +1229,7 @@ pub fn pkh<L>(
     shift_imm: u32,
     d: u32,
     rm: A32Reg,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -1286,7 +1265,7 @@ pub fn pld<L>(
     shift: u32,
     rm: A32Reg,
     address_operand: u32,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {

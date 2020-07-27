@@ -2,19 +2,16 @@
 
 use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
+use crate::arch::aarch32;
 use crate::arch::aarch32::arm::condcode;
 use crate::arch::aarch32::thumb::THUMB_STATE;
 use crate::arch::aarch32::Aarch32Register as A32Reg;
-use crate::arch::aarch32::{Bus, Disasm, Literal, Offset, PtrVal};
+use crate::arch::aarch32::{Bus, Disasm, Literal, PtrVal};
 use crate::ast::{Instruction, Operand as op};
 use crate::{analysis, memory, reg};
 use num::One;
 
-fn cond_branch<L>(
-    p: &memory::Pointer<PtrVal>,
-    cond: u16,
-    offset: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn cond_branch<L>(p: &memory::Pointer<PtrVal>, cond: u16, offset: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -53,10 +50,7 @@ where
     }
 }
 
-fn uncond_branch<L>(
-    p: &memory::Pointer<PtrVal>,
-    offset: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn uncond_branch<L>(p: &memory::Pointer<PtrVal>, offset: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -79,7 +73,7 @@ fn special_data<L>(
     dp_opcode: u16,
     low_rm: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -139,11 +133,7 @@ where
     }
 }
 
-fn data_processing<L>(
-    dp_opcode: u16,
-    low_rm: u16,
-    low_rd: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn data_processing<L>(dp_opcode: u16, low_rm: u16, low_rd: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -258,7 +248,7 @@ fn add_sub_register<L>(
     low_rm: u16,
     low_rn: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -291,7 +281,7 @@ fn add_sub_immed<L>(
     immed: u16,
     low_rn: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -323,7 +313,7 @@ fn shifter_immed<L>(
     immed: u16,
     low_rm: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -365,11 +355,7 @@ where
     }
 }
 
-fn math_immed<L>(
-    math_opcode: u16,
-    low_rd: u16,
-    immed: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn math_immed<L>(math_opcode: u16, low_rd: u16, immed: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -410,7 +396,7 @@ fn load_pool_constant<L>(
     p: &memory::Pointer<PtrVal>,
     low_rd: u16,
     immed: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -439,7 +425,7 @@ fn load_store_register_offset<L>(
     low_rm: u16,
     low_rn: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -476,7 +462,7 @@ fn load_store_immed_offset_word<L>(
     offset: u16,
     low_rn: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -516,7 +502,7 @@ fn load_store_immed_offset_halfword<L>(
     offset: u16,
     low_rn: u16,
     low_rd: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -544,11 +530,7 @@ where
     ))
 }
 
-fn load_store_stack_offset<L>(
-    l: u16,
-    low_rd: u16,
-    offset: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn load_store_stack_offset<L>(l: u16, low_rd: u16, offset: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -574,11 +556,7 @@ where
     ))
 }
 
-fn compute_rel_addr<L>(
-    s: u16,
-    low_rd: u16,
-    offset: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn compute_rel_addr<L>(s: u16, low_rd: u16, offset: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -600,11 +578,7 @@ where
     ))
 }
 
-fn load_store_multiple<L>(
-    l: u16,
-    low_rn: u16,
-    register_list: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn load_store_multiple<L>(l: u16, low_rn: u16, register_list: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -642,7 +616,7 @@ fn uncond_branch_link<L, IO>(
     p: &memory::Pointer<PtrVal>,
     mem: &Bus<IO>,
     high_offset: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
     IO: One,
@@ -686,7 +660,7 @@ where
     }
 }
 
-fn sp_adjust<L>(immed: u16) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn sp_adjust<L>(immed: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -710,11 +684,7 @@ where
     }
 }
 
-fn sign_zero_extend<L>(
-    immed: u16,
-    low_rm: u16,
-    low_rd: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn sign_zero_extend<L>(immed: u16, low_rm: u16, low_rd: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -753,11 +723,7 @@ where
     }
 }
 
-fn endian_reverse<L>(
-    immed: u16,
-    low_rm: u16,
-    low_rd: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn endian_reverse<L>(immed: u16, low_rm: u16, low_rd: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -791,7 +757,7 @@ where
     }
 }
 
-fn push_pop<L>(l: u16, r: u16, register_list: u16) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn push_pop<L>(l: u16, r: u16, register_list: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -838,10 +804,7 @@ where
     }
 }
 
-fn breakpoint<L>(
-    p: &memory::Pointer<PtrVal>,
-    immed: u16,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+fn breakpoint<L>(p: &memory::Pointer<PtrVal>, immed: u16) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
 {
@@ -879,10 +842,7 @@ where
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
 #[allow(clippy::many_single_char_names)]
-pub fn disassemble<L, IO>(
-    p: &memory::Pointer<PtrVal>,
-    mem: &Bus<IO>,
-) -> analysis::Result<Disasm<L>, PtrVal, Offset>
+pub fn disassemble<L, IO>(p: &memory::Pointer<PtrVal>, mem: &Bus<IO>) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
     IO: One,

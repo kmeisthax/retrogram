@@ -14,12 +14,16 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::ops::Sub;
 
-pub type DisassmbledSection<L, P, MV, S> = (
-    ast::Section<L, P, MV, S>,
-    HashSet<analysis::Reference<P>>,
-    Option<S>,
-    Vec<analysis::Block<P, S>>,
-    Option<analysis::Error<P, S>>,
+#[allow(type_alias_bounds)]
+pub type DisassmbledSection<L, AR>
+where
+    AR: Architecture,
+= (
+    ast::Section<L, AR::PtrVal, AR::Byte, AR::Offset>,
+    HashSet<analysis::Reference<AR::PtrVal>>,
+    Option<AR::Offset>,
+    Vec<analysis::Block<AR::PtrVal, AR::Offset>>,
+    Option<analysis::Error<AR>>,
 );
 
 /// Given memory and a pointer, disassemble a basic block of instructions and
@@ -49,7 +53,7 @@ pub fn disassemble_block<L, IO, AR>(
     start_pc: memory::Pointer<AR::PtrVal>,
     plat: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
     arch: AR,
-) -> DisassmbledSection<L, AR::PtrVal, AR::Byte, AR::Offset>
+) -> DisassmbledSection<L, AR>
 where
     AR: Architecture,
     L: CompatibleLiteral<AR>,

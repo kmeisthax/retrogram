@@ -178,7 +178,7 @@ pub type Trace = analysis::Trace<Aarch32Register, Value, PtrVal, Data>;
 pub type Disasm<L> = analysis::Disasm<L, PtrVal, Offset>;
 
 /// The type which represents any analysis result for this architecture.
-pub type Result<T> = analysis::Result<T, PtrVal, Offset>;
+pub type Result<T> = analysis::Result<T, AArch32>;
 
 /// Architectural type for AArch32
 #[derive(Copy, Clone)]

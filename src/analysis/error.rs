@@ -1,11 +1,15 @@
 //! Error type for analysis
 
+use crate::arch::Architecture;
 use crate::memory;
 use std::{error, fmt, io, result};
 
 /// Error type for analysis.
 #[derive(Debug)]
-pub enum Error<P, S> {
+pub enum Error<AR>
+where
+    AR: Architecture,
+{
     /// Underlying cause of error is I/O related
     IOError(io::Error),
 
@@ -15,7 +19,7 @@ pub enum Error<P, S> {
     /// more than one possible value. This can happen if the memory being read
     /// from is rewritable, and no valid memory image has been loaded for that
     /// area.
-    UnconstrainedMemory(memory::Pointer<P>),
+    UnconstrainedMemory(memory::Pointer<AR::PtrVal>),
 
     /// Read an unconstrained value from a register.
     ///
@@ -46,12 +50,12 @@ pub enum Error<P, S> {
     /// decoded, and the `bool` parameter indicates if it was a big-endian or
     /// little-endian value. This may be useful for displaying the invalid data
     /// to the user.
-    Misinterpretation(S, bool),
+    Misinterpretation(AR::Offset, bool),
 }
 
-impl<P, S> fmt::Display for Error<P, S>
+impl<AR> fmt::Display for Error<AR>
 where
-    P: fmt::UpperHex,
+    AR: Architecture,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Error::*;
@@ -70,10 +74,10 @@ where
     }
 }
 
-impl<P, S> error::Error for Error<P, S>
+impl<AR> error::Error for Error<AR>
 where
-    S: fmt::Debug,
-    P: fmt::Debug + fmt::UpperHex,
+    AR: Architecture,
+    Self: fmt::Debug,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         use Error::*;
@@ -85,9 +89,9 @@ where
     }
 }
 
-impl<P, S> Into<io::Error> for Error<P, S>
+impl<AR> Into<io::Error> for Error<AR>
 where
-    P: fmt::UpperHex,
+    AR: Architecture,
 {
     fn into(self) -> io::Error {
         use Error::*;
@@ -99,4 +103,4 @@ where
     }
 }
 
-pub type Result<T, P, S> = result::Result<T, Error<P, S>>;
+pub type Result<T, AR> = result::Result<T, Error<AR>>;

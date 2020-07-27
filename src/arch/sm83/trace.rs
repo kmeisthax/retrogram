@@ -5,7 +5,7 @@ use crate::reg::{Convertable, TryConvertable};
 use crate::{analysis, memory, reg};
 use std::cmp::PartialEq;
 //use crate::arch::sm83::dis::{ALU_BITOPS, ALU_CONDCODE, ALU_OPS, ALU_TARGET_MEM, ALU_TARGET_PAIRS, ALU_TARGET_REGS, STACK_TARGET_PAIRS};
-use crate::arch::sm83::{Bus, Offset, PtrVal, Register, State, Trace, Value};
+use crate::arch::sm83::{Bus, PtrVal, Register, State, Trace, Value};
 use num::One;
 
 /// Given a targetreg operand, produce a symbolic value of what that target reg
@@ -507,7 +507,7 @@ fn trace_call<IO>(
     mem: &Bus<IO>,
     mut state: State,
     trace: &mut Trace,
-) -> analysis::Result<(State, memory::Pointer<PtrVal>), PtrVal, Offset>
+) -> sm83::Result<(State, memory::Pointer<PtrVal>)>
 where
     IO: One,
 {

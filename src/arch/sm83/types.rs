@@ -147,7 +147,7 @@ pub type Trace = analysis::Trace<Register, Value, PtrVal, Data>;
 /// is an extension of the generic AST literal trait.
 pub type Disasm<L> = analysis::Disasm<L, PtrVal, Offset>;
 
-pub type Result<T> = analysis::Result<T, PtrVal, Offset>;
+pub type Result<T> = analysis::Result<T, SM83>;
 
 /// Architectural type for SM83
 #[derive(Copy, Clone)]

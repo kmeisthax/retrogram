@@ -145,7 +145,7 @@ where
         &self,
         at: &Pointer<Self::PtrVal>,
         bus: &Memory<Self::PtrVal, Self::Byte, Self::Offset, IO>,
-    ) -> Result<Disasm<L, Self::PtrVal, Self::Offset>, Self::PtrVal, Self::Offset>
+    ) -> Result<Disasm<L, Self::PtrVal, Self::Offset>, Self>
     where
         L: Literal
             + From<Self::Word>
@@ -185,7 +185,7 @@ where
         at: &Pointer<Self::PtrVal>,
         bus: &Memory<Self::PtrVal, Self::Byte, Self::Offset, IO>,
         state: &State<Self::Register, Self::Word, Self::PtrVal, Self::Byte>,
-    ) -> Result<(Vec<Prerequisite<Self>>, bool), Self::PtrVal, Self::Offset>
+    ) -> Result<(Vec<Prerequisite<Self>>, bool), Self>
     where
         IO: One;
 
@@ -214,8 +214,7 @@ where
             State<Self::Register, Self::Word, Self::PtrVal, Self::Byte>,
             Pointer<Self::PtrVal>,
         ),
-        Self::PtrVal,
-        Self::Offset,
+        Self,
     >
     where
         IO: One;
