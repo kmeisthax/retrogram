@@ -10,15 +10,19 @@ use num::{One, Zero};
 use std::collections::HashSet;
 use std::convert::TryInto;
 
-type TraceResult<RK, I, P, MV, S> = analysis::Result<
+#[allow(type_alias_bounds)]
+type TraceResult<AR>
+where
+    AR: Architecture,
+= analysis::Result<
     (
-        memory::Pointer<P>,
-        analysis::Trace<RK, I, P, MV>,
-        reg::State<RK, I, P, MV>,
-        Vec<Prerequisite<RK, I, P, MV, S>>,
+        memory::Pointer<AR::PtrVal>,
+        analysis::Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+        reg::State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+        Vec<Prerequisite<AR>>,
     ),
-    P,
-    S,
+    AR::PtrVal,
+    AR::Offset,
 >;
 
 /// Trace a given precondition state until it is necessary to fork the analysis
@@ -33,7 +37,7 @@ pub fn trace_until_fork<AR, IO>(
     bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
     pre_state: &State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
     arch: AR,
-) -> TraceResult<AR::Register, AR::Word, AR::PtrVal, AR::Byte, AR::Offset>
+) -> TraceResult<AR>
 where
     AR: Architecture,
     AR::Offset: TryInto<usize>, //This shouldn't be necessary.

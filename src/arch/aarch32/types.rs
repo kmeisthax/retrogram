@@ -165,7 +165,7 @@ pub type State = reg::State<Aarch32Register, Value, PtrVal, Data>;
 
 /// The type which represents an execution prerequisite of a given AArch32
 /// program.
-pub type Prerequisite = analysis::Prerequisite<Aarch32Register, Value, PtrVal, Data, Offset>;
+pub type Prerequisite = analysis::Prerequisite<AArch32>;
 
 /// The trace log type which represents the past execution of a given AArch32
 /// program.

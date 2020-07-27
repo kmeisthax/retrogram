@@ -1,14 +1,13 @@
 //! Dynamic analysis passes
 
-use crate::analysis::{Mappable, Prerequisite, Trace};
-use crate::maths::{Numerical, Popcount};
-use crate::memory::{Memory, Offset, Pointer, PtrNum};
-use crate::reg::{Bitwise, State, Symbolic};
-use num_traits::One;
+use crate::analysis::{Prerequisite, Trace};
+use crate::arch::Architecture;
+use crate::memory::{Memory, Pointer};
+use crate::reg::{State, Symbolic};
+use num::{One, Zero};
 use std::cmp::{Ord, Ordering};
 use std::collections::HashSet;
 use std::convert::TryInto;
-use std::hash::Hash;
 
 /// A single fork of an ongoing multiply-forked tracing operation.
 ///
@@ -17,10 +16,9 @@ use std::hash::Hash;
 /// filled in to reach this particular point in execution. So, for example, if
 /// tracing forked once on a prerequisite with one unsatisfied bit, and another
 /// with three, then the branch count is four.
-pub struct Fork<RK, I, P, MV>
+pub struct Fork<AR>
 where
-    RK: Mappable,
-    P: Mappable,
+    AR: Architecture,
 {
     /// The number of alternate forks that are executing alongside this fork.
     ///
@@ -29,28 +27,25 @@ where
     num_branches: f64,
 
     /// The place to start execution of this fork from.
-    pc: Pointer<P>,
+    pc: Pointer<AR::PtrVal>,
 
     /// Any register or memory values which were defined either during the
     /// normal execution of the trace,
-    pre_state: State<RK, I, P, MV>,
+    pre_state: State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
 
     /// The execution history of this fork.
-    trace: Trace<RK, I, P, MV>,
+    trace: Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
 }
 
-impl<RK, I, P, MV> Fork<RK, I, P, MV>
+impl<AR> Fork<AR>
 where
-    RK: Mappable,
-    I: Bitwise + Numerical + TryInto<u64> + Popcount<Output = I>,
-    P: Mappable,
-    MV: Bitwise + Numerical + TryInto<u64> + Popcount<Output = MV>,
-    Symbolic<I>: Bitwise,
-    Symbolic<MV>: Bitwise,
-    Trace<RK, I, P, MV>: Clone,
+    AR: Architecture,
 {
     /// Construct an initial fork at some location.
-    pub fn initial_fork(pc: Pointer<P>, pre_state: State<RK, I, P, MV>) -> Self {
+    pub fn initial_fork(
+        pc: Pointer<AR::PtrVal>,
+        pre_state: State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+    ) -> Self {
         Self {
             num_branches: 0.0,
             pc: pc.clone(),
@@ -61,19 +56,17 @@ where
 
     /// Given a list of prerequisites and the end of a tracing operation,
     /// construct a new list of forks to pursue.
-    pub fn make_forks<S, IO>(
+    pub fn make_forks<IO>(
         num_branches: f64,
-        pc: Pointer<P>,
-        post_state: State<RK, I, P, MV>,
-        bus: &Memory<P, MV, S, IO>,
-        trace: Trace<RK, I, P, MV>,
-        prerequisites: &[Prerequisite<RK, I, P, MV, S>],
+        pc: Pointer<AR::PtrVal>,
+        post_state: State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+        bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+        trace: Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+        prerequisites: &[Prerequisite<AR>],
     ) -> Vec<Self>
     where
-        P: PtrNum<S>,
-        S: Numerical + Offset<P> + TryInto<usize>,
         IO: One,
-        State<RK, I, P, MV>: Clone + Eq + Hash,
+        AR::Offset: TryInto<usize>,
     {
         if prerequisites.is_empty() {
             return vec![Self {
@@ -115,13 +108,16 @@ where
                     state_list = new_state_list;
                 }
                 Prerequisite::Memory { ptr, length, mask } => {
-                    let mut count = S::zero();
+                    let mut count = AR::Offset::zero();
 
                     while count < length.clone() {
                         let ucount = count.clone().try_into().unwrap_or_else(|_| 0);
-                        let mask_part = mask.get(ucount).cloned().unwrap_or_else(|| !MV::zero());
-                        if mask_part == MV::zero() {
-                            count = count + S::one();
+                        let mask_part = mask
+                            .get(ucount)
+                            .cloned()
+                            .unwrap_or_else(|| !AR::Byte::zero());
+                        if mask_part == AR::Byte::zero() {
+                            count = count + AR::Offset::one();
                             continue;
                         }
 
@@ -161,27 +157,25 @@ where
 
         fork_list
     }
-}
 
-impl<RK, I, P, MV> Fork<RK, I, P, MV>
-where
-    RK: Mappable,
-    P: Mappable,
-{
     /// Consume a Fork, returning the branch count, PC, state, and the trace
     /// that got us this far.
     #[allow(clippy::type_complexity)]
-    pub fn into_parts(self) -> (f64, Pointer<P>, State<RK, I, P, MV>, Trace<RK, I, P, MV>) {
+    pub fn into_parts(
+        self,
+    ) -> (
+        f64,
+        Pointer<AR::PtrVal>,
+        State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+        Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+    ) {
         (self.num_branches, self.pc, self.pre_state, self.trace)
     }
 }
 
-impl<RK, I, P, MV> PartialEq for Fork<RK, I, P, MV>
+impl<AR> PartialEq for Fork<AR>
 where
-    RK: Mappable,
-    P: Mappable,
-    Pointer<P>: PartialEq,
-    State<RK, I, P, MV>: PartialEq,
+    AR: Architecture,
 {
     fn eq(&self, other: &Self) -> bool {
         self.num_branches == other.num_branches
@@ -190,21 +184,11 @@ where
     }
 }
 
-impl<RK, I, P, MV> Eq for Fork<RK, I, P, MV>
-where
-    RK: Mappable,
-    P: Mappable,
-    Pointer<P>: Eq,
-    State<RK, I, P, MV>: Eq,
-{
-}
+impl<AR> Eq for Fork<AR> where AR: Architecture {}
 
-impl<RK, I, P, MV> PartialOrd for Fork<RK, I, P, MV>
+impl<AR> PartialOrd for Fork<AR>
 where
-    RK: Mappable,
-    P: Mappable,
-    Pointer<P>: PartialOrd,
-    State<RK, I, P, MV>: PartialOrd,
+    AR: Architecture,
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(
@@ -216,12 +200,9 @@ where
     }
 }
 
-impl<RK, I, P, MV> Ord for Fork<RK, I, P, MV>
+impl<AR> Ord for Fork<AR>
 where
-    RK: Mappable,
-    P: Mappable,
-    Pointer<P>: Ord,
-    State<RK, I, P, MV>: Ord,
+    AR: Architecture,
 {
     fn cmp(&self, other: &Self) -> Ordering {
         self.num_branches

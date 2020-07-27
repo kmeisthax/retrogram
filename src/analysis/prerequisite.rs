@@ -1,49 +1,54 @@
 //! Prerequisite list type
 
-use crate::analysis::Mappable;
-use crate::maths::{Numerical, Popcount};
-use crate::memory::{Memory, Offset, Pointer, PtrNum};
-use crate::reg::{Bitwise, State};
+use crate::arch::Architecture;
+use crate::maths::Popcount;
+use crate::memory::{Memory, Pointer};
+use crate::reg::State;
 use num_traits::{One, Zero};
 use std::convert::TryInto;
-use std::ops::Not;
 
 /// Indicates a memory or register value that needs to be a concrete value
 /// before execution can continue.
-pub enum Prerequisite<RK, I, P, MV, S> {
+pub enum Prerequisite<AR>
+where
+    AR: Architecture,
+{
     /// A register that must be resolved before execution can continue.
     Register {
         /// The register to resolve.
-        register: RK,
+        register: AR::Register,
 
         /// Which bits are considered necessary to be resolved.
         ///
         /// A value of all-ones (e.g. 0xFF) would indicate a register which
         /// needs total resolution, while a value of all-zeroes would indicate
         /// a register that does not need to be resolved.
-        mask: I,
+        mask: AR::Word,
     },
 
     /// A memory location (or set of locations) that must be resolved before
     /// execution can continue.
     Memory {
         /// The memory location to resolve.
-        ptr: Pointer<P>,
+        ptr: Pointer<AR::PtrVal>,
 
         /// How wide the memory location is.
-        length: S,
+        length: AR::Offset,
 
         /// Which bits are considered necessary to be resolved.
         ///
         /// Memory locations not listed in the mask shall be considered equal
         /// to all-ones. Ergo, to indicate memory that needs total resolution,
         /// you may use an empty `Vec`.
-        mask: Vec<MV>,
+        mask: Vec<AR::Byte>,
     },
 }
 
-impl<RK, I, P, MV, S> Prerequisite<RK, I, P, MV, S> {
-    pub fn memory(ptr: Pointer<P>, length: S) -> Self {
+impl<AR> Prerequisite<AR>
+where
+    AR: Architecture,
+{
+    pub fn memory(ptr: Pointer<AR::PtrVal>, length: AR::Offset) -> Self {
         Prerequisite::Memory {
             ptr,
             length,
@@ -51,19 +56,10 @@ impl<RK, I, P, MV, S> Prerequisite<RK, I, P, MV, S> {
         }
     }
 
-    pub fn register(register: RK, mask: I) -> Self {
+    pub fn register(register: AR::Register, mask: AR::Word) -> Self {
         Prerequisite::Register { register, mask }
     }
-}
 
-impl<RK, I, P, MV, S> Prerequisite<RK, I, P, MV, S>
-where
-    RK: Mappable,
-    I: Bitwise + TryInto<u64> + Popcount<Output = I>,
-    P: Mappable + PtrNum<S>,
-    S: Numerical + Offset<P> + TryInto<usize>,
-    MV: Bitwise + TryInto<u64> + Popcount<Output = MV>,
-{
     /// Compute the number of forks needed to explore every branch implied by a
     /// given set of prerequisites, with the current execution state and memory
     /// bus.
@@ -75,11 +71,14 @@ where
     /// 2 to the power of the fork count, then add.
     pub fn necessary_forks<IO>(
         &self,
-        state: &State<RK, I, P, MV>,
-        bus: &Memory<P, MV, S, IO>,
+        state: &State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+        bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
     ) -> u64
     where
         IO: One,
+        AR::Word: TryInto<u64>,
+        AR::Byte: TryInto<u64>,
+        AR::Offset: TryInto<usize>,
     {
         match self {
             Prerequisite::Register { register, mask } => {
@@ -90,7 +89,7 @@ where
             }
             Prerequisite::Memory { ptr, length, mask } => {
                 let mut needs = 0;
-                let mut count = S::zero();
+                let mut count = AR::Offset::zero();
 
                 while count < length.clone() {
                     let mv = state.get_memory(&(ptr.clone() + count.clone()), bus);
@@ -98,27 +97,22 @@ where
                         & mask
                             .get(count.clone().try_into().unwrap_or_else(|_| 0))
                             .cloned()
-                            .unwrap_or_else(|| !MV::zero());
+                            .unwrap_or_else(|| !AR::Byte::zero());
 
                     needs += this_needs.pop_count().try_into().unwrap_or_else(|_| 0);
 
-                    count = count + S::one();
+                    count = count + AR::Offset::one();
                 }
 
                 needs
             }
         }
     }
-}
 
-impl<RK, I, P, MV, S> From<RK> for Prerequisite<RK, I, P, MV, S>
-where
-    I: Zero + Not<Output = I>,
-{
-    fn from(register: RK) -> Self {
+    pub fn from_register(register: AR::Register) -> Self {
         Prerequisite::Register {
             register,
-            mask: !I::zero(),
+            mask: !AR::Word::zero(),
         }
     }
 }

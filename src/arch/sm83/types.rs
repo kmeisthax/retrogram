@@ -48,7 +48,7 @@ impl Register {
             _ => vec![],
         }
         .iter()
-        .map(|r| Prerequisite::from(*r))
+        .map(|r| Prerequisite::from_register(*r))
         .collect()
     }
 }
@@ -134,7 +134,7 @@ pub type Section<L> = ast::Section<L, PtrVal, Data, Offset>;
 pub type State = reg::State<Register, Value, PtrVal, Data>;
 
 /// The prerequisites necessary to execute a given SM83 program.
-pub type Prerequisite = analysis::Prerequisite<Register, Value, PtrVal, Data, Offset>;
+pub type Prerequisite = analysis::Prerequisite<SM83>;
 
 /// The trace log type which represents the past execution of a given SM83
 /// program.

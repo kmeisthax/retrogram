@@ -86,7 +86,10 @@ fn memlist_call_indir16<IO>(
 where
     IO: One,
 {
-    let mut preqs: Vec<Prerequisite> = regs.iter().map(|r| Prerequisite::from(*r)).collect();
+    let mut preqs: Vec<Prerequisite> = regs
+        .iter()
+        .map(|r| Prerequisite::from_register(*r))
+        .collect();
     if include_flags {
         preqs.push(Prerequisite::register(Register::F, 0x90));
     }
@@ -171,10 +174,10 @@ where
         Some(0xF0) => memlist_rw_hi8(&(p.clone() + 1)), //ldh a, [u8]
         Some(0xF8) => Ok((vec![], true)),               //ld hl, sp+r8
 
-        Some(0xE2) => Ok((vec![Prerequisite::from(Register::C)], true)), //ldh [c], a
-        Some(0xEA) => memlist_rw_op16(&(p.clone() + 1)),                 //ld [u16], a
-        Some(0xF2) => Ok((vec![Prerequisite::from(Register::C)], true)), //ldh a, [c]
-        Some(0xFA) => memlist_rw_op16(&(p.clone() + 1)),                 //ld a, [u16]
+        Some(0xE2) => Ok((vec![Prerequisite::from_register(Register::C)], true)), //ldh [c], a
+        Some(0xEA) => memlist_rw_op16(&(p.clone() + 1)),                          //ld [u16], a
+        Some(0xF2) => Ok((vec![Prerequisite::from_register(Register::C)], true)), //ldh a, [c]
+        Some(0xFA) => memlist_rw_op16(&(p.clone() + 1)),                          //ld a, [u16]
         //TODO: Should memory reads prereq on the target of the read?
         Some(0xF3) => Ok((vec![], true)),
         Some(0xFB) => Ok((vec![], true)),

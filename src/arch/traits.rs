@@ -7,6 +7,7 @@ use crate::maths::{Numerical, Popcount};
 use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, State};
 use num::{Bounded, One};
+use std::convert::TryInto;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -32,10 +33,22 @@ pub trait Architecture
 where
     Self: Copy,
     Self::Register: Mappable + Display + FromStr,
-    Self::Word:
-        Bitwise + Numerical + Popcount<Output = Self::Word> + Mappable + Nameable + Ord + Bounded,
-    Self::Byte:
-        Bitwise + Numerical + Popcount<Output = Self::Byte> + Mappable + Nameable + Ord + Bounded,
+    Self::Word: Bitwise
+        + Numerical
+        + Popcount<Output = Self::Word>
+        + TryInto<u64>
+        + Mappable
+        + Nameable
+        + Ord
+        + Bounded,
+    Self::Byte: Bitwise
+        + Numerical
+        + Popcount<Output = Self::Byte>
+        + TryInto<u64>
+        + Mappable
+        + Nameable
+        + Ord
+        + Bounded,
     Self::PtrVal: PtrNum<Self::Offset> + Mappable + Nameable,
     Self::Offset: Offset<Self::PtrVal> + Mappable + Nameable + Numerical,
 {
@@ -172,14 +185,7 @@ where
         at: &Pointer<Self::PtrVal>,
         bus: &Memory<Self::PtrVal, Self::Byte, Self::Offset, IO>,
         state: &State<Self::Register, Self::Word, Self::PtrVal, Self::Byte>,
-    ) -> Result<
-        (
-            Vec<Prerequisite<Self::Register, Self::Word, Self::PtrVal, Self::Byte, Self::Offset>>,
-            bool,
-        ),
-        Self::PtrVal,
-        Self::Offset,
-    >
+    ) -> Result<(Vec<Prerequisite<Self>>, bool), Self::PtrVal, Self::Offset>
     where
         IO: One;
 

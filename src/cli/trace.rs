@@ -13,7 +13,6 @@ use num::One;
 use serde::Deserialize;
 use std::cmp::max;
 use std::collections::HashSet;
-use std::fmt::{Display, UpperHex};
 use std::fs;
 use std::hash::Hash;
 use std::io;
@@ -145,10 +144,9 @@ where
 }
 
 /// Print out the prerequisites that a trace operation stopped on.
-fn print_prereqs<RK, I, P, MV, S>(halt_pc: Pointer<P>, missing: &[Prerequisite<RK, I, P, MV, S>])
+fn print_prereqs<AR>(halt_pc: Pointer<AR::PtrVal>, missing: &[Prerequisite<AR>])
 where
-    RK: Display,
-    P: UpperHex,
+    AR: Architecture,
 {
     println!("Halted at ${:X}", halt_pc);
 
@@ -211,15 +209,13 @@ fn get_next_action() -> io::Result<NextAction> {
 
 /// Collect a register key and value from the user and set that register to
 /// that value in the state.
-fn set_register<RK, RV, P, MV, S>(
-    state: &mut State<RK, RV, P, MV>,
-    missing: &[Prerequisite<RK, RV, P, MV, S>],
+fn set_register<AR>(
+    state: &mut State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+    missing: &[Prerequisite<AR>],
 ) -> io::Result<()>
 where
-    RK: Eq + Hash + Display + FromStr,
-    RV: FromStrRadix,
-    Symbolic<RV>: From<RV>,
-    P: Eq + Hash,
+    AR: Architecture,
+    AR::Word: FromStrRadix,
 {
     let options = missing
         .iter()
@@ -242,7 +238,7 @@ where
             stdin().lock().read_line(&mut rkey_buf)?;
         }
 
-        match RK::from_str(&rkey_buf.trim()) {
+        match AR::Register::from_str(&rkey_buf.trim()) {
             Ok(r) => r,
             Err(_) => {
                 println!("Invalid register name");
@@ -260,7 +256,7 @@ where
             stdin().lock().read_line(&mut rval_buf)?;
         }
 
-        match RV::from_str_radix(&rval_buf.trim(), 16) {
+        match AR::Word::from_str_radix(&rval_buf.trim(), 16) {
             Ok(r) => r,
             Err(_) => {
                 println!("Invalid register value");
@@ -276,16 +272,14 @@ where
 
 /// Collect a memory pointer and value from the user and set that address to
 /// that value in the state memory.
-fn set_memory<RK, RV, P, MV, S>(
-    state: &mut State<RK, RV, P, MV>,
-    missing: &[Prerequisite<RK, RV, P, MV, S>],
+fn set_memory<AR>(
+    state: &mut State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+    missing: &[Prerequisite<AR>],
 ) -> io::Result<()>
 where
-    RK: Eq + Hash,
-    MV: FromStrRadix,
-    Symbolic<MV>: From<MV>,
-    P: Eq + Hash + Display,
-    Pointer<P>: FromStrRadix,
+    AR: Architecture,
+    AR::PtrVal: FromStrRadix,
+    AR::Byte: FromStrRadix,
 {
     let options = missing
         .iter()
@@ -327,7 +321,7 @@ where
             stdin().lock().read_line(&mut rval_buf)?;
         }
 
-        match MV::from_str_radix(&rval_buf.trim(), 16) {
+        match AR::Byte::from_str_radix(&rval_buf.trim(), 16) {
             Ok(r) => r,
             Err(_) => {
                 println!("Invalid register value");
