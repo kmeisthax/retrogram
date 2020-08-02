@@ -6,7 +6,7 @@ use crate::cli::Nameable;
 use crate::maths::{Numerical, Popcount};
 use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, State};
-use num::{Bounded, One};
+use num::Bounded;
 use std::convert::TryInto;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -141,18 +141,17 @@ where
     /// used when disassembling the program. The `IO` type parameter represents
     /// an offset into a program image, which may be a wider type than `Offset`
     /// (e.g. if bank switchig is in use). It is almost always `usize`.
-    fn disassemble<L, IO>(
+    fn disassemble<L>(
         &self,
         at: &Pointer<Self::PtrVal>,
-        bus: &Memory<Self::PtrVal, Self::Byte, Self::Offset, IO>,
+        bus: &Memory<Self>,
     ) -> Result<Disasm<L, Self::PtrVal, Self::Offset>, Self>
     where
         L: Literal
             + From<Self::Word>
             + From<Self::Byte>
             + From<Self::Offset>
-            + From<Pointer<Self::PtrVal>>,
-        IO: One;
+            + From<Pointer<Self::PtrVal>>;
 
     /// Determine what register values or memory addresses are required to be
     /// resolved in order for symbolic execution to continue at a given PC.
@@ -180,14 +179,12 @@ where
     /// The `IO` type parameter represents an offset into a program image,
     /// which may be a wider type than `Offset` (e.g. if bank switchig is in
     /// use). It is almost always `usize`.
-    fn prerequisites<IO>(
+    fn prerequisites(
         &self,
         at: &Pointer<Self::PtrVal>,
-        bus: &Memory<Self::PtrVal, Self::Byte, Self::Offset, IO>,
-        state: &State<Self::Register, Self::Word, Self::PtrVal, Self::Byte>,
-    ) -> Result<(Vec<Prerequisite<Self>>, bool), Self>
-    where
-        IO: One;
+        bus: &Memory<Self>,
+        state: &State<Self>,
+    ) -> Result<(Vec<Prerequisite<Self>>, bool), Self>;
 
     /// Advance the state of program execution by one instruction, producing a
     /// new state and program counter to continue from.
@@ -203,19 +200,11 @@ where
     ///
     /// TODO: There is currently no representation of states that halt the
     /// program.
-    fn trace<IO>(
+    fn trace(
         &self,
         at: &Pointer<Self::PtrVal>,
-        bus: &Memory<Self::PtrVal, Self::Byte, Self::Offset, IO>,
-        state: State<Self::Register, Self::Word, Self::PtrVal, Self::Byte>,
-        trace: &mut Trace<Self::Register, Self::Word, Self::PtrVal, Self::Byte>,
-    ) -> Result<
-        (
-            State<Self::Register, Self::Word, Self::PtrVal, Self::Byte>,
-            Pointer<Self::PtrVal>,
-        ),
-        Self,
-    >
-    where
-        IO: One;
+        bus: &Memory<Self>,
+        state: State<Self>,
+        trace: &mut Trace<Self>,
+    ) -> Result<(State<Self>, Pointer<Self::PtrVal>), Self>;
 }

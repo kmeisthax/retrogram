@@ -9,7 +9,6 @@ use crate::arch::aarch32::Aarch32Register as A32Reg;
 use crate::arch::aarch32::{Bus, Disasm, Literal, PtrVal};
 use crate::ast::{Instruction, Operand as op};
 use crate::{analysis, memory, reg};
-use num::One;
 
 fn cond_branch<L>(p: &memory::Pointer<PtrVal>, cond: u16, offset: u16) -> aarch32::Result<Disasm<L>>
 where
@@ -612,14 +611,13 @@ where
     ))
 }
 
-fn uncond_branch_link<L, IO>(
+fn uncond_branch_link<L>(
     p: &memory::Pointer<PtrVal>,
-    mem: &Bus<IO>,
+    mem: &Bus,
     high_offset: u16,
 ) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
-    IO: One,
 {
     match mem.read_leword::<u16>(&(p.clone() + 2)).into_concrete() {
         Some(low_instr) if low_instr & 0xE000 == 0xE000 => {
@@ -842,10 +840,9 @@ where
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
 #[allow(clippy::many_single_char_names)]
-pub fn disassemble<L, IO>(p: &memory::Pointer<PtrVal>, mem: &Bus<IO>) -> aarch32::Result<Disasm<L>>
+pub fn disassemble<L>(p: &memory::Pointer<PtrVal>, mem: &Bus) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
-    IO: One,
 {
     match mem.read_leword::<u16>(p).into_concrete() {
         Some(instr) => {

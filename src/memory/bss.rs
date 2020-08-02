@@ -1,56 +1,51 @@
 //! A generic Image type for modeling memory that is either uninitialized or
 //! unknown.
 
+use crate::arch::Architecture;
 use crate::maths::CheckedSub;
-use crate::memory::{Image, Pointer};
+use crate::memory::{Image, Offset, Pointer};
 use crate::reg;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
 
 /// Models a range of memory whose contents are unknown.
 ///
 /// "Unknown" means that the contents of memory cannot be statically analyzed.
-pub struct UnknownImage<P, MV, IO = usize> {
-    pdata: PhantomData<P>,
-    mvdata: PhantomData<MV>,
-    iodata: PhantomData<IO>,
+pub struct UnknownImage<AR>
+where
+    AR: Architecture,
+{
+    phantom_arch: PhantomData<AR>,
 }
 
-impl<P, MV, IO> UnknownImage<P, MV, IO> {
+impl<AR> UnknownImage<AR>
+where
+    AR: Architecture,
+{
     pub fn new() -> Self {
-        UnknownImage {
-            pdata: PhantomData,
-            mvdata: PhantomData,
-            iodata: PhantomData,
+        Self {
+            phantom_arch: PhantomData,
         }
     }
 }
 
-impl<P, MV, IO> Image for UnknownImage<P, MV, IO>
+impl<AR> Image<AR> for UnknownImage<AR>
 where
-    P: Clone + CheckedSub,
-    <P as std::ops::Sub>::Output: TryInto<IO>,
+    AR: Architecture,
+    AR::Offset: Offset<AR::PtrVal>,
 {
-    type Pointer = P;
-    type Offset = IO;
-    type Data = MV;
-
-    fn retrieve(&self, _offset: Self::Offset, _count: Self::Offset) -> Option<&[Self::Data]> {
+    fn retrieve(&self, _offset: usize, _count: usize) -> Option<&[AR::Byte]> {
         None
     }
 
-    fn decode_addr(
-        &self,
-        ptr: &Pointer<Self::Pointer>,
-        base: Self::Pointer,
-    ) -> Option<Self::Offset> {
+    fn decode_addr(&self, ptr: &Pointer<AR::PtrVal>, base: AR::PtrVal) -> Option<usize> {
         match ptr.as_pointer().clone().checked_sub(base) {
-            Some(p) => p.try_into().ok(),
+            Some(p) => AR::Offset::try_from(p).ok()?.try_into().ok(),
             None => None,
         }
     }
 
-    fn minimize_context(&self, ptr: Pointer<Self::Pointer>) -> Pointer<Self::Pointer> {
+    fn minimize_context(&self, ptr: Pointer<AR::PtrVal>) -> Pointer<AR::PtrVal> {
         Pointer::from(ptr.as_pointer().clone())
     }
 }
@@ -59,49 +54,35 @@ where
 /// in order to decode.
 ///
 /// "Unknown" means that the contents of memory cannot be statically analyzed.
-pub struct UnknownBankedImage<P, MV, IO = usize> {
+pub struct UnknownBankedImage {
     banking_ctxt: &'static str,
-    pdata: PhantomData<*const P>,
-    mvdata: PhantomData<*const MV>,
-    iodata: PhantomData<*const IO>,
 }
 
-impl<P, MV, IO> UnknownBankedImage<P, MV, IO> {
+impl UnknownBankedImage {
     pub fn new(context: &'static str) -> Self {
-        UnknownBankedImage {
+        Self {
             banking_ctxt: context,
-            pdata: PhantomData,
-            mvdata: PhantomData,
-            iodata: PhantomData,
         }
     }
 }
 
-impl<P, MV, IO> Image for UnknownBankedImage<P, MV, IO>
+impl<AR> Image<AR> for UnknownBankedImage
 where
-    P: Clone + CheckedSub,
-    <P as std::ops::Sub>::Output: TryInto<IO>,
+    AR: Architecture,
+    AR::Offset: Offset<AR::PtrVal>,
 {
-    type Pointer = P;
-    type Offset = IO;
-    type Data = MV;
-
-    fn retrieve(&self, _offset: Self::Offset, _count: Self::Offset) -> Option<&[Self::Data]> {
+    fn retrieve(&self, _offset: usize, _count: usize) -> Option<&[AR::Byte]> {
         None
     }
 
-    fn decode_addr(
-        &self,
-        ptr: &Pointer<Self::Pointer>,
-        base: Self::Pointer,
-    ) -> Option<Self::Offset> {
+    fn decode_addr(&self, ptr: &Pointer<AR::PtrVal>, base: AR::PtrVal) -> Option<usize> {
         match ptr.as_pointer().clone().checked_sub(base) {
-            Some(p) => p.try_into().ok(),
+            Some(p) => AR::Offset::try_from(p).ok()?.try_into().ok(),
             None => None,
         }
     }
 
-    fn minimize_context(&self, ptr: Pointer<Self::Pointer>) -> Pointer<Self::Pointer> {
+    fn minimize_context(&self, ptr: Pointer<AR::PtrVal>) -> Pointer<AR::PtrVal> {
         let my_ctxt = ptr.get_platform_context(self.banking_ctxt);
         let mut stripped_ptr = Pointer::from(ptr.as_pointer().clone());
 
@@ -111,9 +92,9 @@ where
 
     fn insert_user_context(
         &self,
-        mut ptr: Pointer<Self::Pointer>,
+        mut ptr: Pointer<AR::PtrVal>,
         ctxts: &[&str],
-    ) -> Pointer<Self::Pointer> {
+    ) -> Pointer<AR::PtrVal> {
         if let Some(ctxt) = ctxts.get(0) {
             if let Ok(cval) = u64::from_str_radix(ctxt, 16) {
                 ptr.set_platform_context(self.banking_ctxt, reg::Symbolic::from(cval));

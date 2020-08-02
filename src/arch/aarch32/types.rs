@@ -4,7 +4,6 @@ use crate::arch::aarch32::{architectural_ctxt_parse, disassemble, prereq, trace}
 use crate::arch::Architecture;
 use crate::memory::Pointer;
 use crate::{analysis, ast, memory, reg};
-use num::One;
 use std::{fmt, result, str};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -146,7 +145,7 @@ pub type Data = u8;
 pub type BusAddress = memory::Pointer<PtrVal>;
 
 /// The compatible memory model type necessary to analyze AArch32 programs.
-pub type Bus<IO> = memory::Memory<PtrVal, Data, Offset, IO>;
+pub type Bus = memory::Memory<AArch32>;
 
 /// A trait which defines what assembler literals we need support for.
 pub trait Literal: ast::Literal + From<Value> + From<Offset> + From<BusAddress> {}
@@ -161,7 +160,7 @@ pub type Section<L> = ast::Section<L, PtrVal, Data, Offset>;
 
 /// The register state type which represents the execution state of a given
 /// AArch32 program.
-pub type State = reg::State<Aarch32Register, Value, PtrVal, Data>;
+pub type State = reg::State<AArch32>;
 
 /// The type which represents an execution prerequisite of a given AArch32
 /// program.
@@ -169,7 +168,7 @@ pub type Prerequisite = analysis::Prerequisite<AArch32>;
 
 /// The trace log type which represents the past execution of a given AArch32
 /// program.
-pub type Trace = analysis::Trace<Aarch32Register, Value, PtrVal, Data>;
+pub type Trace = analysis::Trace<AArch32>;
 
 /// The type which represents a single disassembled instruction.
 ///
@@ -198,40 +197,33 @@ impl Architecture for AArch32 {
         architectural_ctxt_parse(contexts, ptr)
     }
 
-    fn disassemble<L, IO>(&self, at: &Pointer<Self::PtrVal>, bus: &Bus<IO>) -> Result<Disasm<L>>
+    fn disassemble<L>(&self, at: &Pointer<Self::PtrVal>, bus: &Bus) -> Result<Disasm<L>>
     where
         L: Literal
             + From<Self::Word>
             + From<Self::Byte>
             + From<Self::Offset>
             + From<Pointer<Self::PtrVal>>,
-        IO: One,
     {
         disassemble(at, bus)
     }
 
-    fn prerequisites<IO>(
+    fn prerequisites(
         &self,
         at: &Pointer<Self::PtrVal>,
-        bus: &Bus<IO>,
+        bus: &Bus,
         state: &State,
-    ) -> Result<(Vec<Prerequisite>, bool)>
-    where
-        IO: One,
-    {
+    ) -> Result<(Vec<Prerequisite>, bool)> {
         prereq(at, bus, state)
     }
 
-    fn trace<IO>(
+    fn trace(
         &self,
         at: &Pointer<Self::PtrVal>,
-        bus: &Bus<IO>,
+        bus: &Bus,
         state: State,
         this_trace: &mut Trace,
-    ) -> Result<(State, Pointer<Self::PtrVal>)>
-    where
-        IO: One,
-    {
+    ) -> Result<(State, Pointer<Self::PtrVal>)> {
         trace(at, bus, state, this_trace)
     }
 }

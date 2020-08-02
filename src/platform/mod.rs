@@ -5,7 +5,7 @@
 
 pub mod agb;
 pub mod gb;
-pub mod sfc;
+//pub mod sfc;
 
 use crate::arch;
 use serde::Serialize;

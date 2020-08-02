@@ -4,17 +4,15 @@ use crate::analysis::{analyze_trace_log, trace_until_fork, Prerequisite, Trace, 
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::ast::Instruction;
 use crate::input::parse_ptr;
-use crate::maths::{FromStrRadix, Numerical};
+use crate::maths::FromStrRadix;
 use crate::memory::{Memory, Pointer};
 use crate::project;
 use crate::reg::{State, Symbolic};
 use clap::{ArgMatches, Values};
-use num::One;
 use serde::Deserialize;
 use std::cmp::max;
 use std::collections::HashSet;
 use std::fs;
-use std::hash::Hash;
 use std::io;
 use std::io::{stdin, stdout, BufRead, Write};
 use std::str::FromStr;
@@ -44,23 +42,21 @@ impl NextAction {
 }
 
 /// Parse a bunch of registers from a multiple-value argument into a State.
-fn reg_parse<RK, RV, P, MV>(state: &mut State<RK, RV, P, MV>, regs: Values<'_>) -> io::Result<()>
+fn reg_parse<AR>(state: &mut State<AR>, regs: Values<'_>) -> io::Result<()>
 where
-    RK: Eq + Hash + FromStr,
-    RV: Numerical + FromStrRadix,
-    Symbolic<RV>: From<RV>,
-    P: Eq + Hash,
+    AR: Architecture,
+    AR::Word: FromStrRadix,
 {
     for reg_spec in regs {
         let values = reg_spec.split('=').collect::<Vec<&str>>();
         if let Some(v) = values.get(0..2) {
-            let reg: RK = v[0].parse().map_err(|_e| {
+            let reg: AR::Register = v[0].parse().map_err(|_e| {
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!("Register {} is invalid", v[0]),
                 )
             })?;
-            let value = RV::from_str_radix(v[1], 16).map_err(|_e| {
+            let value = AR::Word::from_str_radix(v[1], 16).map_err(|_e| {
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!("Value {} for register {} is invalid", v[1], v[0]),
@@ -75,16 +71,15 @@ where
 }
 
 /// Print a tracelog out to the console as a table.
-fn print_tracelog<L, AR, IO, FMTI>(
-    trace: Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
-    bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+fn print_tracelog<L, AR, FMTI>(
+    trace: Trace<AR>,
+    bus: &Memory<AR>,
     arch: AR,
     fmt_i: FMTI,
 ) -> io::Result<()>
 where
     L: CompatibleLiteral<AR>,
     AR: Architecture,
-    IO: One,
     FMTI: Fn(&Instruction<L>) -> String,
 {
     let mut pc_list = vec![];
@@ -209,10 +204,7 @@ fn get_next_action() -> io::Result<NextAction> {
 
 /// Collect a register key and value from the user and set that register to
 /// that value in the state.
-fn set_register<AR>(
-    state: &mut State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
-    missing: &[Prerequisite<AR>],
-) -> io::Result<()>
+fn set_register<AR>(state: &mut State<AR>, missing: &[Prerequisite<AR>]) -> io::Result<()>
 where
     AR: Architecture,
     AR::Word: FromStrRadix,
@@ -272,10 +264,7 @@ where
 
 /// Collect a memory pointer and value from the user and set that address to
 /// that value in the state memory.
-fn set_memory<AR>(
-    state: &mut State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
-    missing: &[Prerequisite<AR>],
-) -> io::Result<()>
+fn set_memory<AR>(state: &mut State<AR>, missing: &[Prerequisite<AR>]) -> io::Result<()>
 where
     AR: Architecture,
     AR::PtrVal: FromStrRadix,
@@ -335,11 +324,11 @@ where
     Ok(())
 }
 
-fn trace_for_arch<'a, L, AR, IO, FMTI>(
+fn trace_for_arch<'a, L, AR, FMTI>(
     prog: &project::Program,
     argv: &ArgMatches<'a>,
     start_spec: &str,
-    bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    bus: &Memory<AR>,
     fmt_i: FMTI,
     arch: AR,
 ) -> io::Result<()>
@@ -350,7 +339,6 @@ where
     for<'dw> AR::PtrVal: Deserialize<'dw> + FromStrRadix,
     for<'dw> AR::Offset: Deserialize<'dw>,
     L: CompatibleLiteral<AR>,
-    IO: One,
     FMTI: Copy + Fn(&Instruction<L>) -> String,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
@@ -395,7 +383,7 @@ where
 
                 traced_blocks = traced_blocks
                     .union(
-                        &analyze_trace_log::<L, AR, IO>(&trace, bus, db, arch)
+                        &analyze_trace_log::<L, AR>(&trace, bus, db, arch)
                             .map_err(Into::<io::Error>::into)?,
                     )
                     .copied()

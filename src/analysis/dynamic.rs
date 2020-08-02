@@ -17,8 +17,8 @@ where
 = analysis::Result<
     (
         memory::Pointer<AR::PtrVal>,
-        analysis::Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
-        reg::State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+        analysis::Trace<AR>,
+        reg::State<AR>,
         Vec<Prerequisite<AR>>,
     ),
     AR,
@@ -30,17 +30,16 @@ where
 /// This function returns the precondition state and a pointer to the first
 /// instruction which requires parallel tracing and cannot be executed
 /// symbolically.
-pub fn trace_until_fork<AR, IO>(
+pub fn trace_until_fork<AR>(
     pc: &Pointer<AR::PtrVal>,
-    mut trace: Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
-    bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
-    pre_state: &State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+    mut trace: Trace<AR>,
+    bus: &Memory<AR>,
+    pre_state: &State<AR>,
     arch: AR,
 ) -> TraceResult<AR>
 where
     AR: Architecture,
     AR::Offset: TryInto<usize>, //This shouldn't be necessary.
-    IO: One,
 {
     let mut new_pc = pc.clone();
     let mut new_state = pre_state.clone();
@@ -101,16 +100,15 @@ where
 /// This function returns a set of blocks that the trace has passed through. At
 /// the end of trace execution, all of these sets must be merged, and any block
 /// within them must have their trace couts incremented by one.
-pub fn analyze_trace_log<L, AR, IO>(
-    trace: &Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
-    bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+pub fn analyze_trace_log<L, AR>(
+    trace: &Trace<AR>,
+    bus: &Memory<AR>,
     database: &mut Database<AR::PtrVal, AR::Offset>,
     arch: AR,
 ) -> analysis::Result<HashSet<usize>, AR>
 where
     L: CompatibleLiteral<AR>,
     AR: Architecture,
-    IO: One,
 {
     let mut last_pc: Option<Pointer<AR::PtrVal>> = None;
     let mut last_disasm: Option<Disasm<L, AR::PtrVal, AR::Offset>> = None;

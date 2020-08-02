@@ -3,15 +3,14 @@
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::{analysis, ast, input, maths, memory, project};
 use clap::ArgMatches;
-use num::One;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::{fs, io};
 
-fn dis_inner<L, IO, FMT, AR>(
+fn dis_inner<L, FMT, AR>(
     prog: &project::Program,
     start_spec: &str,
-    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    bus: &memory::Memory<AR>,
     format: FMT,
     arch: AR,
 ) -> io::Result<()>
@@ -21,7 +20,6 @@ where
     for<'dw> AR::PtrVal: serde::Deserialize<'dw> + maths::FromStrRadix,
     for<'dw> AR::Offset: serde::Deserialize<'dw>,
     FMT: Fn(&ast::Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
-    IO: One,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,

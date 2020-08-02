@@ -6,10 +6,10 @@ use clap::ArgMatches;
 use num_traits::One;
 use std::{fs, io};
 
-fn backref_inner<L, FMT, AR, IO>(
+fn backref_inner<L, FMT, AR>(
     prog: &project::Program,
     start_spec: &str,
-    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    bus: &memory::Memory<AR>,
     fmt: FMT,
     arch: AR,
 ) -> io::Result<()>
@@ -20,7 +20,6 @@ where
     for<'dw> AR::Offset: cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
     for<'dw> AR::Byte: serde::Deserialize<'dw>,
     FMT: Fn(&ast::Instruction<L>) -> String,
-    IO: One,
 {
     let mut pjdb = project::ProjectDatabase::read(prog.as_database_path())?;
     let db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {

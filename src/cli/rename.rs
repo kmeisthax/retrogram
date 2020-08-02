@@ -7,11 +7,11 @@ use num_traits::One;
 use std::str::FromStr;
 use std::{fs, io};
 
-fn rename_inner<AR, IO>(
+fn rename_inner<AR>(
     prog: &project::Program,
     from_spec: &str,
     to_spec: &str,
-    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    bus: &memory::Memory<AR>,
     arch: AR,
 ) -> io::Result<()>
 where

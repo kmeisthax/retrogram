@@ -1,16 +1,15 @@
 //! A special-purpose type for modeling the address decoding of a particular
 //! platform.
 
-use crate::analysis::Mappable;
+use crate::arch::Architecture;
 use crate::maths::CheckedSub;
 use crate::memory::bss::UnknownImage;
 use crate::memory::rombin::ROMBinaryImage;
-use crate::memory::{Behavior, Desegmentable, Endianness, Image, Pointer};
+use crate::memory::{Behavior, Desegmentable, Endianness, Image, Offset, Pointer};
 use crate::reg::State;
 use crate::{memory, reg};
-use num::traits::One;
+use num::traits::{One, Zero};
 use std::convert::{TryFrom, TryInto};
-use std::fmt::Debug;
 use std::io;
 
 /// Models a region of memory visible to the program under analysis.
@@ -48,19 +47,22 @@ use std::io;
 /// "huge memory"); we still wouldn't be able to model the machine's ported I/O
 /// space. Pointers on x86 would need to be an enum of port and memory space
 /// addresses, with offsets being straight integers.
-struct Region<P, MV, S = P, IO = usize> {
-    start: P,
-    length: S,
+struct Region<AR>
+where
+    AR: Architecture,
+{
+    start: AR::PtrVal,
+    length: AR::Offset,
     read_memtype: Behavior,
     write_memtype: Behavior,
     exec_memtype: Behavior,
-    image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>,
+    image: Box<dyn Image<AR>>,
 }
 
-impl<P, MV, S, IO> Region<P, MV, S, IO>
+impl<AR> Region<AR>
 where
-    P: memory::PtrNum<S>,
-    S: memory::Offset<P>,
+    AR: Architecture,
+    AR::Offset: Offset<AR::PtrVal>,
 {
     /// Determine if a contextual pointer is within this region.
     ///
@@ -69,12 +71,15 @@ where
     /// the contexts this image depends on aren't valid for the given image
     /// contents, then the contextual pointer will be treated as "outside" the
     /// given image.
-    pub fn is_ptr_within(&self, ptr: Pointer<P>) -> bool {
-        if let Some(maybe_offset) = ptr.as_pointer().clone().checked_sub(self.start.clone()) {
-            if let Ok(offset) = S::try_from(maybe_offset) {
-                if let Some(_ms_offset) = self.image.decode_addr(&ptr, self.start.clone()) {
-                    return self.start <= ptr.as_pointer().clone() && offset < self.length;
-                }
+    pub fn is_ptr_within(&self, ptr: Pointer<AR::PtrVal>) -> bool {
+        if let Some(offset) = ptr
+            .as_pointer()
+            .clone()
+            .checked_sub(self.start.clone())
+            .and_then(|vo| AR::Offset::try_from(vo).ok())
+        {
+            if let Some(_ms_offset) = self.image.decode_addr(&ptr, self.start.clone()) {
+                return self.start <= ptr.as_pointer().clone() && offset < self.length;
             }
         }
 
@@ -83,29 +88,38 @@ where
 }
 
 //TODO: something better than just a vec pls...
-pub struct Memory<P, MV, S = P, IO = usize> {
-    views: Vec<Region<P, MV, S, IO>>,
+pub struct Memory<AR>
+where
+    AR: Architecture,
+{
+    views: Vec<Region<AR>>,
 }
 
-impl<P, MV, S, IO> Default for Memory<P, MV, S, IO> {
+impl<AR> Default for Memory<AR>
+where
+    AR: Architecture,
+{
     fn default() -> Self {
         Memory { views: Vec::new() }
     }
 }
 
-impl<P, MV, S, IO> Memory<P, MV, S, IO> {
+impl<AR> Memory<AR>
+where
+    AR: Architecture,
+{
     pub fn new() -> Self {
         Memory { views: Vec::new() }
     }
 
     pub fn install_mem_image(
         &mut self,
-        start: P,
-        length: S,
+        start: AR::PtrVal,
+        length: AR::Offset,
         read_memtype: Behavior,
         write_memtype: Behavior,
         exec_memtype: Behavior,
-        image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>,
+        image: Box<dyn Image<AR>>,
     ) {
         self.views.push(Region {
             start,
@@ -119,9 +133,9 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
 
     pub fn install_rom_image(
         &mut self,
-        start: P,
-        length: S,
-        image: Box<dyn Image<Pointer = P, Offset = IO, Data = MV>>,
+        start: AR::PtrVal,
+        length: AR::Offset,
+        image: Box<dyn Image<AR>>,
     ) {
         self.views.push(Region {
             start,
@@ -134,18 +148,15 @@ impl<P, MV, S, IO> Memory<P, MV, S, IO> {
     }
 }
 
-impl<P, MV, S, IO> Memory<P, MV, S, IO>
+impl<AR> Memory<AR>
 where
-    P: memory::PtrNum<S> + 'static,
-    S: memory::Offset<P>,
-    IO: Clone + 'static,
-    <P as std::ops::Sub>::Output: TryInto<IO>,
-    MV: 'static,
+    AR: Architecture + 'static,
+    AR::Offset: Offset<AR::PtrVal> + TryInto<usize>,
 {
     pub fn install_mem(
         &mut self,
-        start: P,
-        length: S,
+        start: AR::PtrVal,
+        length: AR::Offset,
         read_memtype: Behavior,
         write_memtype: Behavior,
         exec_memtype: Behavior,
@@ -160,7 +171,7 @@ where
         });
     }
 
-    pub fn install_ram(&mut self, start: P, length: S) {
+    pub fn install_ram(&mut self, start: AR::PtrVal, length: AR::Offset) {
         self.views.push(Region {
             start,
             length,
@@ -171,7 +182,7 @@ where
         });
     }
 
-    pub fn install_io(&mut self, start: P, length: S) {
+    pub fn install_io(&mut self, start: AR::PtrVal, length: AR::Offset) {
         self.views.push(Region {
             start,
             length,
@@ -182,7 +193,7 @@ where
         });
     }
 
-    pub fn install_openbus(&mut self, start: P, length: S) {
+    pub fn install_openbus(&mut self, start: AR::PtrVal, length: AR::Offset) {
         self.views.push(Region {
             start,
             length,
@@ -192,15 +203,13 @@ where
             image: Box::new(UnknownImage::new()),
         });
     }
-}
 
-impl<P, MV, S> Memory<P, MV, S, usize>
-where
-    P: Clone + CheckedSub + 'static,
-    usize: memory::Offset<P>,
-    MV: From<u8> + 'static,
-{
-    pub fn install_rom<F>(&mut self, start: P, length: S, file: &mut F) -> io::Result<()>
+    pub fn install_rom<F>(
+        &mut self,
+        start: AR::PtrVal,
+        length: AR::Offset,
+        file: &mut F,
+    ) -> io::Result<()>
     where
         F: io::Read,
     {
@@ -217,13 +226,9 @@ where
     }
 }
 
-impl<P, MV, S, IO> Memory<P, MV, S, IO>
+impl<AR> Memory<AR>
 where
-    P: memory::PtrNum<S>,
-    S: memory::Offset<P>,
-    MV: reg::Bitwise,
-    IO: One,
-    reg::Symbolic<MV>: Default,
+    AR: Architecture,
 {
     /// Determine if a given region of memory is dynamically overwritable.
     ///
@@ -237,7 +242,7 @@ where
     /// 3. Both reads and writes must be answered by the same view.
     ///
     ///
-    pub fn is_overwritable(&self, ptr: &Pointer<P>) -> bool {
+    pub fn is_overwritable(&self, ptr: &Pointer<AR::PtrVal>) -> bool {
         for view in &self.views {
             if view.image.decode_addr(ptr, view.start.clone()).is_some() {
                 if view.read_memtype == Behavior::Memory && view.write_memtype == Behavior::Memory {
@@ -255,10 +260,10 @@ where
     ///
     /// Yields a symbolic value which is concrete if the memory model has image
     /// data for the given pointer, and is unconstrained otherwise.
-    pub fn read_unit(&self, ptr: &Pointer<P>) -> reg::Symbolic<MV> {
+    pub fn read_unit(&self, ptr: &Pointer<AR::PtrVal>) -> reg::Symbolic<AR::Byte> {
         for view in &self.views {
             if let Some(offset) = view.image.decode_addr(ptr, view.start.clone()) {
-                if let Some(imgdata) = view.image.retrieve(offset, IO::one()) {
+                if let Some(imgdata) = view.image.retrieve(offset, 1) {
                     if !imgdata.is_empty() {
                         return reg::Symbolic::from(imgdata[0].clone());
                     }
@@ -274,31 +279,28 @@ where
     /// Yields an array of symbolic values whose constraints are equal to the
     /// result of calling `read_unit` on each pointer from `ptr` to
     /// `ptr + size`.
-    pub fn read_memory(&self, ptr: &Pointer<P>, size: S) -> Vec<reg::Symbolic<MV>> {
-        let mut count = S::zero();
+    pub fn read_memory(
+        &self,
+        ptr: &Pointer<AR::PtrVal>,
+        size: AR::Offset,
+    ) -> Vec<reg::Symbolic<AR::Byte>> {
+        let mut count = AR::Offset::zero();
         let mut out = Vec::new();
 
         while count < size {
             let offptr = ptr.clone() + count.clone();
             out.push(self.read_unit(&offptr));
-            count = count + S::one();
+            count = count + AR::Offset::one();
         }
 
         out
     }
 }
 
-impl<P, MV, S, IO> Memory<P, MV, S, IO>
+impl<AR> Memory<AR>
 where
-    P: memory::PtrNum<S> + Mappable,
-    S: memory::Offset<P> + Mappable,
-    MV: reg::Bitwise,
-    IO: One,
-    reg::Symbolic<MV>: Default,
+    AR: Architecture,
 {
-    /// Simulate memory writes to a single location.
-    pub fn write_unit(&self, ptr: &mut Pointer<P>, data: MV, state: &mut State<P, MV, S, IO>) {}
-
     /// Simulate memory writes to a particular location.
     ///
     /// Memory writes are free to change either pointer contexts or program
@@ -307,34 +309,29 @@ where
     /// Memory writes will be made in order of increasing pointer values. This
     /// means that multi-value writes that change contexts may change where
     /// writes occur mid-write.
-    pub fn write_memory(&self, ptr: &mut Pointer<P>, data: &[MV], state: &mut State<P, MV, S, IO>) {
+    pub fn write_memory(
+        &self,
+        _ptr: &mut Pointer<AR::PtrVal>,
+        _data: &[AR::Byte],
+        _state: &mut State<AR>,
+    ) {
     }
-}
 
-impl<P, MV, S, IO> Memory<P, MV, S, IO>
-where
-    P: memory::PtrNum<S>,
-    S: memory::Offset<P> + TryFrom<u32>,
-    MV: reg::Bitwise,
-    IO: One,
-    reg::Symbolic<MV>: Default,
-    <S as TryFrom<u32>>::Error: Debug,
-{
     /// Read an arbitary little-endian integer type from memory.
     ///
     /// The underlying memory value types must implement `Desegmentable` and
     /// their symbolic versions must also implement `Desegmentable`. It must
     /// also be possible to generate a memory offset from a u32.
-    pub fn read_leword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
+    pub fn read_leword<EV>(&self, ptr: &Pointer<AR::PtrVal>) -> reg::Symbolic<EV>
     where
-        S: TryFrom<usize>,
-        reg::Symbolic<EV>: Default + memory::Desegmentable<reg::Symbolic<MV>>,
+        AR::Offset: TryFrom<usize>,
+        reg::Symbolic<EV>: Default + memory::Desegmentable<reg::Symbolic<AR::Byte>>,
     {
         let units_reqd =
-            <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<MV>>>::units_reqd();
+            <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<AR::Byte>>>::units_reqd();
         let data = self.read_memory(
             ptr,
-            match S::try_from(units_reqd) {
+            match AR::Offset::try_from(units_reqd) {
                 Ok(u) => u,
                 Err(_) => return reg::Symbolic::<EV>::default(),
             },
@@ -348,16 +345,16 @@ where
     /// The underlying memory value types must implement `Desegmentable` and
     /// their symbolic versions must also implement `Desegmentable`. It must
     /// also be possible to generate a memory offset from a u32.
-    pub fn read_beword<EV>(&self, ptr: &Pointer<P>) -> reg::Symbolic<EV>
+    pub fn read_beword<EV>(&self, ptr: &Pointer<AR::PtrVal>) -> reg::Symbolic<EV>
     where
-        S: TryFrom<usize>,
-        reg::Symbolic<EV>: Default + memory::Desegmentable<reg::Symbolic<MV>>,
+        AR::Offset: TryFrom<usize>,
+        reg::Symbolic<EV>: Default + memory::Desegmentable<reg::Symbolic<AR::Byte>>,
     {
         let units_reqd =
-            <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<MV>>>::units_reqd();
+            <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<AR::Byte>>>::units_reqd();
         let data = self.read_memory(
             ptr,
-            match S::try_from(units_reqd) {
+            match AR::Offset::try_from(units_reqd) {
                 Ok(u) => u,
                 Err(_) => return reg::Symbolic::<EV>::default(),
             },
@@ -365,14 +362,8 @@ where
         reg::Symbolic::<EV>::from_segments(&data, Endianness::BigEndian)
             .unwrap_or_else(reg::Symbolic::<EV>::default)
     }
-}
 
-impl<P, MV, S, IO> Memory<P, MV, S, IO>
-where
-    P: memory::PtrNum<S>,
-    S: memory::Offset<P>,
-{
-    pub fn minimize_context(&self, ptr: Pointer<P>) -> Pointer<P> {
+    pub fn minimize_context(&self, ptr: Pointer<AR::PtrVal>) -> Pointer<AR::PtrVal> {
         for view in &self.views {
             if view.is_ptr_within(ptr.clone()) {
                 return view.image.minimize_context(ptr);
@@ -382,7 +373,11 @@ where
         ptr
     }
 
-    pub fn insert_user_context(&self, ptr: Pointer<P>, ctxts: &[&str]) -> Pointer<P> {
+    pub fn insert_user_context(
+        &self,
+        ptr: Pointer<AR::PtrVal>,
+        ctxts: &[&str],
+    ) -> Pointer<AR::PtrVal> {
         for view in &self.views {
             if view.is_ptr_within(ptr.clone()) {
                 return view.image.insert_user_context(ptr, ctxts);

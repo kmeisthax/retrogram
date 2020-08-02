@@ -4,7 +4,6 @@ use crate::arch::sm83::{disassemble, prereq, trace};
 use crate::arch::Architecture;
 use crate::memory::{Memory, Pointer};
 use crate::{analysis, ast, memory, reg};
-use num::One;
 use std::{fmt, result, str};
 
 /// Enumeration of all architectural GBZ80 registers.
@@ -110,7 +109,7 @@ pub type SignedValue = i16;
 pub type Data = u8;
 
 /// The compatible memory model type necessary to analyze GBz80 programs.
-pub type Bus<IO> = memory::Memory<PtrVal, Data, Offset, IO>;
+pub type Bus = memory::Memory<SM83>;
 
 /// A trait which defines what assembler literals we need support for.
 pub trait Literal:
@@ -131,14 +130,14 @@ pub type Section<L> = ast::Section<L, PtrVal, Data, Offset>;
 
 /// The register state type which represents the execution state of a given
 /// SM83 program.
-pub type State = reg::State<Register, Value, PtrVal, Data>;
+pub type State = reg::State<SM83>;
 
 /// The prerequisites necessary to execute a given SM83 program.
 pub type Prerequisite = analysis::Prerequisite<SM83>;
 
 /// The trace log type which represents the past execution of a given SM83
 /// program.
-pub type Trace = analysis::Trace<Register, Value, PtrVal, Data>;
+pub type Trace = analysis::Trace<SM83>;
 
 /// The disasm type which represents a successful disassembly of a single
 /// instruction.
@@ -167,36 +166,29 @@ impl Architecture for SM83 {
         Some(())
     }
 
-    fn disassemble<L, IO>(&self, at: &Pointer<Self::PtrVal>, bus: &Bus<IO>) -> Result<Disasm<L>>
+    fn disassemble<L>(&self, at: &Pointer<Self::PtrVal>, bus: &Bus) -> Result<Disasm<L>>
     where
         L: Literal,
-        IO: One,
     {
         disassemble(at, bus)
     }
 
-    fn prerequisites<IO>(
+    fn prerequisites(
         &self,
         at: &Pointer<Self::PtrVal>,
-        bus: &Memory<Self::PtrVal, Self::Byte, Self::Offset, IO>,
+        bus: &Memory<Self>,
         state: &State,
-    ) -> Result<(Vec<Prerequisite>, bool)>
-    where
-        IO: One,
-    {
+    ) -> Result<(Vec<Prerequisite>, bool)> {
         prereq(at, bus, state)
     }
 
-    fn trace<IO>(
+    fn trace(
         &self,
         at: &Pointer<Self::PtrVal>,
-        bus: &Memory<Self::PtrVal, Self::Byte, Self::Offset, IO>,
+        bus: &Memory<Self>,
         state: State,
         this_trace: &mut Trace,
-    ) -> Result<(State, Pointer<Self::PtrVal>)>
-    where
-        IO: One,
-    {
+    ) -> Result<(State, Pointer<Self::PtrVal>)> {
         trace(at, bus, state, this_trace)
     }
 }

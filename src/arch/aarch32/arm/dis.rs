@@ -10,7 +10,6 @@ use crate::arch::aarch32::Aarch32Register as A32Reg;
 use crate::arch::aarch32::{Bus, Disasm, Literal, PtrVal, THUMB_STATE};
 use crate::ast::{Instruction, Operand, Operand as op};
 use crate::{analysis, ast, memory, reg};
-use num::One;
 
 fn shift_symbol(shift: u32, shift_imm: u32) -> aarch32::Result<&'static str> {
     match (shift, shift_imm) {
@@ -1326,10 +1325,9 @@ where
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
 #[allow(clippy::many_single_char_names)]
-pub fn disassemble<L, IO>(p: &memory::Pointer<PtrVal>, mem: &Bus<IO>) -> aarch32::Result<Disasm<L>>
+pub fn disassemble<L>(p: &memory::Pointer<PtrVal>, mem: &Bus) -> aarch32::Result<Disasm<L>>
 where
     L: Literal,
-    IO: One,
 {
     let instr: reg::Symbolic<u32> = mem.read_leword(&p);
 

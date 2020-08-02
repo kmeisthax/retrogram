@@ -69,13 +69,8 @@ where
     /// cannot add fork counts directly. Adding actually multiplies the number
     /// of forks. To add two unrelated numbers of forks, you must first raise
     /// 2 to the power of the fork count, then add.
-    pub fn necessary_forks<IO>(
-        &self,
-        state: &State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
-        bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
-    ) -> u64
+    pub fn necessary_forks(&self, state: &State<AR>, bus: &Memory<AR>) -> u64
     where
-        IO: One,
         AR::Word: TryInto<u64>,
         AR::Byte: TryInto<u64>,
         AR::Offset: TryInto<usize>,

@@ -30,10 +30,10 @@ use std::str::FromStr;
 ///
 /// Architectures are allowed to provide their own context parse function which
 /// can consume contexts from the list and assign contexts to the pointer.
-pub fn parse_ptr<AR, IO>(
+pub fn parse_ptr<AR>(
     text_str: &str,
     db: &database::Database<AR::PtrVal, AR::Offset>,
-    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    bus: &memory::Memory<AR>,
     _arch: AR,
 ) -> Option<memory::Pointer<AR::PtrVal>>
 where

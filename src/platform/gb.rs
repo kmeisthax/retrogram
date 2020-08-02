@@ -132,23 +132,19 @@ where
     }
 }
 
-impl<M> memory::Image for GameBoyROMImage<M>
+impl<M> memory::Image<sm83::SM83> for GameBoyROMImage<M>
 where
     M: Mapper,
 {
-    type Pointer = sm83::PtrVal;
-    type Offset = usize;
-    type Data = sm83::Data;
-
-    fn retrieve(&self, offset: Self::Offset, count: Self::Offset) -> Option<&[Self::Data]> {
+    fn retrieve(&self, offset: usize, count: usize) -> Option<&[sm83::Data]> {
         Some(&self.data[offset as usize..(offset + count) as usize])
     }
 
     fn decode_addr(
         &self,
-        ptr: &memory::Pointer<Self::Pointer>,
-        base: Self::Pointer,
-    ) -> Option<Self::Offset> {
+        ptr: &memory::Pointer<sm83::PtrVal>,
+        base: sm83::PtrVal,
+    ) -> Option<usize> {
         if base == 0x0000 && *ptr.as_pointer() < 0x4000 {
             Some(*ptr.as_pointer() as usize)
         } else {
@@ -158,8 +154,8 @@ where
 
     fn minimize_context(
         &self,
-        ptr: memory::Pointer<Self::Pointer>,
-    ) -> memory::Pointer<Self::Pointer> {
+        ptr: memory::Pointer<sm83::PtrVal>,
+    ) -> memory::Pointer<sm83::PtrVal> {
         let my_ctxt = ptr.get_platform_context("R");
         let mut stripped_ptr = memory::Pointer::from(*ptr.as_pointer());
 
@@ -172,9 +168,9 @@ where
 
     fn insert_user_context(
         &self,
-        mut ptr: memory::Pointer<Self::Pointer>,
+        mut ptr: memory::Pointer<sm83::PtrVal>,
         ctxts: &[&str],
-    ) -> memory::Pointer<Self::Pointer> {
+    ) -> memory::Pointer<sm83::PtrVal> {
         if *ptr.as_pointer() > 0x4000 {
             if let Some(ctxt) = ctxts.get(0) {
                 if let Ok(cval) = u64::from_str_radix(ctxt, 16) {
@@ -248,7 +244,7 @@ where
 /// You may optionally specify a `PlatformVariant` to control which MBC behavior
 /// is used to analyze the image. If unspecified, the ROM header will be used to
 /// determine which MBC was intended to be used alongside this program.
-pub fn construct_platform<F>(file: &mut F) -> io::Result<sm83::Bus<usize>>
+pub fn construct_platform<F>(file: &mut F) -> io::Result<sm83::Bus>
 where
     F: io::Read + io::Seek,
 {

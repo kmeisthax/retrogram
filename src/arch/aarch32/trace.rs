@@ -3,9 +3,9 @@
 use crate::analysis::Error;
 use crate::arch::aarch32::types::{Bus, BusAddress, Result, State, Trace};
 
-pub fn trace<IO>(
+pub fn trace(
     _p: &BusAddress,
-    _mem: &Bus<IO>,
+    _mem: &Bus,
     _state: State,
     _trace: &mut Trace,
 ) -> Result<(State, BusAddress)> {

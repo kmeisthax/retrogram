@@ -31,10 +31,10 @@ where
 
     /// Any register or memory values which were defined either during the
     /// normal execution of the trace,
-    pre_state: State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+    pre_state: State<AR>,
 
     /// The execution history of this fork.
-    trace: Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+    trace: Trace<AR>,
 }
 
 impl<AR> Fork<AR>
@@ -42,10 +42,7 @@ where
     AR: Architecture,
 {
     /// Construct an initial fork at some location.
-    pub fn initial_fork(
-        pc: Pointer<AR::PtrVal>,
-        pre_state: State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
-    ) -> Self {
+    pub fn initial_fork(pc: Pointer<AR::PtrVal>, pre_state: State<AR>) -> Self {
         Self {
             num_branches: 0.0,
             pc: pc.clone(),
@@ -56,16 +53,15 @@ where
 
     /// Given a list of prerequisites and the end of a tracing operation,
     /// construct a new list of forks to pursue.
-    pub fn make_forks<IO>(
+    pub fn make_forks(
         num_branches: f64,
         pc: Pointer<AR::PtrVal>,
-        post_state: State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
-        bus: &Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
-        trace: Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
+        post_state: State<AR>,
+        bus: &Memory<AR>,
+        trace: Trace<AR>,
         prerequisites: &[Prerequisite<AR>],
     ) -> Vec<Self>
     where
-        IO: One,
         AR::Offset: TryInto<usize>,
     {
         if prerequisites.is_empty() {
@@ -161,14 +157,7 @@ where
     /// Consume a Fork, returning the branch count, PC, state, and the trace
     /// that got us this far.
     #[allow(clippy::type_complexity)]
-    pub fn into_parts(
-        self,
-    ) -> (
-        f64,
-        Pointer<AR::PtrVal>,
-        State<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
-        Trace<AR::Register, AR::Word, AR::PtrVal, AR::Byte>,
-    ) {
+    pub fn into_parts(self) -> (f64, Pointer<AR::PtrVal>, State<AR>, Trace<AR>) {
         (self.num_branches, self.pc, self.pre_state, self.trace)
     }
 }

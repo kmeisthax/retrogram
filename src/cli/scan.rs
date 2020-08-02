@@ -15,22 +15,21 @@ use std::{fmt, fs, io};
 
 /// Scan a specific starting PC and add the results of the analysis to the
 /// database.
-fn scan_pc_for_arch<L, AR, IO>(
+fn scan_pc_for_arch<L, AR>(
     db: &mut database::Database<AR::PtrVal, AR::Offset>,
     start_pc: &memory::Pointer<AR::PtrVal>,
-    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    bus: &memory::Memory<AR>,
     arch: AR,
 ) -> io::Result<()>
 where
     L: CompatibleLiteral<AR>,
     AR: Architecture,
     AR::Offset: Offset<AR::PtrVal>, //I shouldn't have to do this.
-    IO: One,
     reg::Symbolic<AR::Byte>: Default,
     ast::Instruction<L>: Clone,
 {
     let (orig_asm, xrefs, pc_offset, blocks, terminating_error) =
-        analysis::disassemble_block::<L, IO, AR>(start_pc.clone(), bus, arch);
+        analysis::disassemble_block::<L, AR>(start_pc.clone(), bus, arch);
 
     if let Some(err) = terminating_error {
         match (pc_offset, err) {
@@ -122,15 +121,14 @@ where
 ///
 /// This function yields false if it's execution yielded no additional code. It
 /// will also yield the addresses of any code that threw errors when analyzed.
-fn exhaust_all_static_scans<L, AR, IO>(
+fn exhaust_all_static_scans<L, AR>(
     db: &mut Database<AR::PtrVal, AR::Offset>,
-    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    bus: &memory::Memory<AR>,
     arch: AR,
 ) -> (bool, HashSet<Pointer<AR::PtrVal>>)
 where
     L: CompatibleLiteral<AR>,
     AR: Architecture,
-    IO: One,
     AR::Byte: reg::Bitwise + fmt::UpperHex,
     ast::Instruction<L>: Clone,
 {
@@ -181,9 +179,9 @@ where
 /// This function yields true if any dynamic analysis was done. You will need
 /// to check for any new unanalyzed static references after the tracing has
 /// completed.
-fn exhaust_all_dynamic_scans<L, AR, IO>(
+fn exhaust_all_dynamic_scans<L, AR>(
     db: &mut Database<AR::PtrVal, AR::Offset>,
-    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    bus: &memory::Memory<AR>,
     arch: AR,
 ) -> analysis::Result<bool, AR>
 where
@@ -192,7 +190,6 @@ where
     AR::Word: TryInto<u64>,
     AR::Byte: TryInto<u64>,
     AR::Offset: TryInto<usize>,
-    IO: One,
 {
     let mut did_trace = false;
 
@@ -221,7 +218,7 @@ where
 
             did_trace = true;
 
-            let traced_blocks = analyze_trace_log::<L, AR, IO>(&trace, bus, db, arch)?;
+            let traced_blocks = analyze_trace_log::<L, AR>(&trace, bus, db, arch)?;
 
             db.insert_trace_counts(traced_blocks, 1);
 
@@ -250,10 +247,10 @@ where
 ///
 /// TODO: The current set of lifetime bounds preclude the use of zero-copy
 /// deserialization. We should figure out a way around that.
-fn scan_for_arch<L, AR, IO, FMTI>(
+fn scan_for_arch<L, AR, FMTI>(
     prog: &project::Program,
     start_spec: &str,
-    bus: &memory::Memory<AR::PtrVal, AR::Byte, AR::Offset, IO>,
+    bus: &memory::Memory<AR>,
     arch: AR,
     _fmt_i: FMTI, // This shouldn't be necessary...
 ) -> io::Result<()>
@@ -264,7 +261,6 @@ where
     for<'dw> AR::PtrVal: serde::Deserialize<'dw> + serde::Serialize + maths::FromStrRadix,
     AR::Byte: TryInto<u64>,
     for<'dw> AR::Offset: serde::Deserialize<'dw> + serde::Serialize + TryInto<usize>,
-    IO: One,
     reg::Symbolic<AR::Word>: Bitwise,
     reg::Symbolic<AR::Byte>: Default + Bitwise,
     analysis::Error<AR>: Into<io::Error>,
@@ -285,7 +281,7 @@ where
     let start_pc = input::parse_ptr(start_spec, db, bus, arch)
         .expect("Must specify a valid address to analyze");
     eprintln!("Starting scan from {:X}", start_pc);
-    match scan_pc_for_arch::<L, AR, IO>(&mut db, &start_pc, bus, arch) {
+    match scan_pc_for_arch::<L, AR>(&mut db, &start_pc, bus, arch) {
         Ok(_) => {}
         Err(e) => {
             eprintln!("Initial scan failed due to {}", e);
@@ -295,12 +291,12 @@ where
     };
 
     loop {
-        let (did_find_code, _) = exhaust_all_static_scans::<L, AR, IO>(&mut db, bus, arch);
+        let (did_find_code, _) = exhaust_all_static_scans::<L, AR>(&mut db, bus, arch);
         if !did_find_code {
             break;
         }
 
-        let did_trace_branches = exhaust_all_dynamic_scans::<L, AR, IO>(&mut db, bus, arch)
+        let did_trace_branches = exhaust_all_dynamic_scans::<L, AR>(&mut db, bus, arch)
             .map_err(Into::<io::Error>::into)?;
         if !did_trace_branches {
             break;

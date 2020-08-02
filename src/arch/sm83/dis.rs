@@ -2,12 +2,10 @@ use crate::arch::sm83;
 use crate::arch::sm83::{Bus, Disasm, Literal, PtrVal};
 use crate::ast::{Instruction as inst, Operand, Operand as op};
 use crate::{analysis, memory};
-use num::One;
 
-fn int_op16<L, IO>(p: &memory::Pointer<PtrVal>, mem: &Bus<IO>) -> Operand<L>
+fn int_op16<L>(p: &memory::Pointer<PtrVal>, mem: &Bus) -> Operand<L>
 where
     L: Literal,
-    IO: One,
 {
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
         return op::lit(val);
@@ -16,10 +14,9 @@ where
     op::miss()
 }
 
-fn dptr_op16<L, IO>(p: &memory::Pointer<PtrVal>, mem: &Bus<IO>) -> Operand<L>
+fn dptr_op16<L>(p: &memory::Pointer<PtrVal>, mem: &Bus) -> Operand<L>
 where
     L: Literal,
-    IO: One,
 {
     if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
         return op::dptr(p.contextualize(val));
@@ -28,14 +25,11 @@ where
     op::miss()
 }
 
-fn cptr_target<IO>(
+fn cptr_target(
     p: &memory::Pointer<PtrVal>,
-    mem: &Bus<IO>,
+    mem: &Bus,
     kind: analysis::ReferenceKind,
-) -> analysis::Reference<PtrVal>
-where
-    IO: One,
-{
+) -> analysis::Reference<PtrVal> {
     if let Some(lobit) = mem.read_leword::<u16>(p).into_concrete() {
         return analysis::Reference::new_static_ref(p.clone() - 1, p.contextualize(lobit), kind);
     }
@@ -43,10 +37,9 @@ where
     analysis::Reference::new_dyn_ref(p.clone() - 1, kind)
 }
 
-fn cptr_op16<L, IO>(p: &memory::Pointer<PtrVal>, mem: &Bus<IO>) -> Operand<L>
+fn cptr_op16<L>(p: &memory::Pointer<PtrVal>, mem: &Bus) -> Operand<L>
 where
     L: Literal,
-    IO: One,
 {
     match mem.read_leword::<u16>(p).into_concrete() {
         Some(target) => op::cptr(p.contextualize(target)),
@@ -54,10 +47,9 @@ where
     }
 }
 
-fn int_op8<L, IO>(p: &memory::Pointer<PtrVal>, mem: &Bus<IO>) -> Operand<L>
+fn int_op8<L>(p: &memory::Pointer<PtrVal>, mem: &Bus) -> Operand<L>
 where
     L: Literal,
-    IO: One,
 {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         return op::lit(lobit);
@@ -66,14 +58,11 @@ where
     op::miss()
 }
 
-fn pcrel_target<IO>(
+fn pcrel_target(
     p: &memory::Pointer<PtrVal>,
-    mem: &Bus<IO>,
+    mem: &Bus,
     kind: analysis::ReferenceKind,
-) -> analysis::Reference<PtrVal>
-where
-    IO: One,
-{
+) -> analysis::Reference<PtrVal> {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         let target = ((p.as_pointer() + 1) as i16 + (lobit as i8) as i16) as u16;
         return analysis::Reference::new_static_ref(p.clone() - 1, p.contextualize(target), kind);
@@ -82,10 +71,9 @@ where
     analysis::Reference::new_dyn_ref(p.clone() - 1, kind)
 }
 
-fn pcrel_op8<L, IO>(p: &memory::Pointer<PtrVal>, mem: &Bus<IO>) -> Operand<L>
+fn pcrel_op8<L>(p: &memory::Pointer<PtrVal>, mem: &Bus) -> Operand<L>
 where
     L: Literal,
-    IO: One,
 {
     match mem.read_unit(p).into_concrete() {
         Some(target) => {
@@ -95,10 +83,9 @@ where
     }
 }
 
-fn hram_op8<L, IO>(p: &memory::Pointer<PtrVal>, mem: &Bus<IO>) -> Operand<L>
+fn hram_op8<L>(p: &memory::Pointer<PtrVal>, mem: &Bus) -> Operand<L>
 where
     L: Literal,
-    IO: One,
 {
     if let Some(lobit) = mem.read_unit(p).into_concrete() {
         return op::dptr(p.contextualize(0xFF00 + lobit as u16));
@@ -173,10 +160,9 @@ static NEW_ALU_BITOPS: [&str; 8] = ["rlc", "rrc", "rl", "rr", "sla", "sra", "swa
 ///    from the instruction. Instructions with dynamic or unknown jump targets
 ///    must be expressed as None. The next instruction is implied as a target
 ///    if is_nonfinal is returned as True and does not need to be provided here.
-pub fn disassemble<L, IO>(p: &memory::Pointer<PtrVal>, mem: &Bus<IO>) -> sm83::Result<Disasm<L>>
+pub fn disassemble<L>(p: &memory::Pointer<PtrVal>, mem: &Bus) -> sm83::Result<Disasm<L>>
 where
     L: Literal,
-    IO: One,
 {
     match mem.read_unit(p).into_concrete() {
         Some(0xCB) => match mem.read_unit(&(p.clone() + 1)).into_concrete() {

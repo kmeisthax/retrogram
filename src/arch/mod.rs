@@ -31,7 +31,7 @@
 
 pub mod aarch32;
 pub mod sm83;
-pub mod w65c816;
+//pub mod w65c816;
 
 mod traits;
 

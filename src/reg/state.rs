@@ -1,9 +1,8 @@
 //! A model of program state.
 
+use crate::arch::Architecture;
 use crate::memory::{Contexts, Memory, Pointer};
 use crate::reg::Symbolic;
-use crate::{memory, reg};
-use num_traits::One;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::hash::{Hash, Hasher};
@@ -34,28 +33,26 @@ use std::hash::{Hash, Hasher};
 ///
 /// # Interaction with
 #[derive(Clone)]
-pub struct State<RK, RV, P, MV>
+pub struct State<AR>
 where
-    RK: Eq + Hash,
-    P: Eq + Hash,
+    AR: Architecture,
 {
     /// Architectural program state, such as CPU registers.
-    cpu_state: HashMap<RK, Symbolic<RV>>,
+    cpu_state: HashMap<AR::Register, Symbolic<AR::Word>>,
 
     /// Non-architectural, or memory-related program state.
-    mem_state: HashMap<Pointer<P>, Symbolic<MV>>,
+    mem_state: HashMap<Pointer<AR::PtrVal>, Symbolic<AR::Byte>>,
 
     /// All currently applicable contexts for memory reads and writes without
     /// known contexts.
     context_state: Contexts<String, u64>,
 }
 
-impl<RK, RV, P, MV> PartialEq for State<RK, RV, P, MV>
+impl<AR> PartialEq for State<AR>
 where
-    RK: Eq + Hash,
-    Symbolic<RV>: PartialEq + Default,
-    P: Eq + Hash,
-    Symbolic<MV>: PartialEq + Default,
+    AR: Architecture,
+    Symbolic<AR::Word>: PartialEq + Default,
+    Symbolic<AR::Byte>: PartialEq + Default,
 {
     fn eq(&self, other: &Self) -> bool {
         for (rk, rv) in self.cpu_state.iter() {
@@ -98,21 +95,19 @@ where
     }
 }
 
-impl<RK, RV, P, MV> Eq for State<RK, RV, P, MV>
+impl<AR> Eq for State<AR>
 where
-    RK: Eq + Hash,
-    Symbolic<RV>: Eq + Default,
-    P: Eq + Hash,
-    Symbolic<MV>: Eq + Default,
+    AR: Architecture,
+    Symbolic<AR::Word>: Eq + Default,
+    Symbolic<AR::Byte>: Eq + Default,
 {
 }
 
-impl<RK, RV, P, MV> Hash for State<RK, RV, P, MV>
+impl<AR> Hash for State<AR>
 where
-    RK: Eq + Hash,
-    Symbolic<RV>: Eq + Hash + Default,
-    P: Eq + Hash,
-    Symbolic<MV>: Eq + Hash + Default,
+    AR: Architecture,
+    Symbolic<AR::Word>: Eq + Hash + Default,
+    Symbolic<AR::Byte>: Eq + Hash + Default,
 {
     fn hash<H>(&self, state: &mut H)
     where
@@ -153,12 +148,11 @@ where
     }
 }
 
-impl<RK, RV, P, MV> PartialOrd for State<RK, RV, P, MV>
+impl<AR> PartialOrd for State<AR>
 where
-    RK: Eq + Ord + Hash + Clone,
-    Symbolic<RV>: Ord + Clone + Default,
-    P: Eq + Ord + Hash + Clone,
-    Symbolic<MV>: Ord + Clone + Default,
+    AR: Architecture,
+    Symbolic<AR::Word>: Ord + Clone + Default,
+    Symbolic<AR::Byte>: Ord + Clone + Default,
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let rk_list = self
@@ -166,7 +160,7 @@ where
             .keys()
             .chain(other.cpu_state.keys())
             .cloned()
-            .collect::<BTreeSet<RK>>();
+            .collect::<BTreeSet<AR::Register>>();
 
         for rk in rk_list.iter() {
             let cmp = self
@@ -192,7 +186,7 @@ where
             .keys()
             .chain(other.mem_state.keys())
             .cloned()
-            .collect::<BTreeSet<Pointer<P>>>();
+            .collect::<BTreeSet<Pointer<AR::PtrVal>>>();
 
         for p in p_list.iter() {
             let cmp = self
@@ -243,12 +237,11 @@ where
     }
 }
 
-impl<RK, RV, P, MV> Ord for State<RK, RV, P, MV>
+impl<AR> Ord for State<AR>
 where
-    RK: Eq + Ord + Hash + Clone,
-    Symbolic<RV>: Ord + Clone + Default,
-    P: Eq + Ord + Hash + Clone,
-    Symbolic<MV>: Ord + Clone + Default,
+    AR: Architecture,
+    Symbolic<AR::Word>: Ord + Clone + Default,
+    Symbolic<AR::Byte>: Ord + Clone + Default,
 {
     fn cmp(&self, other: &Self) -> Ordering {
         let rk_list = self
@@ -256,7 +249,7 @@ where
             .keys()
             .chain(other.cpu_state.keys())
             .cloned()
-            .collect::<BTreeSet<RK>>();
+            .collect::<BTreeSet<AR::Register>>();
 
         for rk in rk_list.iter() {
             let cmp = self
@@ -282,7 +275,7 @@ where
             .keys()
             .chain(other.mem_state.keys())
             .cloned()
-            .collect::<BTreeSet<Pointer<P>>>();
+            .collect::<BTreeSet<Pointer<AR::PtrVal>>>();
 
         for p in p_list.iter() {
             let cmp = self
@@ -333,10 +326,9 @@ where
     }
 }
 
-impl<RK, RV, P, MV> State<RK, RV, P, MV>
+impl<AR> State<AR>
 where
-    RK: Eq + Hash,
-    P: Eq + Hash,
+    AR: Architecture,
 {
     /// Determine if the trace that generated the current architectural state
     /// did or did not define the value of a register at some point in time.
@@ -344,7 +336,7 @@ where
     /// If the value was later undefined by other actions, this function will
     /// still return true. To determine if the register is currently undefined,
     /// get the value and check if it's symbolic or not.
-    pub fn register_was_written(&self, k: &RK) -> bool {
+    pub fn register_was_written(&self, k: &AR::Register) -> bool {
         self.cpu_state.get(k).is_some()
     }
 
@@ -355,15 +347,15 @@ where
     /// If the value was later undefined by other actions, this function will
     /// still return true. To determine if the memory location is currently
     /// undefined, get the value and check if it's symbolic or not.
-    pub fn memory_was_written(&self, k: &Pointer<P>) -> bool {
+    pub fn memory_was_written(&self, k: &Pointer<AR::PtrVal>) -> bool {
         self.mem_state.get(k).is_some()
     }
 
-    pub fn set_register(&mut self, k: RK, v: Symbolic<RV>) {
+    pub fn set_register(&mut self, k: AR::Register, v: Symbolic<AR::Word>) {
         self.cpu_state.insert(k, v);
     }
 
-    pub fn set_memory(&mut self, k: Pointer<P>, v: Symbolic<MV>) {
+    pub fn set_memory(&mut self, k: Pointer<AR::PtrVal>, v: Symbolic<AR::Byte>) {
         self.mem_state.insert(k, v);
     }
 
@@ -381,15 +373,14 @@ where
 
     /// Construct a new pointer with all of the contexts known to the current
     /// state.
-    pub fn contextualize_pointer(&self, ptrval: P) -> Pointer<P> {
+    pub fn contextualize_pointer(&self, ptrval: AR::PtrVal) -> Pointer<AR::PtrVal> {
         Pointer::from_ptrval_and_contexts(ptrval, self.context_state.clone())
     }
 }
 
-impl<RK, RV, P, MV> Default for State<RK, RV, P, MV>
+impl<AR> Default for State<AR>
 where
-    RK: Eq + Hash,
-    P: Eq + Hash,
+    AR: Architecture,
 {
     fn default() -> Self {
         State {
@@ -400,34 +391,19 @@ where
     }
 }
 
-impl<RK, RV, P, MV> State<RK, RV, P, MV>
+impl<AR> State<AR>
 where
-    RK: Eq + Hash,
-    P: Eq + Hash,
-    Symbolic<RV>: Clone + Default,
+    AR: Architecture,
 {
-    pub fn get_register(&self, k: &RK) -> Symbolic<RV> {
+    pub fn get_register(&self, k: &AR::Register) -> Symbolic<AR::Word> {
         if let Some(val) = self.cpu_state.get(k) {
             return val.clone();
         }
 
         Symbolic::default()
     }
-}
 
-impl<RK, RV, P, MV> State<RK, RV, P, MV>
-where
-    RK: Eq + Hash,
-    P: Eq + Hash,
-    Symbolic<MV>: Clone + Default,
-{
-    pub fn get_memory<S, IO>(&self, k: &Pointer<P>, bus: &Memory<P, MV, S, IO>) -> Symbolic<MV>
-    where
-        P: memory::PtrNum<S>,
-        S: memory::Offset<P>,
-        MV: reg::Bitwise,
-        IO: One,
-    {
+    pub fn get_memory(&self, k: &Pointer<AR::PtrVal>, bus: &Memory<AR>) -> Symbolic<AR::Byte> {
         if let Some(val) = self.mem_state.get(k) {
             return val.clone();
         }
