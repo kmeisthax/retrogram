@@ -1,12 +1,13 @@
 //! A special-purpose type for modeling the address decoding of a particular
 //! platform.
 
+use crate::analysis::{Prerequisite, Trace};
 use crate::arch::Architecture;
 use crate::maths::CheckedSub;
 use crate::memory::bss::UnknownImage;
 use crate::memory::rombin::ROMBinaryImage;
 use crate::memory::{Behavior, Desegmentable, Endianness, Image, Offset, Pointer};
-use crate::reg::State;
+use crate::reg::{State, Symbolic};
 use crate::{memory, reg};
 use num::traits::{One, Zero};
 use std::convert::{TryFrom, TryInto};
@@ -81,6 +82,19 @@ where
             if let Some(_ms_offset) = self.image.decode_addr(&ptr, self.start.clone()) {
                 return self.start <= ptr.as_pointer().clone() && offset < self.length;
             }
+        }
+
+        false
+    }
+
+    /// Determine if a pointer value is within this region.
+    pub fn is_bare_ptr_within(&self, ptr: AR::PtrVal) -> bool {
+        if let Some(offset) = ptr
+            .clone()
+            .checked_sub(self.start.clone())
+            .and_then(|vo| AR::Offset::try_from(vo).ok())
+        {
+            return self.start <= ptr && offset < self.length;
         }
 
         false
@@ -295,12 +309,83 @@ where
 
         out
     }
-}
 
-impl<AR> Memory<AR>
-where
-    AR: Architecture,
-{
+    /// Read a single memory unit (e.g. byte) from stateful memory at a given
+    /// pointer.
+    ///
+    /// "Stateful" means that a `reg::State` is present.
+    ///
+    /// Yields a symbolic value which is concrete if the memory model has image
+    /// data for the given pointer, and is unconstrained otherwise.
+    pub fn read_unit_stateful(
+        &self,
+        ptr: AR::PtrVal,
+        state: &State<AR>,
+    ) -> reg::Symbolic<AR::Byte> {
+        for view in &self.views {
+            if let Some(data) = view
+                .image
+                .read_memory(ptr.clone(), view.start.clone(), state)
+            {
+                return data;
+            }
+        }
+
+        reg::Symbolic::default()
+    }
+
+    /// Read multiple memory units (e.g. bytes) from memory at a given pointer.
+    ///
+    /// Yields an array of symbolic values whose constraints are equal to the
+    /// result of calling `read_unit` on each pointer from `ptr` to
+    /// `ptr + size`.
+    pub fn read_memory_stateful(
+        &self,
+        ptr: AR::PtrVal,
+        size: AR::Offset,
+        state: &State<AR>,
+    ) -> Vec<reg::Symbolic<AR::Byte>> {
+        let mut count = AR::Offset::zero();
+        let mut out = Vec::new();
+
+        while count < size {
+            let offptr = ptr.clone() + count.clone();
+            out.push(self.read_unit_stateful(offptr, state));
+            count = count + AR::Offset::one();
+        }
+
+        out
+    }
+
+    /// Read a single memory unit (e.g. byte) from memory at a given pointer.
+    ///
+    /// Yields a symbolic value which is concrete if the memory model has image
+    /// data for the given pointer, and is unconstrained otherwise.
+    pub fn write_unit(
+        &self,
+        ptr: AR::PtrVal,
+        data: Symbolic<AR::Byte>,
+        state: &mut State<AR>,
+        trace: Option<&mut Trace<AR>>,
+    ) {
+        if let Some(trace) = trace {
+            trace.memory_write(
+                state.contextualize_pointer(ptr.clone()),
+                &[data.clone()],
+                state,
+            );
+        }
+
+        for view in &self.views {
+            if view
+                .image
+                .write_memory(ptr.clone(), view.start.clone(), data.clone(), state)
+            {
+                return;
+            }
+        }
+    }
+
     /// Simulate memory writes to a particular location.
     ///
     /// Memory writes are free to change either pointer contexts or program
@@ -311,10 +396,20 @@ where
     /// writes occur mid-write.
     pub fn write_memory(
         &self,
-        _ptr: &mut Pointer<AR::PtrVal>,
-        _data: &[AR::Byte],
-        _state: &mut State<AR>,
+        mut ptr: AR::PtrVal,
+        data: &[Symbolic<AR::Byte>],
+        state: &mut State<AR>,
+        trace: Option<&mut Trace<AR>>,
     ) {
+        if let Some(trace) = trace {
+            trace.memory_write(state.contextualize_pointer(ptr.clone()), data, state);
+        }
+
+        for byte in data {
+            self.write_unit(ptr.clone(), byte.clone(), state, None);
+
+            ptr = ptr + AR::Offset::one();
+        }
     }
 
     /// Read an arbitary little-endian integer type from memory.
@@ -363,6 +458,56 @@ where
             .unwrap_or_else(reg::Symbolic::<EV>::default)
     }
 
+    /// Read an arbitary little-endian integer type from memory using contexts
+    /// from a given state.
+    ///
+    /// The underlying memory value types must implement `Desegmentable` and
+    /// their symbolic versions must also implement `Desegmentable`. It must
+    /// also be possible to generate a memory offset from a u32.
+    pub fn read_leword_stateful<EV>(&self, ptr: AR::PtrVal, state: &State<AR>) -> reg::Symbolic<EV>
+    where
+        AR::Offset: TryFrom<usize>,
+        reg::Symbolic<EV>: Default + memory::Desegmentable<reg::Symbolic<AR::Byte>>,
+    {
+        let units_reqd =
+            <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<AR::Byte>>>::units_reqd();
+        let data = self.read_memory_stateful(
+            ptr,
+            match AR::Offset::try_from(units_reqd) {
+                Ok(u) => u,
+                Err(_) => return reg::Symbolic::<EV>::default(),
+            },
+            state,
+        );
+        reg::Symbolic::<EV>::from_segments(&data, Endianness::LittleEndian)
+            .unwrap_or_else(reg::Symbolic::<EV>::default)
+    }
+
+    /// Read an arbitary big-endian integer type from memory using contexts
+    /// from a given state.
+    ///
+    /// The underlying memory value types must implement `Desegmentable` and
+    /// their symbolic versions must also implement `Desegmentable`. It must
+    /// also be possible to generate a memory offset from a u32.
+    pub fn read_beword_stateful<EV>(&self, ptr: AR::PtrVal, state: &State<AR>) -> reg::Symbolic<EV>
+    where
+        AR::Offset: TryFrom<usize>,
+        reg::Symbolic<EV>: Default + memory::Desegmentable<reg::Symbolic<AR::Byte>>,
+    {
+        let units_reqd =
+            <reg::Symbolic<EV> as memory::Desegmentable<reg::Symbolic<AR::Byte>>>::units_reqd();
+        let data = self.read_memory_stateful(
+            ptr,
+            match AR::Offset::try_from(units_reqd) {
+                Ok(u) => u,
+                Err(_) => return reg::Symbolic::<EV>::default(),
+            },
+            state,
+        );
+        reg::Symbolic::<EV>::from_segments(&data, Endianness::BigEndian)
+            .unwrap_or_else(reg::Symbolic::<EV>::default)
+    }
+
     pub fn minimize_context(&self, ptr: Pointer<AR::PtrVal>) -> Pointer<AR::PtrVal> {
         for view in &self.views {
             if view.is_ptr_within(ptr.clone()) {
@@ -371,6 +516,18 @@ where
         }
 
         ptr
+    }
+
+    /// Determine prerequisites necessary to read or write to a bare address
+    /// without context.
+    pub fn prerequisites(&self, ptr: AR::PtrVal) -> Vec<Prerequisite<AR>> {
+        for view in &self.views {
+            if view.is_bare_ptr_within(ptr.clone()) {
+                return view.image.decode_prerequisites(ptr, view.start.clone());
+            }
+        }
+
+        vec![]
     }
 
     pub fn insert_user_context(

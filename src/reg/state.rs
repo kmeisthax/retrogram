@@ -1,7 +1,7 @@
 //! A model of program state.
 
 use crate::arch::Architecture;
-use crate::memory::{Contexts, Memory, Pointer};
+use crate::memory::{Contexts, Pointer};
 use crate::reg::Symbolic;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
@@ -359,12 +359,32 @@ where
         self.mem_state.insert(k, v);
     }
 
-    pub fn set_context(&mut self, s: String, v: Symbolic<u64>) {
-        self.context_state.insert(s, v);
+    /// Set an architectural context on this state.
+    pub fn set_arch_context(&mut self, s: &str, v: Symbolic<u64>) {
+        let inner_name = format!("A{}", s);
+        self.context_state.insert(inner_name, v);
     }
 
-    pub fn get_context(&mut self, s: &str) -> Symbolic<u64> {
-        if let Some(v) = self.context_state.get(s) {
+    /// Get an architectural context from this state.
+    pub fn get_arch_context(&self, s: &str) -> Symbolic<u64> {
+        let inner_name = format!("A{}", s);
+        if let Some(v) = self.context_state.get(&inner_name) {
+            return *v;
+        }
+
+        Symbolic::default()
+    }
+
+    /// Set a platform context on this state.
+    pub fn set_platform_context(&mut self, s: &str, v: Symbolic<u64>) {
+        let inner_name = format!("P{}", s);
+        self.context_state.insert(inner_name, v);
+    }
+
+    /// Get a platform context from this state.
+    pub fn get_platform_context(&self, s: &str) -> Symbolic<u64> {
+        let inner_name = format!("P{}", s);
+        if let Some(v) = self.context_state.get(&inner_name) {
             return *v;
         }
 
@@ -375,6 +395,18 @@ where
     /// state.
     pub fn contextualize_pointer(&self, ptrval: AR::PtrVal) -> Pointer<AR::PtrVal> {
         Pointer::from_ptrval_and_contexts(ptrval, self.context_state.clone())
+    }
+
+    /// Contextualize the state with the contexts in a given contextual
+    /// pointer.
+    pub fn contextualize_self(&mut self, pointer: &Pointer<AR::PtrVal>) {
+        for (is_arch, context, value) in pointer.iter_contexts() {
+            if is_arch {
+                self.set_arch_context(context, *value);
+            } else {
+                self.set_platform_context(context, *value);
+            }
+        }
     }
 }
 
@@ -403,11 +435,11 @@ where
         Symbolic::default()
     }
 
-    pub fn get_memory(&self, k: &Pointer<AR::PtrVal>, bus: &Memory<AR>) -> Symbolic<AR::Byte> {
+    pub fn get_memory(&self, k: &Pointer<AR::PtrVal>) -> Symbolic<AR::Byte> {
         if let Some(val) = self.mem_state.get(k) {
             return val.clone();
         }
 
-        bus.read_unit(&k)
+        Symbolic::default()
     }
 }

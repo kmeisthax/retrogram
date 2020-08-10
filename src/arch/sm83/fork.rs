@@ -1,62 +1,61 @@
 //! Symbolic fork analysis for SM83
 
+use crate::analysis;
 use crate::arch::sm83;
 use crate::arch::sm83::dis::{AbstractOperand, ALU_TARGET_MEM, ALU_TARGET_REGS};
 use crate::arch::sm83::{Bus, Prerequisite, PtrVal, Register, State};
-use crate::{analysis, memory};
 
 /// Return a prerequisite list for an instruction that reads or writes the
 /// address situated in the opcode of this instruction.
-fn memlist_rw_op16(p: &memory::Pointer<PtrVal>) -> sm83::Result<(Vec<Prerequisite>, bool)> {
-    Ok((vec![Prerequisite::memory(p.clone(), 2)], true))
+fn memlist_rw_op16(p: PtrVal) -> sm83::Result<(Vec<Prerequisite>, bool)> {
+    Ok((vec![Prerequisite::memory(p, 2)], true))
 }
 
 /// Return a prerequisite list for an instruction that jumps to or calls the
 /// address situated in the opcode of this instruction.
+///
+/// The pointer handed to this function is the operand address, *not* the PC
+/// address (i.e. it is already +1'd).
 fn memlist_call_op16(
     mut preq: Vec<Prerequisite>,
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
+    state: &State,
 ) -> sm83::Result<(Vec<Prerequisite>, bool)> {
-    if let Some(val) = mem.read_leword::<u16>(p).into_concrete() {
-        preq.push(Prerequisite::memory(
-            mem.minimize_context(p.contextualize(val)),
-            1,
-        ));
+    if let Some(val) = mem.read_leword_stateful::<u16>(p, state).into_concrete() {
+        preq.push(Prerequisite::memory(val, 1));
         return Ok((preq, true));
     }
 
-    preq.push(Prerequisite::memory(p.clone(), 2));
+    preq.push(Prerequisite::memory(p, 2));
 
     Ok((preq, false))
 }
 
 /// Return a prerequisite list for an instruction that reads or writes the
 /// high memory address situated in the opcode of this instruction.
-fn memlist_rw_hi8(p: &memory::Pointer<PtrVal>) -> sm83::Result<(Vec<Prerequisite>, bool)> {
-    Ok((vec![Prerequisite::memory(p.clone(), 1)], true))
+fn memlist_rw_hi8(p: PtrVal) -> sm83::Result<(Vec<Prerequisite>, bool)> {
+    Ok((vec![Prerequisite::memory(p, 1)], true))
 }
 
 /// Return a prerequisite list for a PC-relative jump.
 fn memlist_pc8(
     mut preq: Vec<Prerequisite>,
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
+    state: &State,
 ) -> sm83::Result<(Vec<Prerequisite>, bool)> {
     let is_complete = match mem
-        .read_unit(p)
+        .read_unit_stateful(p, state)
         .into_concrete()
-        .map(|target| ((p.as_pointer() + 1) as i16 + (target as i8) as i16) as u16)
+        .map(|target| ((p + 1) as i16 + (target as i8) as i16) as u16)
     {
         Some(val) => {
-            preq.push(Prerequisite::memory(
-                mem.minimize_context(p.contextualize(val)),
-                1,
-            ));
+            preq.push(Prerequisite::memory(val, 1));
             true
         }
         None => {
-            preq.push(Prerequisite::memory(p.clone(), 1));
+            preq.push(Prerequisite::memory(p, 1));
             false
         }
     };
@@ -72,13 +71,11 @@ fn memlist_pc8(
 fn memlist_call_indir16(
     regs: Vec<Register>,
     include_flags: bool,
-    p: &memory::Pointer<PtrVal>,
-    mem: &Bus,
     state: &State,
 ) -> sm83::Result<(Vec<Prerequisite>, bool)> {
     let mut preqs: Vec<Prerequisite> = regs
         .iter()
-        .map(|r| Prerequisite::from_register(*r))
+        .map(|r| Prerequisite::register(*r, 0xFF))
         .collect();
     if include_flags {
         preqs.push(Prerequisite::register(Register::F, 0x90));
@@ -90,10 +87,7 @@ fn memlist_call_indir16(
             state.get_register(r1).into_concrete(),
         ) {
             (Some(h), Some(l)) => {
-                preqs.push(Prerequisite::memory(
-                    mem.minimize_context(p.contextualize((h as PtrVal) << 8 | l as PtrVal)),
-                    1,
-                ));
+                preqs.push(Prerequisite::memory((h as PtrVal) << 8 | l as PtrVal, 1));
                 Ok((preqs, true))
             }
             _ => Ok((preqs, false)),
@@ -126,46 +120,44 @@ fn memlist_call_indir16(
 /// registers or memory locations, the tracing routine must consider how many
 /// forks will be created and if such forking is "worth it". This is a heuristic
 /// policy not covered by the tracing implementation of this architecture.
-pub fn prereq(
-    p: &memory::Pointer<PtrVal>,
-    mem: &Bus,
-    state: &State,
-) -> sm83::Result<(Vec<Prerequisite>, bool)> {
-    match mem.read_unit(p).into_concrete() {
-        Some(0xCB) => match mem.read_unit(&(p.clone() + 1)).into_concrete() {
+pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(Vec<Prerequisite>, bool)> {
+    match mem.read_unit_stateful(p, state).into_concrete() {
+        Some(0xCB) => match mem.read_unit_stateful(p + 1, state).into_concrete() {
             Some(subop) => match ALU_TARGET_REGS[(subop & 0x07) as usize] {
                 AbstractOperand::Symbol(_) => Ok((vec![], true)),
                 AbstractOperand::Indirect("hl") => Ok((Register::prereqs_from_sym("hl"), true)),
                 _ => Ok((vec![], false)),
             },
-            _ => Ok((vec![Prerequisite::memory(p.clone() + 1, 1)], false)),
+            _ => Ok((vec![Prerequisite::memory(p + 1, 1)], false)),
         },
 
         //Z80 instructions that don't fit the pattern decoder below
-        Some(0x00) => Ok((vec![], true)),                //nop
-        Some(0x08) => memlist_rw_op16(&(p.clone() + 1)), //ld [u16], sp
-        Some(0x10) => Ok((vec![], true)),                //stop
-        Some(0x18) => memlist_pc8(vec![], &(p.clone() + 1), mem), //jr u8
-        Some(0x76) => Ok((vec![], true)),                //halt
+        Some(0x00) => Ok((vec![], true)),                     //nop
+        Some(0x08) => memlist_rw_op16(p + 1),                 //ld [u16], sp
+        Some(0x10) => Ok((vec![], true)),                     //stop
+        Some(0x18) => memlist_pc8(vec![], p + 1, mem, state), //jr u8
+        Some(0x76) => Ok((vec![], true)),                     //halt
 
-        Some(0xC3) => memlist_call_op16(vec![], &(p.clone() + 1), mem), //jp u16
-        Some(0xCD) => memlist_call_op16(Register::prereqs_from_sym("sp"), &(p.clone() + 1), mem), //call u16
+        Some(0xC3) => memlist_call_op16(vec![], p + 1, mem, state), //jp u16
+        Some(0xCD) => memlist_call_op16(Register::prereqs_from_sym("sp"), p + 1, mem, state), //call u16
 
-        Some(0xC9) => memlist_call_indir16(vec![Register::S, Register::P], false, p, mem, state), //ret
-        Some(0xD9) => memlist_call_indir16(vec![Register::S, Register::P], false, p, mem, state), //reti
-        Some(0xE9) => memlist_call_indir16(vec![Register::H, Register::L], false, p, mem, state), //jp [hl]
+        Some(0xC9) => memlist_call_indir16(vec![Register::S, Register::P], false, state), //ret
+        Some(0xD9) => memlist_call_indir16(vec![Register::S, Register::P], false, state), //reti
+        Some(0xE9) => memlist_call_indir16(vec![Register::H, Register::L], false, state), //jp [hl]
         Some(0xF9) => Ok((vec![], true)), //ld sp, hl
 
-        Some(0xE0) => memlist_rw_hi8(&(p.clone() + 1)), //ldh [u8], a
-        Some(0xE8) => Ok((vec![], true)),               //add sp, reg
-        Some(0xF0) => memlist_rw_hi8(&(p.clone() + 1)), //ldh a, [u8]
-        Some(0xF8) => Ok((vec![], true)),               //ld hl, sp+r8
+        Some(0xE0) => memlist_rw_hi8(p + 1), //ldh [u8], a
+        Some(0xE8) => Ok((vec![], true)),    //add sp, reg
+        Some(0xF0) => memlist_rw_hi8(p + 1), //ldh a, [u8]
+        Some(0xF8) => Ok((vec![], true)),    //ld hl, sp+r8
 
-        Some(0xE2) => Ok((vec![Prerequisite::from_register(Register::C)], true)), //ldh [c], a
-        Some(0xEA) => memlist_rw_op16(&(p.clone() + 1)),                          //ld [u16], a
-        Some(0xF2) => Ok((vec![Prerequisite::from_register(Register::C)], true)), //ldh a, [c]
-        Some(0xFA) => memlist_rw_op16(&(p.clone() + 1)),                          //ld a, [u16]
-        //TODO: Should memory reads prereq on the target of the read?
+        Some(0xE2) => Ok((vec![Prerequisite::register(Register::C, 0xFF)], true)), //ldh [c], a
+        Some(0xEA) => memlist_rw_op16(p + 1),                                      //ld [u16], a
+        Some(0xF2) => Ok((vec![Prerequisite::register(Register::C, 0xFF)], true)), //ldh a, [c]
+        Some(0xFA) => memlist_rw_op16(p + 1),                                      //ld a, [u16]
+        //TODO: Memory reads should prereq on the target of the read so that
+        //we can fork on contexts and busses that change contexts on read get
+        //the correct execution.
         Some(0xF3) => Ok((vec![], true)),
         Some(0xFB) => Ok((vec![], true)),
 
@@ -184,8 +176,9 @@ pub fn prereq(
                 (0, 0, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* 00, 08, 10, 18 */
                 (0, 1, _, 0) => memlist_pc8(
                     vec![Prerequisite::register(Register::F, 0x90)],
-                    &(p.clone() + 1),
+                    p + 1,
                     mem,
+                    state,
                 ), //jr cond, pc8
                 (0, _, 0, 1) => Ok((vec![], true)),                                //ld r16, u16
                 (0, _, 1, 1) => Ok((vec![], true)),                                //add hl, r16
@@ -213,23 +206,23 @@ pub fn prereq(
                 (1, _, _, _) => Ok((vec![], true)), //ld r8, r8
                 (2, _, _, _) if (op & 0x07) == 6 => Ok((Register::prereqs_from_sym("hl"), true)), //aluops r8, [hl]
                 (2, _, _, _) => Ok((vec![], true)), //aluops a, r8
-                (3, 0, _, 0) => {
-                    memlist_call_indir16(vec![Register::S, Register::P], true, p, mem, state)
-                } //ret cond... TODO: Can we specify which bit of F we want?
+                (3, 0, _, 0) => memlist_call_indir16(vec![Register::S, Register::P], true, state), //ret cond... TODO: Can we specify which bit of F we want?
                 (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
                 (3, _, 0, 1) => Ok((Register::prereqs_from_sym("sp"), true)),      //pop r16
                 (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
                 (3, 0, _, 2) => memlist_call_op16(
                     vec![Prerequisite::register(Register::F, 0x90)],
-                    &(p.clone() + 1),
+                    p + 1,
                     mem,
+                    state,
                 ), //jp cond, d16
                 (3, 1, _, 2) => Err(analysis::Error::Misinterpretation(1, false)), /* E2, EA, F2, FA */
                 (3, _, _, 3) => Err(analysis::Error::InvalidInstruction),          //invalid
                 (3, 0, _, 4) => memlist_call_op16(
                     vec![Prerequisite::register(Register::F, 0x90)],
-                    &(p.clone() + 1),
+                    p + 1,
                     mem,
+                    state,
                 ), //call cond, d16
                 (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction),          //invalid
                 (3, _, 0, 5) => Ok((Register::prereqs_from_sym("sp"), true)),      //push r16
@@ -240,6 +233,6 @@ pub fn prereq(
                 _ => Err(analysis::Error::Misinterpretation(1, false)), //invalid
             }
         }
-        _ => Ok((vec![Prerequisite::memory(p.clone(), 1)], false)),
+        _ => Ok((vec![Prerequisite::memory(p, 1)], false)),
     }
 }

@@ -5,7 +5,7 @@ use crate::arch::{Architecture, CompatibleLiteral};
 use crate::ast::Instruction;
 use crate::database::Database;
 use crate::memory::{Offset, Pointer};
-use crate::reg::Bitwise;
+use crate::reg::{Bitwise, State};
 use crate::{analysis, ast, database, input, maths, memory, project, reg};
 use clap::ArgMatches;
 use num_traits::{One, Zero};
@@ -196,10 +196,13 @@ where
     for block_id in db.undertraced_blocks().iter() {
         let block = db.block(*block_id).unwrap();
         let mut forks = BinaryHeap::new();
+        let mut first_state = State::default();
+
+        first_state.contextualize_self(block.as_start());
 
         forks.push(Fork::initial_fork(
-            block.as_start().clone(),
-            Default::default(),
+            block.as_start().as_pointer().clone(),
+            first_state,
         ));
 
         while let Some(fork) = forks.pop() {
@@ -222,12 +225,14 @@ where
 
             db.insert_trace_counts(traced_blocks, 1);
 
+            let context_new_pc = post_state.contextualize_pointer(new_pc.clone());
+
             for result_fork in Fork::make_forks(
                 branches,
                 new_pc.clone(),
                 post_state,
                 bus,
-                Trace::begin_at(new_pc),
+                Trace::begin_at(context_new_pc),
                 &prerequisites,
             ) {
                 forks.push(result_fork);

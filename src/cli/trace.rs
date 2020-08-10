@@ -121,6 +121,24 @@ where
                     );
                 }
             }
+            TraceEvent::ArchitecturalContextSet(ctxt, value) => {
+                if let Some(evt) = event_list.last_mut() {
+                    if !evt.is_empty() {
+                        *evt = format!("{}, ", evt);
+                    }
+
+                    *evt = format!("ArchCtxt{}={:X}", ctxt, value);
+                }
+            }
+            TraceEvent::PlatformContextSet(ctxt, value) => {
+                if let Some(evt) = event_list.last_mut() {
+                    if !evt.is_empty() {
+                        *evt = format!("{}, ", evt);
+                    }
+
+                    *evt = format!("PlatCtxt{}={:X}", ctxt, value);
+                }
+            }
         }
     }
 
@@ -367,6 +385,9 @@ where
 
     let mut action = NextAction::Trace;
     let mut state = State::default();
+
+    state.contextualize_self(&pc);
+
     let mut missing = Vec::new();
     let mut traced_blocks = HashSet::new();
 
@@ -377,9 +398,14 @@ where
     loop {
         match action {
             NextAction::Trace => {
-                let (halt_pc, trace, new_state, new_missing) =
-                    trace_until_fork(&pc, Trace::begin_at(pc.clone()), bus, &state, arch)
-                        .map_err(Into::<io::Error>::into)?;
+                let (halt_pc, trace, new_state, new_missing) = trace_until_fork(
+                    pc.as_pointer(),
+                    Trace::begin_at(pc.clone()),
+                    bus,
+                    &state,
+                    arch,
+                )
+                .map_err(Into::<io::Error>::into)?;
 
                 traced_blocks = traced_blocks
                     .union(
@@ -391,11 +417,11 @@ where
 
                 state = new_state;
                 missing = new_missing;
-                pc = halt_pc.clone();
+                pc = state.contextualize_pointer(halt_pc);
 
                 print_tracelog(trace, bus, arch, fmt_i)?;
 
-                print_prereqs(halt_pc, &missing);
+                print_prereqs(pc.clone(), &missing);
             }
             NextAction::Ask => {
                 action = get_next_action()?;

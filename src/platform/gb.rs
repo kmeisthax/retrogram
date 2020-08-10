@@ -1,5 +1,6 @@
 //! Platform implementation for Game Boy and it's attendant memory mapper chips
 
+use crate::analysis::Prerequisite;
 use crate::arch::sm83;
 use crate::{memory, reg};
 use std::io;
@@ -8,6 +9,8 @@ use std::io;
 /// image.
 trait Mapper {
     fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize>;
+
+    fn context_mask(&self) -> u64;
 }
 
 /// Mapper type which does not support banking.
@@ -24,6 +27,10 @@ impl LinearMapper {
 impl Mapper for LinearMapper {
     fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize> {
         Some(((ptr.as_pointer() & 0x3FFF) + 0x4000) as usize)
+    }
+
+    fn context_mask(&self) -> u64 {
+        0
     }
 }
 
@@ -46,6 +53,10 @@ impl Mapper for MBC1Mapper {
             None => None,
         }
     }
+
+    fn context_mask(&self) -> u64 {
+        0x7F
+    }
 }
 
 struct MBC2Mapper {}
@@ -65,6 +76,10 @@ impl Mapper for MBC2Mapper {
             None => None,
         }
     }
+
+    fn context_mask(&self) -> u64 {
+        0x0F
+    }
 }
 
 struct MBC3Mapper {}
@@ -82,6 +97,10 @@ impl Mapper for MBC3Mapper {
             None => None,
         }
     }
+
+    fn context_mask(&self) -> u64 {
+        0x7F
+    }
 }
 
 struct MBC5Mapper {}
@@ -98,6 +117,10 @@ impl Mapper for MBC5Mapper {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None,
         }
+    }
+
+    fn context_mask(&self) -> u64 {
+        0x1FF
     }
 }
 
@@ -150,6 +173,17 @@ where
         } else {
             self.mapper.decode_banked_addr(ptr)
         }
+    }
+
+    fn decode_prerequisites(
+        &self,
+        _ptr: sm83::PtrVal,
+        _base: sm83::PtrVal,
+    ) -> Vec<Prerequisite<sm83::SM83>> {
+        vec![Prerequisite::platform_context(
+            "R".to_string(),
+            self.mapper.context_mask(),
+        )]
     }
 
     fn minimize_context(

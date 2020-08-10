@@ -1,6 +1,7 @@
 //! A generic Image type for modeling memory that is either uninitialized or
 //! unknown.
 
+use crate::analysis::Prerequisite;
 use crate::arch::Architecture;
 use crate::maths::CheckedSub;
 use crate::memory::{Image, Offset, Pointer};
@@ -45,6 +46,10 @@ where
         }
     }
 
+    fn decode_prerequisites(&self, _ptr: AR::PtrVal, _base: AR::PtrVal) -> Vec<Prerequisite<AR>> {
+        Vec::new()
+    }
+
     fn minimize_context(&self, ptr: Pointer<AR::PtrVal>) -> Pointer<AR::PtrVal> {
         Pointer::from(ptr.as_pointer().clone())
     }
@@ -56,13 +61,12 @@ where
 /// "Unknown" means that the contents of memory cannot be statically analyzed.
 pub struct UnknownBankedImage {
     banking_ctxt: &'static str,
+    mask: u64,
 }
 
 impl UnknownBankedImage {
-    pub fn new(context: &'static str) -> Self {
-        Self {
-            banking_ctxt: context,
-        }
+    pub fn new(banking_ctxt: &'static str, mask: u64) -> Self {
+        Self { banking_ctxt, mask }
     }
 }
 
@@ -88,6 +92,13 @@ where
 
         stripped_ptr.set_platform_context(self.banking_ctxt, my_ctxt);
         stripped_ptr
+    }
+
+    fn decode_prerequisites(&self, _ptr: AR::PtrVal, _base: AR::PtrVal) -> Vec<Prerequisite<AR>> {
+        vec![Prerequisite::platform_context(
+            self.banking_ctxt.to_string(),
+            self.mask,
+        )]
     }
 
     fn insert_user_context(

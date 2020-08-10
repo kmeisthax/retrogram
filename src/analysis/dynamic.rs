@@ -5,8 +5,8 @@ use crate::arch::{Architecture, CompatibleLiteral};
 use crate::database::Database;
 use crate::memory::{Memory, Pointer};
 use crate::reg::State;
-use crate::{analysis, memory, reg};
-use num::{One, Zero};
+use crate::{analysis, reg};
+use num::Zero;
 use std::collections::HashSet;
 use std::convert::TryInto;
 
@@ -16,7 +16,7 @@ where
     AR: Architecture,
 = analysis::Result<
     (
-        memory::Pointer<AR::PtrVal>,
+        AR::PtrVal,
         analysis::Trace<AR>,
         reg::State<AR>,
         Vec<Prerequisite<AR>>,
@@ -31,7 +31,7 @@ where
 /// instruction which requires parallel tracing and cannot be executed
 /// symbolically.
 pub fn trace_until_fork<AR>(
-    pc: &Pointer<AR::PtrVal>,
+    pc: &AR::PtrVal,
     mut trace: Trace<AR>,
     bus: &Memory<AR>,
     pre_state: &State<AR>,
@@ -45,40 +45,12 @@ where
     let mut new_state = pre_state.clone();
 
     loop {
-        let (prerequisites, _is_complete) = arch.prerequisites(&new_pc, bus, &new_state)?;
+        let (prerequisites, _is_complete) = arch.prerequisites(new_pc.clone(), bus, &new_state)?;
         let mut missing = vec![];
 
         for pr in prerequisites {
-            match &pr {
-                Prerequisite::Register { register, mask } => {
-                    if !new_state
-                        .get_register(&register.clone())
-                        .bits_are_concrete(mask.clone())
-                    {
-                        missing.push(pr);
-                    }
-                }
-                Prerequisite::Memory { ptr, length, mask } => {
-                    let mut i = AR::Offset::zero();
-
-                    while i < length.clone() {
-                        let index: usize = i
-                            .clone()
-                            .try_into()
-                            .map_err(|_| analysis::Error::BlockSizeOverflow)?;
-                        let mask = mask.get(index).cloned().unwrap_or_else(AR::Byte::zero);
-
-                        if !new_state
-                            .get_memory(&(ptr.clone() + length.clone()), bus)
-                            .bits_are_concrete(mask)
-                        {
-                            missing.push(pr);
-                            break;
-                        }
-
-                        i = i + AR::Offset::one();
-                    }
-                }
+            if !pr.necessary_forks(&new_state, bus).is_zero() {
+                missing.push(pr);
             }
         }
 
@@ -86,10 +58,10 @@ where
             return Ok((new_pc, trace, new_state, missing));
         }
 
-        let (next_state, next_pc) = arch.trace(&new_pc, bus, new_state, &mut trace)?;
+        let (next_state, next_pc) = arch.trace(new_pc, bus, new_state, &mut trace)?;
 
         new_state = next_state;
-        trace.traced_to(next_pc.clone());
+        trace.traced_to(new_state.contextualize_pointer(next_pc.clone()));
         new_pc = next_pc;
     }
 }
@@ -144,6 +116,8 @@ where
                     ));
                 }
             }
+            TraceEvent::ArchitecturalContextSet(_ctxt, _value) => {}
+            TraceEvent::PlatformContextSet(_ctxt, _value) => {}
         }
     }
 

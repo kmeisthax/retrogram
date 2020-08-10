@@ -210,7 +210,7 @@ impl Architecture for AArch32 {
 
     fn prerequisites(
         &self,
-        at: &Pointer<Self::PtrVal>,
+        at: Self::PtrVal,
         bus: &Bus,
         state: &State,
     ) -> Result<(Vec<Prerequisite>, bool)> {
@@ -219,11 +219,11 @@ impl Architecture for AArch32 {
 
     fn trace(
         &self,
-        at: &Pointer<Self::PtrVal>,
+        at: Self::PtrVal,
         bus: &Bus,
         state: State,
         this_trace: &mut Trace,
-    ) -> Result<(State, Pointer<Self::PtrVal>)> {
+    ) -> Result<(State, Self::PtrVal)> {
         trace(at, bus, state, this_trace)
     }
 }

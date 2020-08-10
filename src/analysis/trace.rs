@@ -17,6 +17,12 @@ where
     /// The setting of a register to a new value.
     RegisterSet(AR::Register, Symbolic<AR::Word>),
 
+    /// The setting of an architectural context to a new value.
+    ArchitecturalContextSet(String, Symbolic<u64>),
+
+    /// The setting of a platform context to a new value.
+    PlatformContextSet(String, Symbolic<u64>),
+
     /// The writing of one or more bytes of memory to a particular location.
     ///
     /// This allows wider writes to be listed as a single operation. Writes

@@ -181,7 +181,7 @@ where
     /// use). It is almost always `usize`.
     fn prerequisites(
         &self,
-        at: &Pointer<Self::PtrVal>,
+        at: Self::PtrVal,
         bus: &Memory<Self>,
         state: &State<Self>,
     ) -> Result<(Vec<Prerequisite<Self>>, bool), Self>;
@@ -202,9 +202,9 @@ where
     /// program.
     fn trace(
         &self,
-        at: &Pointer<Self::PtrVal>,
+        at: Self::PtrVal,
         bus: &Memory<Self>,
         state: State<Self>,
         trace: &mut Trace<Self>,
-    ) -> Result<(State<Self>, Pointer<Self::PtrVal>), Self>;
+    ) -> Result<(State<Self>, Self::PtrVal), Self>;
 }

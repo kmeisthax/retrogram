@@ -1,5 +1,6 @@
 //! ROM binary dump image types
 
+use crate::analysis::Prerequisite;
 use crate::arch::Architecture;
 use crate::maths::CheckedSub;
 use crate::memory::{Image, Offset, Pointer};
@@ -54,6 +55,10 @@ where
             Some(p) => AR::Offset::try_from(p).ok()?.try_into().ok(),
             None => None,
         }
+    }
+
+    fn decode_prerequisites(&self, _ptr: AR::PtrVal, _base: AR::PtrVal) -> Vec<Prerequisite<AR>> {
+        Vec::new()
     }
 
     fn minimize_context(&self, ptr: Pointer<AR::PtrVal>) -> Pointer<AR::PtrVal> {

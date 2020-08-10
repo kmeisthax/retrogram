@@ -2,9 +2,8 @@
 
 use crate::analysis::{Prerequisite, Trace};
 use crate::arch::Architecture;
-use crate::memory::{Memory, Pointer};
-use crate::reg::{State, Symbolic};
-use num::{One, Zero};
+use crate::memory::Memory;
+use crate::reg::State;
 use std::cmp::{Ord, Ordering};
 use std::collections::HashSet;
 use std::convert::TryInto;
@@ -27,7 +26,7 @@ where
     num_branches: f64,
 
     /// The place to start execution of this fork from.
-    pc: Pointer<AR::PtrVal>,
+    pc: AR::PtrVal,
 
     /// Any register or memory values which were defined either during the
     /// normal execution of the trace,
@@ -42,12 +41,12 @@ where
     AR: Architecture,
 {
     /// Construct an initial fork at some location.
-    pub fn initial_fork(pc: Pointer<AR::PtrVal>, pre_state: State<AR>) -> Self {
+    pub fn initial_fork(pc: AR::PtrVal, pre_state: State<AR>) -> Self {
         Self {
             num_branches: 0.0,
             pc: pc.clone(),
-            pre_state,
-            trace: Trace::begin_at(pc),
+            pre_state: pre_state.clone(),
+            trace: Trace::begin_at(pre_state.contextualize_pointer(pc)),
         }
     }
 
@@ -55,7 +54,7 @@ where
     /// construct a new list of forks to pursue.
     pub fn make_forks(
         num_branches: f64,
-        pc: Pointer<AR::PtrVal>,
+        pc: AR::PtrVal,
         post_state: State<AR>,
         bus: &Memory<AR>,
         trace: Trace<AR>,
@@ -83,61 +82,7 @@ where
             addl_branch_bits +=
                 (2.0 as f64).powf(prerequisite.necessary_forks(&post_state, bus) as f64);
 
-            match prerequisite {
-                Prerequisite::Register { register, mask } => {
-                    let mut new_state_list = HashSet::new();
-
-                    for state in state_list {
-                        let rv = state.get_register(register);
-                        let needed_rv = rv.clone() & Symbolic::from(mask.clone());
-                        let unneeded_rv = rv & Symbolic::from(!(mask.clone()));
-
-                        for possible_rv in needed_rv.valid() {
-                            let mut new_state = state.clone();
-                            let new_rv = Symbolic::from(possible_rv) | unneeded_rv.clone();
-                            new_state.set_register(register.clone(), new_rv);
-
-                            new_state_list.insert(new_state);
-                        }
-                    }
-
-                    state_list = new_state_list;
-                }
-                Prerequisite::Memory { ptr, length, mask } => {
-                    let mut count = AR::Offset::zero();
-
-                    while count < length.clone() {
-                        let ucount = count.clone().try_into().unwrap_or_else(|_| 0);
-                        let mask_part = mask
-                            .get(ucount)
-                            .cloned()
-                            .unwrap_or_else(|| !AR::Byte::zero());
-                        if mask_part == AR::Byte::zero() {
-                            count = count + AR::Offset::one();
-                            continue;
-                        }
-
-                        let mut new_state_list = HashSet::new();
-
-                        for state in state_list {
-                            let mptr = ptr.clone() + count.clone();
-                            let mv = state.get_memory(&mptr, bus);
-                            let needed_mv = mv.clone() & Symbolic::from(mask_part.clone());
-                            let unneeded_mv = mv & Symbolic::from(!(mask_part.clone()));
-
-                            for possible_mv in needed_mv.valid() {
-                                let mut new_state = state.clone();
-                                let new_mv = Symbolic::from(possible_mv) | unneeded_mv.clone();
-                                new_state.set_memory(mptr.clone(), new_mv);
-
-                                new_state_list.insert(new_state);
-                            }
-                        }
-
-                        state_list = new_state_list;
-                    }
-                }
-            }
+            state_list = prerequisite.fork_state(&state_list, bus);
         }
 
         let mut fork_list = Vec::new();
@@ -157,7 +102,7 @@ where
     /// Consume a Fork, returning the branch count, PC, state, and the trace
     /// that got us this far.
     #[allow(clippy::type_complexity)]
-    pub fn into_parts(self) -> (f64, Pointer<AR::PtrVal>, State<AR>, Trace<AR>) {
+    pub fn into_parts(self) -> (f64, AR::PtrVal, State<AR>, Trace<AR>) {
         (self.num_branches, self.pc, self.pre_state, self.trace)
     }
 }

@@ -2,7 +2,7 @@
 
 use crate::arch::sm83;
 use crate::reg::{Convertable, TryConvertable};
-use crate::{analysis, memory, reg};
+use crate::{analysis, reg};
 use std::cmp::PartialEq;
 //use crate::arch::sm83::dis::{ALU_BITOPS, ALU_CONDCODE, ALU_OPS, ALU_TARGET_MEM, ALU_TARGET_PAIRS, ALU_TARGET_REGS, STACK_TARGET_PAIRS};
 use crate::arch::sm83::{Bus, PtrVal, Register, State, Trace, Value};
@@ -10,7 +10,6 @@ use crate::arch::sm83::{Bus, PtrVal, Register, State, Trace, Value};
 /// Given a targetreg operand, produce a symbolic value of what that target reg
 /// would be given the current state.
 fn read_value_from_targetreg(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     state: &State,
     targetreg: u8,
@@ -26,8 +25,7 @@ fn read_value_from_targetreg(
             let hl = reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::H)) << 8
                 | reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::L));
             if let Some(hl) = hl.into_concrete() {
-                let ptr_hl = mem.minimize_context(p.contextualize(hl)); //TODO: Attempt to pull context from state
-                Ok(mem.read_unit(&ptr_hl)) //TODO: Should respond to memory state
+                Ok(mem.read_unit_stateful(hl, &state))
             } else {
                 Ok(reg::Symbolic::default())
             }
@@ -40,7 +38,6 @@ fn read_value_from_targetreg(
 /// Given a targetreg operand, manipulate the given state to incorporate the
 /// effect of writing a given value to that operand.
 fn write_value_to_targetreg(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     state: &mut State,
     trace: &mut Trace,
@@ -58,8 +55,7 @@ fn write_value_to_targetreg(
             let hl = reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::H)) << 8
                 | reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::L));
             if let Some(hl) = hl.into_concrete() {
-                let ptr_hl = mem.minimize_context(p.contextualize(hl)); //TODO: Attempt to pull context from state
-                trace.memory_write(ptr_hl, &[value], state);
+                mem.write_memory(hl, &[value], state, Some(trace));
                 return Ok(());
             }
 
@@ -148,7 +144,6 @@ fn write_value_to_targetpair(
 /// Will fail if SP isn't set. No support currently exists for tracing relative
 /// registers yet.
 fn pop_value_from_sp(
-    ptr: &memory::Pointer<PtrVal>,
     mem: &Bus,
     state: &mut State,
     trace: &mut Trace,
@@ -158,11 +153,7 @@ fn pop_value_from_sp(
             let next_sp = sp + 2;
             write_value_to_targetpair(state, trace, 3, false, reg::Symbolic::from(next_sp))?;
 
-            let loval: reg::Symbolic<u16> =
-                reg::Symbolic::convert_from(state.get_memory(&ptr.contextualize(sp), mem));
-            let hival: reg::Symbolic<u16> =
-                reg::Symbolic::convert_from(state.get_memory(&ptr.contextualize(sp + 1), mem));
-            let val = hival << 8 | loval;
+            let val = mem.read_leword_stateful(sp, state);
 
             Ok(val)
         }
@@ -179,7 +170,7 @@ fn pop_value_from_sp(
 /// Will fail if SP isn't set. No support currently exists for tracing relative
 /// registers yet.
 fn push_value_to_sp(
-    ptr: &memory::Pointer<PtrVal>,
+    mem: &Bus,
     state: &mut State,
     trace: &mut Trace,
     value: reg::Symbolic<PtrVal>,
@@ -191,7 +182,7 @@ fn push_value_to_sp(
             let hi_value = reg::Symbolic::try_convert_from(value >> 8)
                 .map_err(|_| analysis::Error::BlockSizeOverflow)?;
 
-            trace.memory_write(ptr.contextualize(sp), &[lo_value, hi_value], state);
+            mem.write_memory(sp, &[lo_value, hi_value], state, Some(trace));
 
             let next_sp = sp - 2;
             write_value_to_targetpair(state, trace, 3, false, reg::Symbolic::from(next_sp))?;
@@ -341,7 +332,6 @@ fn aluop(
 /// Trace a CB-prefix bit rotate operation (RLC, RRC, RL, RR, SLA, SRA, SWAP,
 /// or SRL).
 fn trace_bitop(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
@@ -350,7 +340,7 @@ fn trace_bitop(
 ) -> sm83::Result<State> {
     let flags = state.get_register(&Register::F);
     let carry = flags & reg::Symbolic::from(0x10);
-    let val = read_value_from_targetreg(p, mem, &state, targetreg)?;
+    let val = read_value_from_targetreg(mem, &state, targetreg)?;
 
     let (newval, newcarry) = match bitop {
         0 => (val << 1 | val >> 7, carry),      //RLC
@@ -369,14 +359,13 @@ fn trace_bitop(
     };
 
     trace.register_set(Register::F, newcarry << 4 | zero_flag(val), &mut state); //N and H flags are always zero
-    write_value_to_targetreg(p, mem, &mut state, trace, targetreg, newval)?;
+    write_value_to_targetreg(mem, &mut state, trace, targetreg, newval)?;
 
     Ok(state)
 }
 
 /// Trace a CB-prefix bit test instruction (e.g. BIT n, reg).
 fn trace_bittest(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
@@ -384,8 +373,8 @@ fn trace_bittest(
     targetreg: u8,
 ) -> sm83::Result<State> {
     let flags = state.get_register(&Register::F);
-    let val = read_value_from_targetreg(p, mem, &state, targetreg)? >> targetbit
-        & reg::Symbolic::from(0x01);
+    let val =
+        read_value_from_targetreg(mem, &state, targetreg)? >> targetbit & reg::Symbolic::from(0x01);
 
     trace.register_set(
         Register::F,
@@ -398,7 +387,6 @@ fn trace_bittest(
 
 /// Trace a CB-prefix bit reset instruction (e.g. RES n, reg).
 fn trace_bitreset(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
@@ -406,16 +394,15 @@ fn trace_bitreset(
     targetreg: u8,
 ) -> sm83::Result<State> {
     let mask = reg::Symbolic::from(!(1 << targetbit));
-    let val = read_value_from_targetreg(p, mem, &state, targetreg)?;
+    let val = read_value_from_targetreg(mem, &state, targetreg)?;
 
-    write_value_to_targetreg(p, mem, &mut state, trace, targetreg, val & mask)?;
+    write_value_to_targetreg(mem, &mut state, trace, targetreg, val & mask)?;
 
     Ok(state)
 }
 
 /// Trace a CB-prefix bit set instruction (e.g. SET n, reg).
 fn trace_bitset(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
@@ -423,33 +410,34 @@ fn trace_bitset(
     targetreg: u8,
 ) -> sm83::Result<State> {
     let bit = reg::Symbolic::from(1 << targetbit);
-    let val = read_value_from_targetreg(p, mem, &state, targetreg)?;
+    let val = read_value_from_targetreg(mem, &state, targetreg)?;
 
-    write_value_to_targetreg(p, mem, &mut state, trace, targetreg, val | bit)?;
+    write_value_to_targetreg(mem, &mut state, trace, targetreg, val | bit)?;
 
     Ok(state)
 }
 
 /// Trace writing the stack pointer to a memory location
 fn trace_sp_storage(
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
 ) -> sm83::Result<State> {
-    let op_ptr = p.contextualize(*p.as_pointer() + 1);
+    let op_ptr = p + 1;
     let memloc = mem
-        .read_leword::<PtrVal>(&op_ptr)
+        .read_leword_stateful::<PtrVal>(op_ptr, &state)
         .into_concrete()
-        .ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
+        .ok_or_else(|| analysis::Error::UnconstrainedMemory(state.contextualize_pointer(op_ptr)))?;
 
-    trace.memory_write(
-        p.contextualize(memloc),
+    mem.write_memory(
+        memloc,
         &[
             state.get_register(&Register::P),
             state.get_register(&Register::S),
         ],
         &mut state,
+        Some(trace),
     );
 
     Ok(state)
@@ -458,105 +446,101 @@ fn trace_sp_storage(
 /// Trace full jumps
 fn trace_jump(
     condcode: Option<u8>,
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     state: State,
-) -> sm83::Result<(State, memory::Pointer<PtrVal>)> {
+) -> sm83::Result<(State, PtrVal)> {
     if flag_test(condcode, state.get_register(&Register::F))? {
-        let op_ptr = p.contextualize(*p.as_pointer() + 1);
         let target = mem
-            .read_leword::<u16>(&op_ptr)
+            .read_leword_stateful::<u16>(p + 1, &state)
             .into_concrete()
-            .ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
+            .ok_or_else(|| {
+                analysis::Error::UnconstrainedMemory(state.contextualize_pointer(p + 1))
+            })?;
 
-        Ok((state, p.contextualize(target)))
+        Ok((state, target))
     } else {
-        Ok((state, p.clone() + 3))
+        Ok((state, p + 3))
     }
 }
 
 /// Trace full calls
 fn trace_call(
     condcode: Option<u8>,
-    ptr: &memory::Pointer<PtrVal>,
+    ptr: PtrVal,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
-) -> sm83::Result<(State, memory::Pointer<PtrVal>)> {
+) -> sm83::Result<(State, PtrVal)> {
     if flag_test(condcode, state.get_register(&Register::F))? {
-        let op_ptr = ptr.contextualize(*ptr.as_pointer() + 1);
         let target = mem
-            .read_leword::<u16>(&op_ptr)
+            .read_leword_stateful::<u16>(ptr + 1, &state)
             .into_concrete()
-            .ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
-        let ret_pc = *ptr.as_pointer() + 3;
+            .ok_or_else(|| {
+                analysis::Error::UnconstrainedMemory(state.contextualize_pointer(ptr + 1))
+            })?;
+        let ret_pc = ptr + 3;
 
-        push_value_to_sp(ptr, &mut state, trace, reg::Symbolic::from(ret_pc))?;
+        push_value_to_sp(mem, &mut state, trace, reg::Symbolic::from(ret_pc))?;
 
-        Ok((state, ptr.contextualize(target)))
+        Ok((state, target))
     } else {
-        Ok((state, ptr.clone() + 3))
+        Ok((state, ptr + 3))
     }
 }
 
 /// Trace return
 fn trace_return(
     condcode: Option<u8>,
-    ptr: &memory::Pointer<PtrVal>,
+    ptr: PtrVal,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
-) -> sm83::Result<(State, memory::Pointer<PtrVal>)> {
+) -> sm83::Result<(State, PtrVal)> {
     if flag_test(condcode, state.get_register(&Register::F))? {
         let old_spval = read_value_from_targetpair(&state, 3, false)?
             .into_concrete()
             .ok_or(analysis::Error::UnconstrainedRegister)?;
-        let new_pcval = pop_value_from_sp(ptr, mem, &mut state, trace)?
+        let new_pcval = pop_value_from_sp(mem, &mut state, trace)?
             .into_concrete()
-            .ok_or_else(|| analysis::Error::UnconstrainedMemory(ptr.contextualize(old_spval)))?;
-        let new_ptr = ptr.contextualize(new_pcval);
+            .ok_or_else(|| {
+                analysis::Error::UnconstrainedMemory(state.contextualize_pointer(old_spval))
+            })?;
 
-        Ok((state, new_ptr))
+        Ok((state, new_pcval))
     } else {
-        Ok((state, ptr.clone() + 1))
+        Ok((state, ptr + 1))
     }
 }
 
 /// Trace relative jumps
 fn trace_jump_relative(
     condcode: Option<u8>,
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     state: State,
-) -> sm83::Result<(State, memory::Pointer<PtrVal>)> {
-    let op_ptr = p.contextualize((*p.as_pointer()).overflowing_add(1).0);
-    let offset = state
-        .get_memory(&op_ptr, mem)
+) -> sm83::Result<(State, PtrVal)> {
+    let offset = mem
+        .read_unit_stateful(p.overflowing_add(1).0, &state)
         .into_concrete()
-        .ok_or_else(|| analysis::Error::UnconstrainedMemory(op_ptr))? as i8 as i16
-        as u16;
-    let target = p.contextualize(
-        (*p.as_pointer())
-            .overflowing_add(2)
-            .0
-            .overflowing_add(offset)
-            .0,
-    );
+        .ok_or_else(|| {
+            analysis::Error::UnconstrainedMemory(
+                state.contextualize_pointer(p.overflowing_add(1).0),
+            )
+        })? as i8 as i16 as u16;
+    let target = p.overflowing_add(2).0.overflowing_add(offset).0;
 
     if flag_test(condcode, state.get_register(&Register::F))? {
         Ok((state, target))
     } else {
-        Ok((state, p.clone() + 2))
+        Ok((state, p + 2))
     }
 }
 
 /// Trace dynamic jumps
-fn trace_jump_dynamic(
-    p: &memory::Pointer<PtrVal>,
-    state: State,
-) -> sm83::Result<(State, memory::Pointer<PtrVal>)> {
+fn trace_jump_dynamic(state: State) -> sm83::Result<(State, PtrVal)> {
     match read_value_from_targetpair(&state, 2, false)?.into_concrete() {
-        Some(hl) => Ok((state, p.contextualize(hl))),
+        Some(hl) => Ok((state, hl)),
         _ => Err(analysis::Error::UnconstrainedRegister),
     }
 }
@@ -571,35 +555,32 @@ fn trace_sp_set(mut state: State, trace: &mut Trace) -> State {
 
 /// Trace high memory store
 fn trace_himem_store(
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
 ) -> sm83::Result<State> {
-    let op_ptr = p.contextualize(*p.as_pointer() + 1);
-    match mem.read_unit(&op_ptr).into_concrete() {
+    match mem.read_unit_stateful(p + 1, &state).into_concrete() {
         Some(hi) => {
-            trace.memory_write(
-                p.contextualize(0xFF00 | hi as u16),
+            mem.write_memory(
+                0xFF00 | hi as u16,
                 &[state.get_register(&Register::A)],
                 &mut state,
+                Some(trace),
             );
 
             Ok(state)
         }
-        _ => Err(analysis::Error::UnconstrainedMemory(op_ptr)),
+        _ => Err(analysis::Error::UnconstrainedMemory(
+            state.contextualize_pointer(p + 1),
+        )),
     }
 }
 
 /// Trace SP adjustment
-fn trace_sp_adjust(
-    p: &memory::Pointer<PtrVal>,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-) -> State {
+fn trace_sp_adjust(p: PtrVal, mem: &Bus, mut state: State, trace: &mut Trace) -> State {
     let adjust: reg::Symbolic<u16> =
-        reg::Symbolic::convert_from(mem.read_unit(&p.contextualize(*p.as_pointer() + 1)));
+        reg::Symbolic::convert_from(mem.read_unit_stateful(p + 1, &state));
     let hi_sp: reg::Symbolic<u16> = reg::Symbolic::convert_from(state.get_register(&Register::S));
     let lo_sp: reg::Symbolic<u16> = reg::Symbolic::convert_from(state.get_register(&Register::P));
     let new_sp = (hi_sp << 8 | lo_sp) + adjust;
@@ -618,32 +599,32 @@ fn trace_sp_adjust(
 
 /// Trace high memory load
 fn trace_himem_load(
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
 ) -> sm83::Result<State> {
-    let op_ptr = p.contextualize(*p.as_pointer() + 1);
-    match mem.read_unit(&op_ptr).into_concrete() {
+    match mem.read_unit_stateful(p + 1, &state).into_concrete() {
         Some(hi) => {
-            let mv = state.get_memory(&p.contextualize(0xFF00 | hi as u16), mem);
+            let mv = mem.read_unit_stateful(0xFF00 | hi as u16, &state);
             trace.register_set(Register::A, mv, &mut state);
 
             Ok(state)
         }
-        _ => Err(analysis::Error::UnconstrainedMemory(op_ptr)),
+        _ => Err(analysis::Error::UnconstrainedMemory(
+            state.contextualize_pointer(p + 1),
+        )),
     }
 }
 
 /// Trace SP offset calculation
 fn trace_sp_offset_calc(
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
 ) -> sm83::Result<State> {
-    let op_ptr = p.clone() + 1;
-    let r8: reg::Symbolic<u16> = reg::Symbolic::convert_from(mem.read_unit(&op_ptr));
+    let r8: reg::Symbolic<u16> = reg::Symbolic::convert_from(mem.read_unit_stateful(p + 1, &state));
     let sign = match (r8 & reg::Symbolic::from(0x0080 as u16)).into_concrete() {
         Some(0x80) => reg::Symbolic::from(0xFF80 as u16),
         Some(0x00) => reg::Symbolic::from(0x0000 as u16),
@@ -667,18 +648,14 @@ fn trace_sp_offset_calc(
 }
 
 /// Trace himem indirect store
-fn trace_himem_indir_store(
-    p: &memory::Pointer<PtrVal>,
-    mut state: State,
-    trace: &mut Trace,
-) -> sm83::Result<State> {
+fn trace_himem_indir_store(mem: &Bus, mut state: State, trace: &mut Trace) -> sm83::Result<State> {
     match state.get_register(&Register::C).into_concrete() {
         Some(c) => {
-            let op_ptr = 0xFF00 | c as u16;
-            trace.memory_write(
-                p.contextualize(op_ptr),
+            mem.write_memory(
+                0xFF00 | c as u16,
                 &[state.get_register(&Register::A)],
                 &mut state,
+                Some(trace),
             );
             Ok(state)
         }
@@ -688,39 +665,35 @@ fn trace_himem_indir_store(
 
 /// Trace writing the accumulator to a memory location
 fn trace_mem_store(
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
 ) -> sm83::Result<State> {
-    let op_ptr = p.contextualize(*p.as_pointer() + 1);
+    let op_ptr = p.saturating_add(1);
     let memloc = mem
-        .read_leword::<PtrVal>(&op_ptr)
+        .read_leword_stateful::<PtrVal>(op_ptr, &state)
         .into_concrete()
-        .ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
+        .ok_or_else(|| analysis::Error::UnconstrainedMemory(state.contextualize_pointer(op_ptr)))?;
 
-    trace.memory_write(
-        p.contextualize(memloc),
+    mem.write_memory(
+        memloc,
         &[state.get_register(&Register::A)],
         &mut state,
+        Some(trace),
     );
 
     Ok(state)
 }
 
 /// Trace himem indirect load
-fn trace_himem_indir_load(
-    p: &memory::Pointer<PtrVal>,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-) -> sm83::Result<State> {
+fn trace_himem_indir_load(mem: &Bus, mut state: State, trace: &mut Trace) -> sm83::Result<State> {
     match state.get_register(&Register::C).into_concrete() {
         Some(c) => {
             let op_ptr = 0xFF00 | c as u16;
             trace.register_set(
                 Register::A,
-                state.get_memory(&p.contextualize(op_ptr), mem),
+                mem.read_unit_stateful(op_ptr, &state),
                 &mut state,
             );
             Ok(state)
@@ -731,20 +704,20 @@ fn trace_himem_indir_load(
 
 /// Trace loading the accumulator from a memory location
 fn trace_mem_load(
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
 ) -> sm83::Result<State> {
-    let op_ptr = p.contextualize(*p.as_pointer() + 1);
+    let op_ptr = p + 1;
     let memloc = mem
-        .read_leword::<PtrVal>(&op_ptr)
+        .read_leword_stateful::<PtrVal>(op_ptr, &state)
         .into_concrete()
-        .ok_or(analysis::Error::UnconstrainedMemory(op_ptr))?;
+        .ok_or_else(|| analysis::Error::UnconstrainedMemory(state.contextualize_pointer(op_ptr)))?;
 
     trace.register_set(
         Register::A,
-        state.get_memory(&p.contextualize(memloc), mem),
+        mem.read_unit_stateful(memloc, &state),
         &mut state,
     );
 
@@ -752,13 +725,13 @@ fn trace_mem_load(
 }
 
 fn trace_regpair_set(
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
     targetpair: u8,
 ) -> sm83::Result<State> {
-    let value: reg::Symbolic<PtrVal> = mem.read_leword(&(p.clone() + 1));
+    let value: reg::Symbolic<PtrVal> = mem.read_leword_stateful(p + 1, &state);
 
     write_value_to_targetpair(&mut state, trace, targetpair, false, value)?;
 
@@ -777,7 +750,7 @@ fn trace_wide_add(mut state: State, trace: &mut Trace, targetpair: u8) -> sm83::
 }
 
 fn trace_targetmem_store(
-    p: &memory::Pointer<PtrVal>,
+    mem: &Bus,
     mut state: State,
     trace: &mut Trace,
     targetmem: u8,
@@ -802,11 +775,11 @@ fn trace_targetmem_store(
 
     let a = state.get_register(&Register::A);
     let hl = match ptr.into_concrete() {
-        Some(ptr) => p.contextualize(ptr),
+        Some(ptr) => ptr,
         None => return Err(analysis::Error::UnconstrainedRegister),
     };
 
-    trace.memory_write(hl, &[a], &mut state);
+    mem.write_memory(hl, &[a], &mut state, Some(trace));
 
     match targetmem {
         2 => {
@@ -824,7 +797,6 @@ fn trace_targetmem_store(
 }
 
 fn trace_targetmem_load(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
@@ -849,10 +821,10 @@ fn trace_targetmem_load(
     };
 
     let hl = match ptr.into_concrete() {
-        Some(ptr) => p.contextualize(ptr),
+        Some(ptr) => ptr,
         None => return Err(analysis::Error::UnconstrainedRegister),
     };
-    let a = state.get_memory(&hl, mem);
+    let a = mem.read_unit_stateful(hl, &state);
 
     trace.register_set(Register::A, a, &mut state);
 
@@ -896,95 +868,90 @@ fn trace_targetpair_dec(
 }
 
 fn trace_targetreg_inc(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
     targetreg: u8,
 ) -> sm83::Result<State> {
-    let pairval = read_value_from_targetreg(p, mem, &state, targetreg)?;
+    let pairval = read_value_from_targetreg(mem, &state, targetreg)?;
     let newval = pairval + reg::Symbolic::from(1);
-    write_value_to_targetreg(p, mem, &mut state, trace, targetreg, newval)?;
+    write_value_to_targetreg(mem, &mut state, trace, targetreg, newval)?;
 
     Ok(state)
 }
 
 fn trace_targetreg_dec(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
     targetreg: u8,
 ) -> sm83::Result<State> {
-    let pairval = read_value_from_targetreg(p, mem, &state, targetreg)?;
+    let pairval = read_value_from_targetreg(mem, &state, targetreg)?;
     let newval = pairval - reg::Symbolic::from(1);
-    write_value_to_targetreg(p, mem, &mut state, trace, targetreg, newval)?;
+    write_value_to_targetreg(mem, &mut state, trace, targetreg, newval)?;
 
     Ok(state)
 }
 
 fn trace_targetreg_set(
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
     targetreg: u8,
 ) -> sm83::Result<State> {
-    let op_ptr = p.clone() + 1;
-    let operand = state.get_memory(&op_ptr, mem);
-    write_value_to_targetreg(p, mem, &mut state, trace, targetreg, operand)?;
+    let op_ptr = p + 1;
+    let operand = mem.read_unit_stateful(op_ptr, &state);
+    write_value_to_targetreg(mem, &mut state, trace, targetreg, operand)?;
 
     Ok(state)
 }
 
 fn trace_targetreg_copy(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
     targetreg_src: u8,
     targetreg_dst: u8,
 ) -> sm83::Result<State> {
-    let value = read_value_from_targetreg(p, mem, &state, targetreg_src)?;
-    write_value_to_targetreg(p, mem, &mut state, trace, targetreg_dst, value)?;
+    let value = read_value_from_targetreg(mem, &state, targetreg_src)?;
+    write_value_to_targetreg(mem, &mut state, trace, targetreg_dst, value)?;
 
     Ok(state)
 }
 
 fn trace_stackpair_push(
-    p: &memory::Pointer<PtrVal>,
-    mut state: State,
-    trace: &mut Trace,
-    stackpair: u8,
-) -> sm83::Result<State> {
-    let value = read_value_from_targetpair(&state, stackpair, true)?;
-    push_value_to_sp(p, &mut state, trace, value)?;
-
-    Ok(state)
-}
-
-fn trace_stackpair_pop(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
     stackpair: u8,
 ) -> sm83::Result<State> {
-    let value = pop_value_from_sp(p, mem, &mut state, trace)?;
+    let value = read_value_from_targetpair(&state, stackpair, true)?;
+    push_value_to_sp(mem, &mut state, trace, value)?;
+
+    Ok(state)
+}
+
+fn trace_stackpair_pop(
+    mem: &Bus,
+    mut state: State,
+    trace: &mut Trace,
+    stackpair: u8,
+) -> sm83::Result<State> {
+    let value = pop_value_from_sp(mem, &mut state, trace)?;
     write_value_to_targetpair(&mut state, trace, stackpair, true, value)?;
 
     Ok(state)
 }
 
 fn trace_aluop_register(
-    p: &memory::Pointer<PtrVal>,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
     the_aluop: u8,
     targetreg: u8,
 ) -> sm83::Result<State> {
-    let operand = read_value_from_targetreg(p, mem, &state, targetreg)?;
+    let operand = read_value_from_targetreg(mem, &state, targetreg)?;
     let (new_accum, new_flags) = aluop(
         the_aluop,
         state.get_register(&Register::A),
@@ -999,14 +966,14 @@ fn trace_aluop_register(
 }
 
 fn trace_aluop_immediate(
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     mut state: State,
     trace: &mut Trace,
     the_aluop: u8,
 ) -> sm83::Result<State> {
-    let op_ptr = p.clone() + 1;
-    let operand = mem.read_unit(&op_ptr);
+    let op_ptr = p + 1;
+    let operand = mem.read_unit_stateful(op_ptr, &state);
     let (new_accum, new_flags) = aluop(
         the_aluop,
         state.get_register(&Register::A),
@@ -1058,17 +1025,18 @@ fn trace_oldbitops(mut state: State, trace: &mut Trace, op: u8) -> sm83::Result<
 }
 
 fn trace_rst(
-    ptr: &memory::Pointer<PtrVal>,
+    ptr: PtrVal,
+    mem: &Bus,
     mut state: State,
     trace: &mut Trace,
     op: u8,
-) -> sm83::Result<(State, memory::Pointer<PtrVal>)> {
+) -> sm83::Result<(State, PtrVal)> {
     let target = (op & 0x38) as u16;
-    let ret_pc = *ptr.as_pointer() + 3;
+    let ret_pc = ptr + 3;
 
-    push_value_to_sp(ptr, &mut state, trace, reg::Symbolic::from(ret_pc))?;
+    push_value_to_sp(mem, &mut state, trace, reg::Symbolic::from(ret_pc))?;
 
-    Ok((state, ptr.contextualize(target)))
+    Ok((state, target))
 }
 
 /// Trace the current instruction state into a new one.
@@ -1087,67 +1055,62 @@ fn trace_rst(
 ///  * The new state after the execution has been traced
 ///  * The address of the next instruction to execute
 pub fn trace(
-    p: &memory::Pointer<PtrVal>,
+    p: PtrVal,
     mem: &Bus,
     state: State,
     trace: &mut Trace,
-) -> sm83::Result<(State, memory::Pointer<PtrVal>)> {
-    match mem.read_unit(p).into_concrete() {
-        Some(0xCB) => match mem.read_unit(&(p.clone() + 1)).into_concrete() {
+) -> sm83::Result<(State, PtrVal)> {
+    match mem.read_unit_stateful(p, &state).into_concrete() {
+        Some(0xCB) => match mem.read_unit_stateful(p + 1, &state).into_concrete() {
             Some(subop) => {
                 let targetreg = subop & 0x07;
                 let new_bitop = (subop >> 3) & 0x07;
 
                 match ((subop >> 6) & 0x03, (subop >> 3) & 0x07, subop & 0x07) {
                     (0, _, _) => Ok((
-                        trace_bitop(p, mem, state, trace, new_bitop, targetreg)?,
-                        (p.clone() + 2),
+                        trace_bitop(mem, state, trace, new_bitop, targetreg)?,
+                        (p + 2),
                     )),
-                    (1, bit, _) => Ok((
-                        trace_bittest(p, mem, state, trace, bit, targetreg)?,
-                        (p.clone() + 2),
-                    )),
-                    (2, bit, _) => Ok((
-                        trace_bitreset(p, mem, state, trace, bit, targetreg)?,
-                        (p.clone() + 2),
-                    )),
-                    (3, bit, _) => Ok((
-                        trace_bitset(p, mem, state, trace, bit, targetreg)?,
-                        (p.clone() + 2),
-                    )),
+                    (1, bit, _) => Ok((trace_bittest(mem, state, trace, bit, targetreg)?, (p + 2))),
+                    (2, bit, _) => {
+                        Ok((trace_bitreset(mem, state, trace, bit, targetreg)?, (p + 2)))
+                    }
+                    (3, bit, _) => Ok((trace_bitset(mem, state, trace, bit, targetreg)?, (p + 2))),
                     _ => Err(analysis::Error::Misinterpretation(2, false)),
                 }
             }
-            _ => Err(analysis::Error::UnconstrainedMemory(p.clone() + 1)),
+            _ => Err(analysis::Error::UnconstrainedMemory(
+                state.contextualize_pointer(p + 1),
+            )),
         },
 
         //Z80 instructions that don't fit the pattern decoder below
-        Some(0x00) => Ok((state, p.clone() + 1)), //nop
-        Some(0x08) => Ok((trace_sp_storage(p, mem, state, trace)?, p.clone() + 3)), //ld [u16], SP
-        Some(0x10) => Ok((state, p.clone() + 1)), //stop
+        Some(0x00) => Ok((state, p + 1)), //nop
+        Some(0x08) => Ok((trace_sp_storage(p, mem, state, trace)?, p + 3)), //ld [u16], SP
+        Some(0x10) => Ok((state, p + 1)), //stop
         Some(0x18) => trace_jump_relative(None, p, mem, state), //jr u8
-        Some(0x76) => Ok((state, p.clone() + 1)), //halt
+        Some(0x76) => Ok((state, p + 1)), //halt
 
         Some(0xC3) => trace_jump(None, p, mem, state), //jp u16
         Some(0xCD) => trace_call(None, p, mem, state, trace),
 
         Some(0xC9) => trace_return(None, p, mem, state, trace), //ret
         Some(0xD9) => trace_return(None, p, mem, state, trace), //reti
-        Some(0xE9) => trace_jump_dynamic(p, state),             //jp hl
-        Some(0xF9) => Ok((trace_sp_set(state, trace), p.clone() + 1)), //ld sp, hl
+        Some(0xE9) => trace_jump_dynamic(state),                //jp hl
+        Some(0xF9) => Ok((trace_sp_set(state, trace), p + 1)),  //ld sp, hl
 
-        Some(0xE0) => Ok((trace_himem_store(p, mem, state, trace)?, p.clone() + 2)), //ldh [u8], a
-        Some(0xE8) => Ok((trace_sp_adjust(p, mem, state, trace), p.clone() + 2)),    //add sp, u8
-        Some(0xF0) => Ok((trace_himem_load(p, mem, state, trace)?, p.clone() + 2)),  //ldh a, [u8]
-        Some(0xF8) => Ok((trace_sp_offset_calc(p, mem, state, trace)?, p.clone() + 2)), //ld hl, sp+u8
+        Some(0xE0) => Ok((trace_himem_store(p, mem, state, trace)?, p + 2)), //ldh [u8], a
+        Some(0xE8) => Ok((trace_sp_adjust(p, mem, state, trace), p + 2)),    //add sp, u8
+        Some(0xF0) => Ok((trace_himem_load(p, mem, state, trace)?, p + 2)),  //ldh a, [u8]
+        Some(0xF8) => Ok((trace_sp_offset_calc(p, mem, state, trace)?, p + 2)), //ld hl, sp+u8
 
-        Some(0xE2) => Ok((trace_himem_indir_store(p, state, trace)?, p.clone() + 1)), //ld [c], a
-        Some(0xEA) => Ok((trace_mem_store(p, mem, state, trace)?, p.clone() + 3)),    //ld [u16], a
-        Some(0xF2) => Ok((trace_himem_indir_load(p, mem, state, trace)?, p.clone() + 1)), //ld a, [c]
-        Some(0xFA) => Ok((trace_mem_load(p, mem, state, trace)?, p.clone() + 3)), //ld a, [u16]
+        Some(0xE2) => Ok((trace_himem_indir_store(mem, state, trace)?, p + 1)), //ld [c], a
+        Some(0xEA) => Ok((trace_mem_store(p, mem, state, trace)?, p + 3)),      //ld [u16], a
+        Some(0xF2) => Ok((trace_himem_indir_load(mem, state, trace)?, p + 1)),  //ld a, [c]
+        Some(0xFA) => Ok((trace_mem_load(p, mem, state, trace)?, p + 3)),       //ld a, [u16]
 
-        Some(0xF3) => Ok((state, p.clone() + 1)), //di
-        Some(0xFB) => Ok((state, p.clone() + 1)), //ei
+        Some(0xF3) => Ok((state, p + 1)), //di
+        Some(0xFB) => Ok((state, p + 1)), //ei
 
         //Z80 instructions that follow a particular pattern
         Some(op) => {
@@ -1170,74 +1133,43 @@ pub fn trace(
             ) {
                 (0, 0, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* 00, 08, 10, 18 */
                 (0, 1, _, 0) => trace_jump_relative(Some(condcode), p, mem, state), //jr cond, u8
-                (0, _, 0, 1) => Ok((
-                    trace_regpair_set(p, mem, state, trace, targetpair)?,
-                    p.clone() + 3,
-                )), //ld targetpair, u16
-                (0, _, 1, 1) => Ok((trace_wide_add(state, trace, targetpair)?, p.clone() + 1)), //add hl, targetpair
-                (0, _, 0, 2) => Ok((
-                    trace_targetmem_store(p, state, trace, targetmem)?,
-                    p.clone() + 1,
-                )), //ld [targetmem], a
-                (0, _, 1, 2) => Ok((
-                    trace_targetmem_load(p, mem, state, trace, targetmem)?,
-                    p.clone() + 1,
-                )), //ld a, [targetmem]
-                (0, _, 0, 3) => Ok((
-                    trace_targetpair_inc(state, trace, targetpair)?,
-                    p.clone() + 1,
-                )), //inc targetpair
-                (0, _, 1, 3) => Ok((
-                    trace_targetpair_dec(state, trace, targetpair)?,
-                    p.clone() + 1,
-                )), //dec targetpair
-                (0, _, _, 4) => Ok((
-                    trace_targetreg_inc(p, mem, state, trace, targetreg)?,
-                    p.clone() + 1,
-                )), //inc targetreg
-                (0, _, _, 5) => Ok((
-                    trace_targetreg_dec(p, mem, state, trace, targetreg)?,
-                    p.clone() + 1,
-                )), //dec targetreg
-                (0, _, _, 6) => Ok((
-                    trace_targetreg_set(p, mem, state, trace, targetreg)?,
-                    p.clone() + 2,
-                )), //ld targetreg, u8
-                (0, _, _, 7) => Ok((trace_oldbitops(state, trace, bitop)?, p.clone() + 1)), //old bitops
+                (0, _, 0, 1) => Ok((trace_regpair_set(p, mem, state, trace, targetpair)?, p + 3)), //ld targetpair, u16
+                (0, _, 1, 1) => Ok((trace_wide_add(state, trace, targetpair)?, p + 1)), //add hl, targetpair
+                (0, _, 0, 2) => Ok((trace_targetmem_store(mem, state, trace, targetmem)?, p + 1)), //ld [targetmem], a
+                (0, _, 1, 2) => Ok((trace_targetmem_load(mem, state, trace, targetmem)?, p + 1)), //ld a, [targetmem]
+                (0, _, 0, 3) => Ok((trace_targetpair_inc(state, trace, targetpair)?, p + 1)), //inc targetpair
+                (0, _, 1, 3) => Ok((trace_targetpair_dec(state, trace, targetpair)?, p + 1)), //dec targetpair
+                (0, _, _, 4) => Ok((trace_targetreg_inc(mem, state, trace, targetreg)?, p + 1)), //inc targetreg
+                (0, _, _, 5) => Ok((trace_targetreg_dec(mem, state, trace, targetreg)?, p + 1)), //dec targetreg
+                (0, _, _, 6) => Ok((trace_targetreg_set(p, mem, state, trace, targetreg)?, p + 2)), //ld targetreg, u8
+                (0, _, _, 7) => Ok((trace_oldbitops(state, trace, bitop)?, p + 1)), //old bitops
                 (1, _, _, _) => Ok((
-                    trace_targetreg_copy(p, mem, state, trace, targetreg, targetreg2)?,
-                    p.clone() + 1,
+                    trace_targetreg_copy(mem, state, trace, targetreg, targetreg2)?,
+                    p + 1,
                 )), //ld targetreg2, targetreg
                 (2, _, _, _) => Ok((
-                    trace_aluop_register(p, mem, state, trace, aluop, targetreg2)?,
-                    p.clone() + 1,
+                    trace_aluop_register(mem, state, trace, aluop, targetreg2)?,
+                    p + 1,
                 )), //(aluop) a, targetreg2
                 (3, 0, _, 0) => trace_return(Some(condcode), p, mem, state, trace), //ret cond
                 (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
-                (3, _, 0, 1) => Ok((
-                    trace_stackpair_pop(p, mem, state, trace, stackpair)?,
-                    p.clone() + 1,
-                )), //pop stackpair
+                (3, _, 0, 1) => Ok((trace_stackpair_pop(mem, state, trace, stackpair)?, p + 1)), //pop stackpair
                 (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
                 (3, 0, _, 2) => trace_jump(Some(condcode), p, mem, state),         //jp cond, u16
                 (3, 1, _, 2) => Err(analysis::Error::Misinterpretation(1, false)), /* E2, EA, F2, FA */
                 (3, _, _, 3) => Err(analysis::Error::InvalidInstruction),
                 (3, 0, _, 4) => trace_call(Some(condcode), p, mem, state, trace), //call cond, u16
                 (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction),
-                (3, _, 0, 5) => Ok((
-                    trace_stackpair_push(p, state, trace, stackpair)?,
-                    p.clone() + 1,
-                )), //push stackpair
+                (3, _, 0, 5) => Ok((trace_stackpair_push(mem, state, trace, stackpair)?, p + 1)), //push stackpair
                 (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction),
-                (3, _, _, 6) => Ok((
-                    trace_aluop_immediate(p, mem, state, trace, aluop)?,
-                    p.clone() + 2,
-                )), //(aluop) a, u8
-                (3, _, _, 7) => trace_rst(p, state, trace, op), //rst op& 0x38
+                (3, _, _, 6) => Ok((trace_aluop_immediate(p, mem, state, trace, aluop)?, p + 2)), //(aluop) a, u8
+                (3, _, _, 7) => trace_rst(p, mem, state, trace, op), //rst op& 0x38
 
                 _ => Err(analysis::Error::InvalidInstruction),
             }
         }
-        _ => Err(analysis::Error::UnconstrainedMemory(p.clone())),
+        _ => Err(analysis::Error::UnconstrainedMemory(
+            state.contextualize_pointer(p),
+        )),
     }
 }

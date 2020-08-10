@@ -47,7 +47,7 @@ impl Register {
             _ => vec![],
         }
         .iter()
-        .map(|r| Prerequisite::from_register(*r))
+        .map(|r| Prerequisite::register(*r, 0xFF))
         .collect()
     }
 }
@@ -175,7 +175,7 @@ impl Architecture for SM83 {
 
     fn prerequisites(
         &self,
-        at: &Pointer<Self::PtrVal>,
+        at: Self::PtrVal,
         bus: &Memory<Self>,
         state: &State,
     ) -> Result<(Vec<Prerequisite>, bool)> {
@@ -184,11 +184,11 @@ impl Architecture for SM83 {
 
     fn trace(
         &self,
-        at: &Pointer<Self::PtrVal>,
+        at: Self::PtrVal,
         bus: &Memory<Self>,
         state: State,
         this_trace: &mut Trace,
-    ) -> Result<(State, Pointer<Self::PtrVal>)> {
+    ) -> Result<(State, Self::PtrVal)> {
         trace(at, bus, state, this_trace)
     }
 }
