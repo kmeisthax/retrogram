@@ -8,7 +8,7 @@ use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, State};
 use num::Bounded;
 use std::convert::TryInto;
-use std::fmt::Display;
+use std::fmt::{Display, Debug};
 use std::str::FromStr;
 
 /// Indicates a `Literal` that is specifically compatible with a given
@@ -31,8 +31,8 @@ where
 /// must provide in order to be supported.
 pub trait Architecture
 where
-    Self: Copy,
-    Self::Register: Mappable + Display + FromStr,
+    Self: Copy + Debug,
+    Self::Register: Mappable + Debug + Display + FromStr,
     Self::Word: Bitwise
         + Numerical
         + Popcount<Output = Self::Word>

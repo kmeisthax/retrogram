@@ -6,7 +6,7 @@ use crate::memory::Pointer;
 use crate::{analysis, ast, memory, reg};
 use std::{fmt, result, str};
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Aarch32Register {
     R0,
     R1,
@@ -180,7 +180,7 @@ pub type Disasm<L> = analysis::Disasm<L, PtrVal, Offset>;
 pub type Result<T> = analysis::Result<T, AArch32>;
 
 /// Architectural type for AArch32
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct AArch32();
 
 impl Architecture for AArch32 {

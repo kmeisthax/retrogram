@@ -10,6 +10,7 @@ use std::convert::TryInto;
 
 /// Indicates a memory or register value that needs to be a concrete value
 /// before execution can continue.
+#[derive(Debug)]
 pub enum Prerequisite<AR>
 where
     AR: Architecture,
