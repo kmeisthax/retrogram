@@ -2,6 +2,7 @@
 
 use crate::analysis::Prerequisite;
 use crate::arch::sm83;
+use crate::reg::{Convertable, State, Symbolic};
 use crate::{memory, reg};
 use std::io;
 
@@ -11,6 +12,16 @@ trait Mapper {
     fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize>;
 
     fn context_mask(&self) -> u64;
+
+    /// Attempt to handle an MBC register write.
+    ///
+    /// If this is not an MBC register write, then return false.
+    fn register_write(
+        &self,
+        ptr: sm83::PtrVal,
+        byte: Symbolic<sm83::Data>,
+        state: &mut State<sm83::SM83>,
+    ) -> bool;
 }
 
 /// Mapper type which does not support banking.
@@ -31,6 +42,15 @@ impl Mapper for LinearMapper {
 
     fn context_mask(&self) -> u64 {
         0
+    }
+
+    fn register_write(
+        &self,
+        _ptr: sm83::PtrVal,
+        _byte: Symbolic<sm83::Data>,
+        _state: &mut State<sm83::SM83>,
+    ) -> bool {
+        false
     }
 }
 
@@ -57,6 +77,31 @@ impl Mapper for MBC1Mapper {
     fn context_mask(&self) -> u64 {
         0x7F
     }
+
+    fn register_write(
+        &self,
+        ptr: sm83::PtrVal,
+        byte: Symbolic<sm83::Data>,
+        state: &mut State<sm83::SM83>,
+    ) -> bool {
+        if ptr >= 0x2000 && ptr <= 0x3FFF {
+            let byte = match byte.into_concrete() {
+                Some(0x00) => Symbolic::from(0x01),
+                Some(0x20) => Symbolic::from(0x21),
+                Some(0x40) => Symbolic::from(0x41),
+                Some(0x60) => Symbolic::from(0x61),
+                _ => byte,
+            };
+
+            state.set_platform_context(
+                "R",
+                Symbolic::<u64>::convert_from(byte) & self.context_mask().into(),
+            );
+            return true;
+        }
+
+        false
+    }
 }
 
 struct MBC2Mapper {}
@@ -80,6 +125,23 @@ impl Mapper for MBC2Mapper {
     fn context_mask(&self) -> u64 {
         0x0F
     }
+
+    fn register_write(
+        &self,
+        ptr: sm83::PtrVal,
+        byte: Symbolic<sm83::Data>,
+        state: &mut State<sm83::SM83>,
+    ) -> bool {
+        if ptr >= 0x2000 && ptr <= 0x3FFF && ptr & 0x0100 != 0 {
+            state.set_platform_context(
+                "R",
+                Symbolic::<u64>::convert_from(byte) & self.context_mask().into(),
+            );
+            return true;
+        }
+
+        false
+    }
 }
 
 struct MBC3Mapper {}
@@ -101,6 +163,28 @@ impl Mapper for MBC3Mapper {
     fn context_mask(&self) -> u64 {
         0x7F
     }
+
+    fn register_write(
+        &self,
+        ptr: sm83::PtrVal,
+        byte: Symbolic<sm83::Data>,
+        state: &mut State<sm83::SM83>,
+    ) -> bool {
+        if ptr >= 0x2000 && ptr <= 0x3FFF {
+            let byte = match byte.into_concrete() {
+                Some(0x00) => Symbolic::from(0x01),
+                _ => byte,
+            };
+
+            state.set_platform_context(
+                "R",
+                Symbolic::<u64>::convert_from(byte) & self.context_mask().into(),
+            );
+            return true;
+        }
+
+        false
+    }
 }
 
 struct MBC5Mapper {}
@@ -121,6 +205,31 @@ impl Mapper for MBC5Mapper {
 
     fn context_mask(&self) -> u64 {
         0x1FF
+    }
+
+    fn register_write(
+        &self,
+        ptr: sm83::PtrVal,
+        byte: Symbolic<sm83::Data>,
+        state: &mut State<sm83::SM83>,
+    ) -> bool {
+        if ptr >= 0x2000 && ptr <= 0x2FFF {
+            let old_data = state.get_platform_context("R") & Symbolic::from(0x100);
+            state.set_platform_context(
+                "R",
+                old_data | Symbolic::<u64>::convert_from(byte) & self.context_mask().into(),
+            );
+            return true;
+        } else if ptr >= 0x3000 && ptr <= 0x3FFF {
+            let old_data = state.get_platform_context("R") & Symbolic::from(0x0FF);
+            state.set_platform_context(
+                "R",
+                old_data | (Symbolic::<u64>::convert_from(byte) << 8) & self.context_mask().into(),
+            );
+            return true;
+        }
+
+        false
     }
 }
 
@@ -214,6 +323,16 @@ where
         }
 
         ptr
+    }
+
+    fn write_memory(
+        &self,
+        ptr: sm83::PtrVal,
+        _base: sm83::PtrVal,
+        data: Symbolic<sm83::Data>,
+        state: &mut State<sm83::SM83>,
+    ) -> bool {
+        self.mapper.register_write(ptr, data, state)
     }
 }
 
