@@ -106,4 +106,17 @@ where
             _ => false,
         }
     }
+
+    /// Convert a static reference to a dynamic one, discarding information
+    /// about the target in the process.
+    pub fn into_dynamic(self) -> Self {
+        match self {
+            Reference::Static {
+                from,
+                to: _,
+                reftype,
+            } => Reference::Dynamic { at: from, reftype },
+            Reference::Dynamic { .. } => self,
+        }
+    }
 }

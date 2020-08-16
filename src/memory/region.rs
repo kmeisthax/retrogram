@@ -244,6 +244,29 @@ impl<AR> Memory<AR>
 where
     AR: Architecture,
 {
+    /// Determine if a given region of memory has a mapping associated with it.
+    pub fn is_mapped(&self, ptr: AR::PtrVal) -> bool {
+        for view in &self.views {
+            if view.is_bare_ptr_within(ptr.clone()) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Determine if a given contextual pointer uniquely identifies a single
+    /// memory location.
+    pub fn is_decodable(&self, ptr: Pointer<AR::PtrVal>) -> bool {
+        for view in &self.views {
+            if view.is_ptr_within(ptr.clone()) {
+                return true;
+            }
+        }
+
+        false
+    }
+
     /// Determine if a given region of memory is dynamically overwritable.
     ///
     /// In order for dynamic tracing to simulate a memory overwrite, the

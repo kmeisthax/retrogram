@@ -88,6 +88,15 @@ where
                 asm.append_directive(disasm.directive(), pc.clone());
 
                 for target in disasm.iter_targets() {
+                    if let Some(tptr) = target.as_target() {
+                        if plat.is_mapped(tptr.as_pointer().clone())
+                            && !plat.is_decodable(tptr.clone())
+                        {
+                            targets.insert(target.clone().into_dynamic());
+                            continue;
+                        }
+                    }
+
                     targets.insert(target.clone());
                 }
 
