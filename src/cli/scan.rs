@@ -103,9 +103,9 @@ where
                     db.split_block(id, xref_offset);
                 }
             }
-
-            db.insert_crossreference(xref);
         }
+
+        db.insert_crossreference(xref);
     }
 
     //TODO: This seems to be polluting the symbol table for no reason.
