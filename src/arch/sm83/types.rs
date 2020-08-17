@@ -4,6 +4,7 @@ use crate::arch::sm83::{disassemble, prereq, trace};
 use crate::arch::Architecture;
 use crate::memory::{Memory, Pointer};
 use crate::{analysis, ast, memory, reg};
+use std::collections::HashSet;
 use std::{fmt, result, str};
 
 /// Enumeration of all architectural GBZ80 registers.
@@ -178,7 +179,7 @@ impl Architecture for SM83 {
         at: Self::PtrVal,
         bus: &Memory<Self>,
         state: &State,
-    ) -> Result<(Vec<Prerequisite>, bool)> {
+    ) -> Result<(HashSet<Prerequisite>, bool)> {
         prereq(at, bus, state)
     }
 

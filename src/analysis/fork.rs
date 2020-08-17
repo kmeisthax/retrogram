@@ -58,24 +58,16 @@ where
         post_state: State<AR>,
         bus: &Memory<AR>,
         trace: Trace<AR>,
-        prerequisites: &[Prerequisite<AR>],
+        prerequisites: impl Iterator<Item = Prerequisite<AR>>,
     ) -> Vec<Self>
     where
         AR::Offset: TryInto<usize>,
     {
-        if prerequisites.is_empty() {
-            return vec![Self {
-                num_branches,
-                pc,
-                pre_state: post_state,
-                trace,
-            }];
-        }
-
         let mut state_list = HashSet::new();
         state_list.insert(post_state.clone());
 
         let mut addl_branch_bits = num_branches as f64;
+        let mut is_empty = true;
 
         for prerequisite in prerequisites {
             //TODO: If the prerequisite list has overlaps, then this will be wrong
@@ -83,6 +75,16 @@ where
                 (2.0 as f64).powf(prerequisite.necessary_forks(&post_state, bus) as f64);
 
             state_list = prerequisite.fork_state(&state_list, bus);
+            is_empty = false;
+        }
+
+        if is_empty {
+            return vec![Self {
+                num_branches,
+                pc,
+                pre_state: post_state,
+                trace,
+            }];
         }
 
         let mut fork_list = Vec::new();

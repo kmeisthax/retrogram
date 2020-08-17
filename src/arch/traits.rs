@@ -7,6 +7,7 @@ use crate::maths::{Numerical, Popcount};
 use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, State};
 use num::Bounded;
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt::{Debug, Display};
 use std::str::FromStr;
@@ -184,7 +185,7 @@ where
         at: Self::PtrVal,
         bus: &Memory<Self>,
         state: &State<Self>,
-    ) -> Result<(Vec<Prerequisite<Self>>, bool), Self>;
+    ) -> Result<(HashSet<Prerequisite<Self>>, bool), Self>;
 
     /// Advance the state of program execution by one instruction, producing a
     /// new state and program counter to continue from.

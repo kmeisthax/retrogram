@@ -4,6 +4,7 @@ use crate::arch::aarch32::{architectural_ctxt_parse, disassemble, prereq, trace}
 use crate::arch::Architecture;
 use crate::memory::Pointer;
 use crate::{analysis, ast, memory, reg};
+use std::collections::HashSet;
 use std::{fmt, result, str};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -213,7 +214,7 @@ impl Architecture for AArch32 {
         at: Self::PtrVal,
         bus: &Bus,
         state: &State,
-    ) -> Result<(Vec<Prerequisite>, bool)> {
+    ) -> Result<(HashSet<Prerequisite>, bool)> {
         prereq(at, bus, state)
     }
 

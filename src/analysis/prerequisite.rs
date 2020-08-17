@@ -7,6 +7,7 @@ use crate::reg::{State, Symbolic};
 use num::{One, Zero};
 use std::collections::HashSet;
 use std::convert::TryInto;
+use std::hash::{Hash, Hasher};
 
 /// Indicates a memory or register value that needs to be a concrete value
 /// before execution can continue.
@@ -66,6 +67,75 @@ where
     },
 }
 
+impl<AR> Hash for Prerequisite<AR>
+where
+    AR: Architecture,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Prerequisite::Register { register, mask } => {
+                register.hash(state);
+                mask.hash(state);
+            }
+            Prerequisite::Memory { ptr, length, mask } => {
+                ptr.hash(state);
+                length.hash(state);
+                mask.hash(state);
+            }
+            Prerequisite::ArchitecturalContext { context, mask } => {
+                context.hash(state);
+                mask.hash(state);
+            }
+            Prerequisite::PlatformContext { context, mask } => {
+                context.hash(state);
+                mask.hash(state);
+            }
+        }
+    }
+}
+
+impl<AR> PartialEq for Prerequisite<AR>
+where
+    AR: Architecture,
+{
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Prerequisite::Register { register, mask },
+                Prerequisite::Register {
+                    register: register_other,
+                    mask: mask_other,
+                },
+            ) => register.eq(register_other) && mask.eq(mask_other),
+            (
+                Prerequisite::Memory { ptr, length, mask },
+                Prerequisite::Memory {
+                    ptr: ptr_other,
+                    length: length_other,
+                    mask: mask_other,
+                },
+            ) => ptr.eq(ptr_other) && length.eq(length_other) && mask.eq(mask_other),
+            (
+                Prerequisite::ArchitecturalContext { context, mask },
+                Prerequisite::ArchitecturalContext {
+                    context: context_other,
+                    mask: mask_other,
+                },
+            ) => context.eq(context_other) && mask.eq(mask_other),
+            (
+                Prerequisite::PlatformContext { context, mask },
+                Prerequisite::PlatformContext {
+                    context: context_other,
+                    mask: mask_other,
+                },
+            ) => context.eq(context_other) & mask.eq(mask_other),
+            _ => false,
+        }
+    }
+}
+
+impl<AR> Eq for Prerequisite<AR> where AR: Architecture {}
+
 impl<AR> Prerequisite<AR>
 where
     AR: Architecture,
@@ -92,6 +162,35 @@ where
     /// Construct a new platform context prerequisite.
     pub fn platform_context(context: String, mask: u64) -> Self {
         Prerequisite::PlatformContext { context, mask }
+    }
+
+    /// Given a particular prerequisite, check if it has any contexts that
+    /// need to be resolved before we can start talking about memory.
+    pub fn check_for_missing_contexts(&self, state: &State<AR>, bus: &Memory<AR>) -> HashSet<Self> {
+        match self {
+            Prerequisite::Memory {
+                ptr,
+                length,
+                mask: _mask,
+            } => {
+                let mut context_preqs = HashSet::new();
+                let mut pval = ptr.clone();
+                let mut length = length.clone();
+                while length > AR::Offset::zero() {
+                    for new_context_preq in bus.prerequisites(pval.clone()) {
+                        if !new_context_preq.necessary_forks(state, bus).is_zero() {
+                            context_preqs.insert(new_context_preq);
+                        }
+                    }
+
+                    pval = pval + AR::Offset::one();
+                    length = length - AR::Offset::one();
+                }
+
+                context_preqs.into_iter().collect()
+            }
+            _ => HashSet::new(),
+        }
     }
 
     /// Compute the number of forks needed to explore every branch implied by a

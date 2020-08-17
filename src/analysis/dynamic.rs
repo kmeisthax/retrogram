@@ -19,7 +19,7 @@ where
         AR::PtrVal,
         analysis::Trace<AR>,
         reg::State<AR>,
-        Vec<Prerequisite<AR>>,
+        HashSet<Prerequisite<AR>>,
     ),
     AR,
 >;
@@ -46,11 +46,19 @@ where
 
     loop {
         let (prerequisites, _is_complete) = arch.prerequisites(new_pc.clone(), bus, &new_state)?;
-        let mut missing = vec![];
+        let mut missing = HashSet::new();
 
         for pr in prerequisites {
             if !pr.necessary_forks(&new_state, bus).is_zero() {
-                missing.push(pr);
+                let context_prs = pr.check_for_missing_contexts(&new_state, &bus);
+
+                if !context_prs.is_empty() {
+                    for cpr in context_prs {
+                        missing.insert(cpr);
+                    }
+                } else {
+                    missing.insert(pr);
+                }
             }
         }
 

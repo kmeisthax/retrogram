@@ -4,6 +4,8 @@ use crate::analysis;
 use crate::arch::sm83;
 use crate::arch::sm83::dis::{AbstractOperand, ALU_TARGET_MEM, ALU_TARGET_REGS};
 use crate::arch::sm83::{Bus, Prerequisite, PtrVal, Register, State};
+use std::collections::HashSet;
+use std::iter::FromIterator;
 
 /// Return a prerequisite list for an instruction that reads or writes the
 /// address situated in the opcode of this instruction.
@@ -120,8 +122,8 @@ fn memlist_call_indir16(
 /// registers or memory locations, the tracing routine must consider how many
 /// forks will be created and if such forking is "worth it". This is a heuristic
 /// policy not covered by the tracing implementation of this architecture.
-pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(Vec<Prerequisite>, bool)> {
-    match mem.read_unit_stateful(p, state).into_concrete() {
+pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(HashSet<Prerequisite>, bool)> {
+    let ret = match mem.read_unit_stateful(p, state).into_concrete() {
         Some(0xCB) => match mem.read_unit_stateful(p + 1, state).into_concrete() {
             Some(subop) => match ALU_TARGET_REGS[(subop & 0x07) as usize] {
                 AbstractOperand::Symbol(_) => Ok((vec![], true)),
@@ -234,5 +236,10 @@ pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(Vec<Prerequi
             }
         }
         _ => Ok((vec![Prerequisite::memory(p, 1)], false)),
+    };
+
+    match ret {
+        Ok((preqs, is_complete)) => Ok((HashSet::from_iter(preqs.into_iter()), is_complete)),
+        Err(e) => Err(e),
     }
 }

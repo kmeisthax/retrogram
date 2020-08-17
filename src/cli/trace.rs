@@ -129,45 +129,64 @@ where
 }
 
 /// Print out the prerequisites that a trace operation stopped on.
-fn print_prereqs<AR>(halt_pc: Pointer<AR::PtrVal>, missing: &[Prerequisite<AR>])
-where
-    AR: Architecture,
+fn print_prereqs<'a, AR>(
+    halt_pc: Pointer<AR::PtrVal>,
+    missing: impl Iterator<Item = &'a Prerequisite<AR>>,
+) where
+    AR: 'static + Architecture,
 {
     println!("Halted at ${:X}", halt_pc);
 
-    if !missing.is_empty() {
-        let missing_reg = missing
-            .iter()
-            .filter_map(|p| match p {
-                Prerequisite::Register {
-                    register,
-                    mask: _mask,
-                } => Some(format!("{}", register)),
-                _ => None,
-            })
-            .collect::<Vec<String>>()
-            .join(", ");
+    let mut missing_reg = Vec::new();
+    let mut missing_mem = Vec::new();
+    let mut missing_actxt = Vec::new();
+    let mut missing_pctxt = Vec::new();
 
-        if !missing_reg.is_empty() {
-            println!("Halted on unconstrained register: {}", missing_reg);
+    for p in missing {
+        match p {
+            Prerequisite::Register {
+                register,
+                mask: _mask,
+            } => missing_reg.push(format!("{}", register)),
+            Prerequisite::Memory {
+                ptr,
+                length: _length,
+                mask: _mask,
+            } => missing_mem.push(format!("${:X}", ptr)),
+            Prerequisite::ArchitecturalContext {
+                context,
+                mask: _mask,
+            } => missing_actxt.push(context.clone()),
+            Prerequisite::PlatformContext {
+                context,
+                mask: _mask,
+            } => missing_pctxt.push(context.clone()),
         }
+    }
 
-        let missing_mem = missing
-            .iter()
-            .filter_map(|p| match p {
-                Prerequisite::Memory {
-                    ptr,
-                    length: _length,
-                    mask: _mask,
-                } => Some(format!("${:X}", ptr)),
-                _ => None,
-            })
-            .collect::<Vec<String>>()
-            .join(", ");
+    if !missing_reg.is_empty() {
+        println!(
+            "Halted on unconstrained register: {}",
+            missing_reg.join(", ")
+        );
+    }
 
-        if !missing_mem.is_empty() {
-            println!("Halted on unconstrained memory: {}", missing_mem);
-        }
+    if !missing_mem.is_empty() {
+        println!("Halted on unconstrained memory: {}", missing_mem.join(", "));
+    }
+
+    if !missing_actxt.is_empty() {
+        println!(
+            "Halted on unconstrained architectural context: {}",
+            missing_actxt.join(", ")
+        );
+    }
+
+    if !missing_pctxt.is_empty() {
+        println!(
+            "Halted on unconstrained platform context: {}",
+            missing_pctxt.join(", ")
+        );
     }
 }
 
@@ -194,13 +213,15 @@ fn get_next_action() -> io::Result<NextAction> {
 
 /// Collect a register key and value from the user and set that register to
 /// that value in the state.
-fn set_register<AR>(state: &mut State<AR>, missing: &[Prerequisite<AR>]) -> io::Result<()>
+fn set_register<'a, AR>(
+    state: &mut State<AR>,
+    missing: impl Iterator<Item = &'a Prerequisite<AR>>,
+) -> io::Result<()>
 where
-    AR: Architecture,
+    AR: 'static + Architecture,
     AR::Word: FromStrRadix,
 {
     let options = missing
-        .iter()
         .filter_map(|m| match m {
             Prerequisite::Register {
                 register,
@@ -254,14 +275,16 @@ where
 
 /// Collect a memory pointer and value from the user and set that address to
 /// that value in the state memory.
-fn set_memory<AR>(state: &mut State<AR>, missing: &[Prerequisite<AR>]) -> io::Result<()>
+fn set_memory<'a, AR>(
+    state: &mut State<AR>,
+    missing: impl Iterator<Item = &'a Prerequisite<AR>>,
+) -> io::Result<()>
 where
-    AR: Architecture,
+    AR: 'static + Architecture,
     AR::PtrVal: FromStrRadix,
     AR::Byte: FromStrRadix,
 {
     let options = missing
-        .iter()
         .filter_map(|m| match m {
             Prerequisite::Memory {
                 ptr,
@@ -323,7 +346,7 @@ fn trace_for_arch<'a, L, AR, FMTI>(
     arch: AR,
 ) -> io::Result<()>
 where
-    AR: Architecture,
+    AR: 'static + Architecture,
     AR::Word: FromStrRadix,
     AR::Byte: FromStrRadix,
     for<'dw> AR::PtrVal: Deserialize<'dw> + FromStrRadix,
@@ -360,7 +383,7 @@ where
 
     state.contextualize_self(&pc);
 
-    let mut missing = Vec::new();
+    let mut missing = HashSet::new();
     let mut traced_blocks = HashSet::new();
 
     if let Some(regs) = argv.values_of("register") {
@@ -393,14 +416,14 @@ where
 
                 print_tracelog(trace, bus, arch, fmt_i)?;
 
-                print_prereqs(pc.clone(), &missing);
+                print_prereqs(pc.clone(), missing.iter());
             }
             NextAction::Ask => {
                 action = get_next_action()?;
                 continue;
             }
-            NextAction::SetRegister => set_register(&mut state, &missing)?,
-            NextAction::SetMemory => set_memory(&mut state, &missing)?,
+            NextAction::SetRegister => set_register(&mut state, missing.iter())?,
+            NextAction::SetMemory => set_memory(&mut state, missing.iter())?,
             NextAction::Quit => break,
             NextAction::Help => {
                 println!("All of the listed prerequisites must be resolved before continuing.");

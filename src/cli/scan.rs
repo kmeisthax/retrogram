@@ -243,7 +243,7 @@ where
                 post_state,
                 bus,
                 Trace::begin_at(context_new_pc),
-                &prerequisites,
+                prerequisites.into_iter(),
             ) {
                 forks.push(result_fork);
             }
