@@ -8,7 +8,7 @@ use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, State};
 use num::Bounded;
 use std::convert::TryInto;
-use std::fmt::{Display, Debug};
+use std::fmt::{Debug, Display};
 use std::str::FromStr;
 
 /// Indicates a `Literal` that is specifically compatible with a given

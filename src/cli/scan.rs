@@ -3,7 +3,9 @@
 use crate::analysis::{analyze_trace_log, trace_until_fork, Fork, Trace};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::ast::Instruction;
+use crate::cli::common::reg_parse;
 use crate::database::Database;
+use crate::maths::FromStrRadix;
 use crate::memory::{Offset, Pointer};
 use crate::reg::{Bitwise, State};
 use crate::{analysis, ast, database, input, maths, memory, project, reg};
@@ -183,6 +185,7 @@ fn exhaust_all_dynamic_scans<L, AR>(
     db: &mut Database<AR::PtrVal, AR::Offset>,
     bus: &memory::Memory<AR>,
     arch: AR,
+    poweron_state: State<AR>,
 ) -> analysis::Result<bool, AR>
 where
     L: CompatibleLiteral<AR>,
@@ -199,7 +202,7 @@ where
         eprintln!("Starting trace from {}", block.as_start());
 
         let mut forks = BinaryHeap::new();
-        let mut first_state = State::default();
+        let mut first_state = poweron_state.clone();
 
         first_state.contextualize_self(block.as_start());
 
@@ -259,17 +262,18 @@ where
 ///
 /// TODO: The current set of lifetime bounds preclude the use of zero-copy
 /// deserialization. We should figure out a way around that.
-fn scan_for_arch<L, AR, FMTI>(
+fn scan_for_arch<'a, L, AR, FMTI>(
     prog: &project::Program,
     start_spec: &str,
     bus: &memory::Memory<AR>,
     arch: AR,
     _fmt_i: FMTI, // This shouldn't be necessary...
+    argv: &ArgMatches<'a>,
 ) -> io::Result<()>
 where
     L: CompatibleLiteral<AR>,
     AR: Architecture,
-    AR::Word: TryInto<u64>,
+    AR::Word: TryInto<u64> + FromStrRadix,
     for<'dw> AR::PtrVal: serde::Deserialize<'dw> + serde::Serialize + maths::FromStrRadix,
     AR::Byte: TryInto<u64>,
     for<'dw> AR::Offset: serde::Deserialize<'dw> + serde::Serialize + TryInto<usize>,
@@ -290,6 +294,13 @@ where
     let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
     db.update_indexes();
 
+    let is_tracing_allowed = argv.is_present("dynamic");
+    let mut poweron_state = State::default();
+
+    if let Some(regs) = argv.values_of("register") {
+        reg_parse(&mut poweron_state, regs)?;
+    }
+
     let start_pc = input::parse_ptr(start_spec, db, bus, arch)
         .expect("Must specify a valid address to analyze");
     eprintln!("Starting scan from {:X}", start_pc);
@@ -308,10 +319,13 @@ where
             break;
         }
 
-        let did_trace_branches = exhaust_all_dynamic_scans::<L, AR>(&mut db, bus, arch)
-            .map_err(Into::<io::Error>::into)?;
-        if !did_trace_branches {
-            break;
+        if is_tracing_allowed {
+            let did_trace_branches =
+                exhaust_all_dynamic_scans::<L, AR>(&mut db, bus, arch, poweron_state.clone())
+                    .map_err(Into::<io::Error>::into)?;
+            if !did_trace_branches {
+                break;
+            }
         }
     }
 
@@ -334,6 +348,6 @@ pub fn scan<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()
     let mut file = fs::File::open(image)?;
 
     with_architecture!(prog, file, |bus, _fmt_s, fmt_i, arch| {
-        scan_for_arch(prog, start_spec, bus, arch, fmt_i)
+        scan_for_arch(prog, start_spec, bus, arch, fmt_i, argv)
     })
 }

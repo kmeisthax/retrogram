@@ -1,10 +1,12 @@
 //! Common utilities for command implementations
 
-use crate::arch::ArchName;
+use crate::arch::{ArchName, Architecture};
 use crate::asm::AssemblerName;
+use crate::maths::FromStrRadix;
 use crate::platform::PlatformName;
 use crate::project::{DataSource, Program, Project};
-use clap::{App, Arg, SubCommand};
+use crate::reg::{State, Symbolic};
+use clap::{App, Arg, SubCommand, Values};
 use std::io;
 use std::str;
 use std::str::FromStr;
@@ -39,6 +41,20 @@ impl Command {
                         .index(1)
                         .required(true)
                         .help("The PC value to start analysis from"),
+                )
+                .arg(
+                    Arg::with_name("dynamic")
+                        .long("dynamic")
+                        .help("When specified, unresolvable references will trigger dynamic tracing analysis."),
+                )
+                .arg(
+                    Arg::with_name("register")
+                        .value_name("A=8F")
+                        .short("R")
+                        .multiple(true)
+                        .takes_value(true)
+                        .value_terminator("--")
+                        .help("One or more registers to initialize to particular values during dynamic analysis"),
                 ),
             Command::Disassemble => SubCommand::with_name("dis")
                 .about("Display code for a given address or label")
@@ -204,6 +220,35 @@ pub fn resolve_program_config(
         })?;
 
     Ok((arch, platform, asm))
+}
+
+/// Parse a bunch of registers from a multiple-value argument into a State.
+pub fn reg_parse<AR>(state: &mut State<AR>, regs: Values<'_>) -> io::Result<()>
+where
+    AR: Architecture,
+    AR::Word: FromStrRadix,
+{
+    for reg_spec in regs {
+        let values = reg_spec.split('=').collect::<Vec<&str>>();
+        if let Some(v) = values.get(0..2) {
+            let reg: AR::Register = v[0].parse().map_err(|_e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Register {} is invalid", v[0]),
+                )
+            })?;
+            let value = AR::Word::from_str_radix(v[1], 16).map_err(|_e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Value {} for register {} is invalid", v[1], v[0]),
+                )
+            })?;
+
+            state.set_register(reg, Symbolic::from(value))
+        }
+    }
+
+    Ok(())
 }
 
 /// Execute a callback with a given set of architectural, platform, and

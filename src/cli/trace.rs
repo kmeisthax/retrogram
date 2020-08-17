@@ -3,12 +3,13 @@
 use crate::analysis::{analyze_trace_log, trace_until_fork, Prerequisite, Trace, TraceEvent};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::ast::Instruction;
+use crate::cli::common::reg_parse;
 use crate::input::parse_ptr;
 use crate::maths::FromStrRadix;
 use crate::memory::{Memory, Pointer};
 use crate::project;
 use crate::reg::{State, Symbolic};
-use clap::{ArgMatches, Values};
+use clap::ArgMatches;
 use serde::Deserialize;
 use std::cmp::max;
 use std::collections::HashSet;
@@ -39,35 +40,6 @@ impl NextAction {
             NextAction::Invalid => NextAction::Ask,
         }
     }
-}
-
-/// Parse a bunch of registers from a multiple-value argument into a State.
-fn reg_parse<AR>(state: &mut State<AR>, regs: Values<'_>) -> io::Result<()>
-where
-    AR: Architecture,
-    AR::Word: FromStrRadix,
-{
-    for reg_spec in regs {
-        let values = reg_spec.split('=').collect::<Vec<&str>>();
-        if let Some(v) = values.get(0..2) {
-            let reg: AR::Register = v[0].parse().map_err(|_e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("Register {} is invalid", v[0]),
-                )
-            })?;
-            let value = AR::Word::from_str_radix(v[1], 16).map_err(|_e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("Value {} for register {} is invalid", v[1], v[0]),
-                )
-            })?;
-
-            state.set_register(reg, Symbolic::from(value))
-        }
-    }
-
-    Ok(())
 }
 
 /// Print a tracelog out to the console as a table.
