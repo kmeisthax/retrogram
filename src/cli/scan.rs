@@ -195,6 +195,9 @@ where
 
     for block_id in db.undertraced_blocks().iter() {
         let block = db.block(*block_id).unwrap();
+
+        eprintln!("Starting trace from {}", block.as_start());
+
         let mut forks = BinaryHeap::new();
         let mut first_state = State::default();
 
@@ -216,6 +219,8 @@ where
                 continue;
             }
 
+            eprintln!("Processing trace fork from {}", pc);
+
             let (new_pc, trace, post_state, prerequisites) =
                 trace_until_fork(&pc, trace, bus, &state, arch)?;
 
@@ -226,6 +231,8 @@ where
             db.insert_trace_counts(traced_blocks, 1);
 
             let context_new_pc = post_state.contextualize_pointer(new_pc.clone());
+
+            eprintln!("Prerequisites missing: {:?}", prerequisites);
 
             for result_fork in Fork::make_forks(
                 branches,
