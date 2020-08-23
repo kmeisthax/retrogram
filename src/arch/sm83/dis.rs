@@ -1,3 +1,4 @@
+use crate::analysis::Flow;
 use crate::arch::sm83;
 use crate::arch::sm83::{Bus, Disasm, Literal, PtrVal};
 use crate::ast::{Instruction as inst, Operand, Operand as op};
@@ -174,25 +175,25 @@ where
                     (0, _, _) => Ok(Disasm::new(
                         inst::new(new_bitop, vec![targetreg]),
                         2,
-                        analysis::Flow::Normal,
+                        Flow::Normal,
                         vec![],
                     )),
                     (1, bit, _) => Ok(Disasm::new(
                         inst::new("bit", vec![op::lit(bit), targetreg]),
                         2,
-                        analysis::Flow::Normal,
+                        Flow::Normal,
                         vec![],
                     )),
                     (2, bit, _) => Ok(Disasm::new(
                         inst::new("res", vec![op::lit(bit), targetreg]),
                         2,
-                        analysis::Flow::Normal,
+                        Flow::Normal,
                         vec![],
                     )),
                     (3, bit, _) => Ok(Disasm::new(
                         inst::new("set", vec![op::lit(bit), targetreg]),
                         2,
-                        analysis::Flow::Normal,
+                        Flow::Normal,
                         vec![],
                     )),
                     _ => Err(analysis::Error::InvalidInstruction),
@@ -205,25 +206,25 @@ where
         Some(0x00) => Ok(Disasm::new(
             inst::new("nop", vec![]),
             1,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         Some(0x08) => Ok(Disasm::new(
             inst::new("ld", vec![op::indir(dptr_op16(p, mem)), op::sym("sp")]),
             3,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         Some(0x10) => Ok(Disasm::new(
             inst::new("stop", vec![]),
             1,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         Some(0x18) => Ok(Disasm::new(
             inst::new("jr", vec![pcrel_op8(&(p.clone() + 1), mem)]),
             2,
-            analysis::Flow::Branching(false),
+            Flow::Branching(false),
             vec![pcrel_target(
                 &(p.clone() + 1),
                 mem,
@@ -233,14 +234,14 @@ where
         Some(0x76) => Ok(Disasm::new(
             inst::new("halt", vec![]),
             1,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )), //encoded as ld [hl], [hl]
 
         Some(0xC3) => Ok(Disasm::new(
             inst::new("jp", vec![cptr_op16(&(p.clone() + 1), mem)]),
             3,
-            analysis::Flow::Branching(false),
+            Flow::Branching(false),
             vec![cptr_target(
                 &(p.clone() + 1),
                 mem,
@@ -250,7 +251,7 @@ where
         Some(0xCD) => Ok(Disasm::new(
             inst::new("call", vec![cptr_op16(&(p.clone() + 1), mem)]),
             3,
-            analysis::Flow::Normal,
+            Flow::Calling,
             vec![cptr_target(
                 &(p.clone() + 1),
                 mem,
@@ -261,19 +262,19 @@ where
         Some(0xC9) => Ok(Disasm::new(
             inst::new("ret", vec![]),
             1,
-            analysis::Flow::Returning,
+            Flow::Returning(false),
             vec![],
         )),
         Some(0xD9) => Ok(Disasm::new(
             inst::new("reti", vec![]),
             1,
-            analysis::Flow::Returning,
+            Flow::Returning(false),
             vec![],
         )),
         Some(0xE9) => Ok(Disasm::new(
             inst::new("jp", vec![op::indir(op::sym("hl"))]),
             1,
-            analysis::Flow::Branching(false),
+            Flow::Branching(false),
             vec![analysis::Reference::new_dyn_ref(
                 p.clone(),
                 analysis::ReferenceKind::Code,
@@ -282,7 +283,7 @@ where
         Some(0xF9) => Ok(Disasm::new(
             inst::new("ld", vec![op::sym("sp"), op::sym("hl")]),
             1,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
 
@@ -292,13 +293,13 @@ where
                 vec![op::indir(hram_op8(&(p.clone() + 1), mem)), op::sym("a")],
             ),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         Some(0xE8) => Ok(Disasm::new(
             inst::new("add", vec![op::sym("sp"), int_op8(&(p.clone() + 1), mem)]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         Some(0xF0) => Ok(Disasm::new(
@@ -307,7 +308,7 @@ where
                 vec![op::sym("a"), op::indir(hram_op8(&(p.clone() + 1), mem))],
             ),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         Some(0xF8) => Ok(Disasm::new(
@@ -319,14 +320,14 @@ where
                 ],
             ),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
 
         Some(0xE2) => Ok(Disasm::new(
             inst::new("ld", vec![op::indir(op::sym("c")), op::sym("a")]),
             1,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         Some(0xEA) => Ok(Disasm::new(
@@ -335,13 +336,13 @@ where
                 vec![op::indir(dptr_op16(&(p.clone() + 1), mem)), op::sym("a")],
             ),
             3,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         Some(0xF2) => Ok(Disasm::new(
             inst::new("ld", vec![op::sym("a"), op::indir(op::sym("c"))]),
             1,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         Some(0xFA) => Ok(Disasm::new(
@@ -350,20 +351,20 @@ where
                 vec![op::sym("a"), op::indir(dptr_op16(&(p.clone() + 1), mem))],
             ),
             3,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
 
         Some(0xF3) => Ok(Disasm::new(
             inst::new("di", vec![]),
             1,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         Some(0xFB) => Ok(Disasm::new(
             inst::new("ei", vec![]),
             1,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
 
@@ -393,7 +394,7 @@ where
                         vec![op::sym(condcode), pcrel_op8(&(p.clone() + 1), mem)],
                     ),
                     2,
-                    analysis::Flow::Branching(true),
+                    Flow::Branching(true),
                     vec![pcrel_target(
                         &(p.clone() + 1),
                         mem,
@@ -406,86 +407,86 @@ where
                         vec![op::sym(targetpair), int_op16(&(p.clone() + 1), mem)],
                     ),
                     3,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (0, _, 1, 1) => Ok(Disasm::new(
                     inst::new("add", vec![op::sym("hl"), op::sym(targetpair)]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (0, _, 0, 2) => Ok(Disasm::new(
                     inst::new("ld", vec![op::indir(op::sym(targetmem)), op::sym("a")]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (0, _, 1, 2) => Ok(Disasm::new(
                     inst::new("ld", vec![op::sym("a"), op::indir(op::sym(targetmem))]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (0, _, 0, 3) => Ok(Disasm::new(
                     inst::new("inc", vec![op::sym(targetpair)]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (0, _, 1, 3) => Ok(Disasm::new(
                     inst::new("dec", vec![op::sym(targetpair)]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (0, _, _, 4) => Ok(Disasm::new(
                     inst::new("inc", vec![targetreg]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (0, _, _, 5) => Ok(Disasm::new(
                     inst::new("dec", vec![targetreg]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (0, _, _, 6) => Ok(Disasm::new(
                     inst::new("ld", vec![targetreg, int_op8(&(p.clone() + 1), mem)]),
                     2,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (0, _, _, 7) => Ok(Disasm::new(
                     inst::new(bitop, vec![]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (1, _, _, _) => Ok(Disasm::new(
                     inst::new("ld", vec![targetreg2, targetreg]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (2, _, _, _) => Ok(Disasm::new(
                     inst::new(aluop, vec![op::sym("a"), targetreg2]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (3, 0, _, 0) => Ok(Disasm::new(
                     inst::new("ret", vec![op::sym(condcode)]),
                     1,
-                    analysis::Flow::Branching(true),
+                    Flow::Returning(true),
                     vec![],
                 )),
                 (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
                 (3, _, 0, 1) => Ok(Disasm::new(
                     inst::new("pop", vec![op::sym(stackpair)]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
@@ -495,7 +496,7 @@ where
                         vec![op::sym(condcode), cptr_op16(&(p.clone() + 1), mem)],
                     ),
                     3,
-                    analysis::Flow::Branching(true),
+                    Flow::Branching(true),
                     vec![cptr_target(
                         &(p.clone() + 1),
                         mem,
@@ -510,7 +511,7 @@ where
                         vec![op::sym(condcode), cptr_op16(&(p.clone() + 1), mem)],
                     ),
                     3,
-                    analysis::Flow::Normal,
+                    Flow::Calling,
                     vec![cptr_target(
                         &(p.clone() + 1),
                         mem,
@@ -521,14 +522,14 @@ where
                 (3, _, 0, 5) => Ok(Disasm::new(
                     inst::new("push", vec![op::sym(stackpair)]),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction),
                 (3, _, _, 6) => Ok(Disasm::new(
                     inst::new(aluop, vec![op::sym("a"), int_op8(&(p.clone() + 1), mem)]),
                     2,
-                    analysis::Flow::Normal,
+                    Flow::Normal,
                     vec![],
                 )),
                 (3, _, _, 7) => Ok(Disasm::new(
@@ -537,7 +538,7 @@ where
                         vec![op::cptr(p.contextualize((op & 0x38) as PtrVal))],
                     ),
                     1,
-                    analysis::Flow::Normal,
+                    Flow::Calling,
                     vec![analysis::Reference::new_static_ref(
                         p.clone(),
                         p.contextualize((op & 0x38) as u16),

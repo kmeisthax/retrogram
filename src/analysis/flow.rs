@@ -15,46 +15,59 @@ pub enum Flow {
     ///
     /// Instruction control predictably flows from the current instruction to
     /// the following instruction.
-    ///
-    /// Equivalent to (true, true)
     Normal,
 
     /// Branching control flow.
     ///
     /// Instruction control diverges at this point with a number of possible
     /// continuing branches. The boolean parameter indicates whether or not the
-    /// offset to the next instruction provided by the disassembly result is
-    /// included as one of the possible branches.
-    ///
-    /// Equivalent to (true, false) or (false, false)
+    /// branch is *conditional*: if true, then the branch may not be taken, and
+    /// the offset to the next instruction provided by the disassembly result
+    /// is implicitly included as one of the possible branches.
     Branching(bool),
+
+    /// Calling control flow.
+    ///
+    /// Instruction control flow diverges to another subroutine, with the
+    /// expectation that it will converge back to the next instruction after
+    /// this one.
+    Calling,
 
     /// Returning control flow.
     ///
-    /// Instruction control flow for this subroutine ends.
-    ///
-    /// Equivalent to (false, true)
-    Returning,
+    /// Instruction control flow for this subroutine ends. The boolean
+    /// parameter indicates whether or not the return is *conditional*: if
+    /// true, then the return may not be taken, and the offset to the next
+    /// instruction is implicitly included as one of the possible branches.
+    Returning(bool),
 }
 
 impl Flow {
+    /// Indicate if this instruction prohibits execution of the following
+    /// instruction in the stream.
     pub fn is_final(self) -> bool {
         use Flow::*;
 
         match self {
             Normal => false,
-            Branching(with_next) => !with_next,
-            Returning => true,
+            Branching(conditional) => !conditional,
+            Calling => false,
+            Returning(conditional) => !conditional,
         }
     }
 
+    /// Indicate if this instruction marks the end of the current block.
+    ///
+    /// A block consists of a run of instructions that always execute
+    /// unconditionally. Instructions that end the run are said to be branching.
     pub fn is_branching(self) -> bool {
         use Flow::*;
 
         match self {
             Normal => false,
             Branching(_) => true,
-            Returning => false,
+            Calling => false,
+            Returning(_) => true,
         }
     }
 
@@ -66,9 +79,9 @@ impl Flow {
         use Flow::*;
 
         match self {
-            Normal | Returning => None,
-            Branching(true) => Some(ReferenceKind::Subroutine),
-            Branching(false) => Some(ReferenceKind::Code),
+            Normal | Returning(_) => None,
+            Calling => Some(ReferenceKind::Subroutine),
+            Branching(_) => Some(ReferenceKind::Code),
         }
     }
 }

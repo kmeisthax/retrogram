@@ -2,6 +2,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use crate::analysis::Flow;
 use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32;
@@ -142,8 +143,8 @@ where
     };
 
     let flow = match rd {
-        A32Reg::R15 => analysis::Flow::Branching(cond != 14),
-        _ => analysis::Flow::Normal,
+        A32Reg::R15 => Flow::Branching(cond != 14),
+        _ => Flow::Normal,
     };
 
     Ok(Disasm::new(
@@ -278,8 +279,8 @@ where
     };
 
     let flow = match (is_load, rd) {
-        (true, A32Reg::R15) => analysis::Flow::Branching(cond != 14),
-        _ => analysis::Flow::Normal,
+        (true, A32Reg::R15) => Flow::Branching(cond != 14),
+        _ => Flow::Normal,
     };
 
     Ok(Disasm::new(
@@ -343,9 +344,9 @@ where
     }
 
     let flow = if writes_pc {
-        analysis::Flow::Branching(cond != 14)
+        Flow::Branching(cond != 14)
     } else {
-        analysis::Flow::Normal
+        Flow::Normal
     };
 
     let reglist_operand = if s == 1 {
@@ -380,9 +381,9 @@ where
             .wrapping_add(((offset & 0x007F_FFFF) | signbit) << 2),
     );
     let flow = if is_link {
-        analysis::Flow::Normal
+        Flow::Calling
     } else {
-        analysis::Flow::Branching(cond != 14)
+        Flow::Branching(cond != 14)
     };
 
     if is_link {
@@ -422,7 +423,7 @@ where
     Ok(Disasm::new(
         ast::Instruction::new(&format!("SWI{}", condcode(cond)?), vec![op::lit(target)]),
         4,
-        analysis::Flow::Normal,
+        Flow::Calling,
         vec![refr::new_static_ref(
             pc.clone(),
             pc.contextualize(0x0000_0008),
@@ -468,9 +469,9 @@ where
 
     //TODO: Create a Flow type for "causes undefined/unpredictable PC behavior"
     let flow = match (rd, rn) {
-        (_, A32Reg::R15) => analysis::Flow::Branching(cond != 14),
-        (A32Reg::R15, _) => analysis::Flow::Branching(cond != 14),
-        _ => analysis::Flow::Normal,
+        (_, A32Reg::R15) => Flow::Branching(cond != 14),
+        (A32Reg::R15, _) => Flow::Branching(cond != 14),
+        _ => Flow::Normal,
     };
 
     match (is_long, is_unsigned, is_fma, is_status) {
@@ -625,7 +626,7 @@ where
     Ok(Disasm::new(
         Instruction::new(&format!("MSR{}", condcode(cond)?), op_list),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -641,7 +642,7 @@ where
     Ok(Disasm::new(
         Instruction::new(&format!("MRS{}", condcode(cond)?), op_list),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -663,7 +664,7 @@ where
             vec![op::sym(&rm.to_string())],
         ),
         4,
-        analysis::Flow::Branching(cond != 14),
+        Flow::Branching(cond != 14),
         vec![jumpref],
     ))
 }
@@ -674,8 +675,8 @@ where
 {
     //TODO: Find a better status than "Returning"
     let flow = match cond {
-        15 => analysis::Flow::Returning,
-        _ => analysis::Flow::Branching(true),
+        15 => Flow::Returning(false),
+        _ => Flow::Branching(true),
     };
 
     //While this instruction is technically a branch, it's designed for an
@@ -704,7 +705,7 @@ where
             vec![op::sym(&rd.to_string()), op::sym(&rm.to_string())],
         ),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -726,7 +727,7 @@ where
             vec![op::sym(&rm.to_string())],
         ),
         4,
-        analysis::Flow::Normal,
+        Flow::Calling,
         vec![jumpref],
     ))
 }
@@ -750,7 +751,7 @@ where
     Ok(Disasm::new(
         Instruction::new("BLX", vec![op::cptr(target)]),
         4,
-        analysis::Flow::Normal,
+        Flow::Calling,
         vec![jumpref],
     ))
 }
@@ -766,7 +767,7 @@ where
     Ok(Disasm::new(
         Instruction::new("BKPT", vec![op::lit(immed)]),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -801,7 +802,7 @@ where
             vec![cp_sym, cop1_sym, crd_sym, crn_sym, crm_sym, cop2_sym],
         ),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -840,7 +841,7 @@ where
             vec![cp_sym, cop1_sym, rd_sym, crn_sym, crm_sym, cop2_sym],
         ),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -874,7 +875,7 @@ where
     Ok(Disasm::new(
         Instruction::new(&arm_opcode, vec![cp_sym, cop_sym, rd_sym, rn_sym, crm_sym]),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -918,19 +919,19 @@ where
         (0, "") => Ok(Disasm::new(
             Instruction::new(&format!("CPS{}", effect), vec![]),
             4,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         (_, "") => Ok(Disasm::new(
             Instruction::new(&format!("CPS{}", effect), vec![op::lit(mode)]),
             4,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         (0, _) => Ok(Disasm::new(
             Instruction::new(&format!("CPS{}", effect), vec![op::sym(&iflags)]),
             4,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         (_, _) => Ok(Disasm::new(
@@ -939,7 +940,7 @@ where
                 vec![op::sym(&iflags), op::lit(mode)],
             ),
             4,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
     }
@@ -1100,7 +1101,7 @@ where
     Ok(Disasm::new(
         Instruction::new(&opname, operands),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -1177,7 +1178,7 @@ where
     Ok(Disasm::new(
         Instruction::new(&opcode_str, operands),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -1216,7 +1217,7 @@ where
     Ok(Disasm::new(
         Instruction::new(&opname, operands),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -1251,7 +1252,7 @@ where
     Ok(Disasm::new(
         Instruction::new(&opname, operands),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -1303,7 +1304,7 @@ where
     Ok(Disasm::new(
         Instruction::new("PLD", address_operand),
         4,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }

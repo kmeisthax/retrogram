@@ -1,5 +1,6 @@
 //! THUMB instruction set disassembly
 
+use crate::analysis::Flow;
 use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32;
@@ -30,7 +31,7 @@ where
         16 => Ok(Disasm::new(
             Instruction::new("SWI", vec![op::lit(offset as u32)]),
             2,
-            analysis::Flow::Normal,
+            Flow::Calling,
             vec![refr::new_static_ref(
                 p.clone(),
                 swi_target,
@@ -43,7 +44,7 @@ where
                 vec![op::cptr(target.clone())],
             ),
             2,
-            analysis::Flow::Branching(cond != 15),
+            Flow::Branching(cond != 15),
             vec![refr::new_static_ref(p.clone(), target, refkind::Code)],
         )),
     }
@@ -62,7 +63,7 @@ where
     Ok(Disasm::new(
         Instruction::new("B", vec![op::cptr(target.clone())]),
         2,
-        analysis::Flow::Branching(false),
+        Flow::Branching(false),
         vec![refr::new_static_ref(p.clone(), target, refkind::Code)],
     ))
 }
@@ -92,9 +93,9 @@ where
         _ => vec![],
     };
     let flow = if rd_reg == A32Reg::R15 {
-        analysis::Flow::Branching(false)
+        Flow::Branching(false)
     } else {
-        analysis::Flow::Normal
+        Flow::Normal
     };
 
     match (opcode, l) {
@@ -107,7 +108,7 @@ where
         (1, _) => Ok(Disasm::new(
             Instruction::new("CMP", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         (2, _) => Ok(Disasm::new(
@@ -119,13 +120,13 @@ where
         (3, false) => Ok(Disasm::new(
             Instruction::new("BX", vec![rm_operand]),
             2,
-            analysis::Flow::Branching(false),
+            Flow::Branching(false),
             vec![refr::new_dyn_ref(p.clone(), refkind::Code)],
         )),
         (3, true) => Ok(Disasm::new(
             Instruction::new("BLX", vec![rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Calling,
             vec![refr::new_dyn_ref(p.clone(), refkind::Subroutine)],
         )),
         _ => Err(analysis::Error::Misinterpretation(2, false)),
@@ -145,97 +146,97 @@ where
         0 => Ok(Disasm::new(
             Instruction::new("AND", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         1 => Ok(Disasm::new(
             Instruction::new("EOR", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         2 => Ok(Disasm::new(
             Instruction::new("LSL", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         3 => Ok(Disasm::new(
             Instruction::new("LSR", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         4 => Ok(Disasm::new(
             Instruction::new("ASR", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         5 => Ok(Disasm::new(
             Instruction::new("ADC", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         7 => Ok(Disasm::new(
             Instruction::new("ROR", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         6 => Ok(Disasm::new(
             Instruction::new("SBC", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         8 => Ok(Disasm::new(
             Instruction::new("TST", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         9 => Ok(Disasm::new(
             Instruction::new("NEG", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         0xA => Ok(Disasm::new(
             Instruction::new("CMP", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         0xB => Ok(Disasm::new(
             Instruction::new("CMM", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         0xC => Ok(Disasm::new(
             Instruction::new("ORR", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         0xD => Ok(Disasm::new(
             Instruction::new("MUL", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         0xE => Ok(Disasm::new(
             Instruction::new("BIC", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         0xF => Ok(Disasm::new(
             Instruction::new("MVN", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         _ => Err(analysis::Error::Misinterpretation(2, false)),
@@ -262,13 +263,13 @@ where
         0 => Ok(Disasm::new(
             Instruction::new("ADD", vec![rd_operand, rn_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         1 => Ok(Disasm::new(
             Instruction::new("SUB", vec![rd_operand, rn_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         _ => Err(analysis::Error::Misinterpretation(2, false)),
@@ -294,13 +295,13 @@ where
         0 => Ok(Disasm::new(
             Instruction::new("ADD", vec![rd_operand, rn_operand, immed_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         1 => Ok(Disasm::new(
             Instruction::new("SUB", vec![rd_operand, rn_operand, immed_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         _ => Err(analysis::Error::Misinterpretation(2, false)),
@@ -329,7 +330,7 @@ where
         0 => Ok(Disasm::new(
             Instruction::new("LSL", vec![rd_operand, rm_operand, op::lit(immed as u32)]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         1 => Ok(Disasm::new(
@@ -338,7 +339,7 @@ where
                 vec![rd_operand, rm_operand, op::lit(nz_immed as u32)],
             ),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         2 => Ok(Disasm::new(
@@ -347,7 +348,7 @@ where
                 vec![rd_operand, rm_operand, op::lit(nz_immed as u32)],
             ),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         _ => Err(analysis::Error::Misinterpretation(2, false)),
@@ -366,25 +367,25 @@ where
         0 => Ok(Disasm::new(
             Instruction::new("MOV", vec![rd_operand, immed_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         1 => Ok(Disasm::new(
             Instruction::new("CMP", vec![rd_operand, immed_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         2 => Ok(Disasm::new(
             Instruction::new("ADD", vec![rd_operand, immed_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         3 => Ok(Disasm::new(
             Instruction::new("SUB", vec![rd_operand, immed_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         _ => Err(analysis::Error::Misinterpretation(2, false)),
@@ -414,7 +415,7 @@ where
     Ok(Disasm::new(
         ast,
         2,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Data)],
     ))
 }
@@ -450,7 +451,7 @@ where
     Ok(Disasm::new(
         Instruction::new(opcode_name, operands),
         2,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -491,7 +492,7 @@ where
     Ok(Disasm::new(
         Instruction::new(opcode_name, operands),
         2,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -524,7 +525,7 @@ where
     Ok(Disasm::new(
         Instruction::new(opcode_name, operands),
         2,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -550,7 +551,7 @@ where
     Ok(Disasm::new(
         Instruction::new(opcode_name, operands),
         2,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -572,7 +573,7 @@ where
     Ok(Disasm::new(
         Instruction::new("ADD", vec![rd_operand, s_operand, offset_operand]),
         2,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -606,7 +607,7 @@ where
     Ok(Disasm::new(
         Instruction::new(instr, operands),
         2,
-        analysis::Flow::Normal,
+        Flow::Normal,
         vec![],
     ))
 }
@@ -638,7 +639,7 @@ where
                 1 if low_offset & 1 == 0 => Ok(Disasm::new(
                     Instruction::new("BLX", vec![op::cptr(arm_target.clone())]),
                     4,
-                    analysis::Flow::Normal,
+                    Flow::Calling,
                     vec![refr::new_static_ref(
                         p.clone(),
                         arm_target,
@@ -648,7 +649,7 @@ where
                 3 => Ok(Disasm::new(
                     Instruction::new("BL", vec![op::cptr(target.clone())]),
                     4,
-                    analysis::Flow::Branching(false),
+                    Flow::Branching(false),
                     vec![refr::new_static_ref(p.clone(), target, refkind::Subroutine)],
                 )),
                 _ => Err(analysis::Error::InvalidInstruction),
@@ -669,13 +670,13 @@ where
         0 => Ok(Disasm::new(
             Instruction::new("ADD", vec![op::sym("SP"), op::lit(target as u32)]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         1 => Ok(Disasm::new(
             Instruction::new("SUB", vec![op::sym("SP"), op::lit(target as u32)]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         _ => Err(analysis::Error::Misinterpretation(2, false)),
@@ -696,25 +697,25 @@ where
         0 => Ok(Disasm::new(
             Instruction::new("SXTH", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         1 => Ok(Disasm::new(
             Instruction::new("SXTB", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         2 => Ok(Disasm::new(
             Instruction::new("UXTH", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         3 => Ok(Disasm::new(
             Instruction::new("UXTB", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         _ => Err(analysis::Error::Misinterpretation(2, false)),
@@ -735,20 +736,20 @@ where
         0 => Ok(Disasm::new(
             Instruction::new("REV", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         1 => Ok(Disasm::new(
             Instruction::new("REV16", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         2 => Err(analysis::Error::InvalidInstruction),
         3 => Ok(Disasm::new(
             Instruction::new("REVSH", vec![rd_operand, rm_operand]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         _ => Err(analysis::Error::Misinterpretation(2, false)),
@@ -780,16 +781,16 @@ where
     }
 
     let flow = if is_callret {
-        analysis::Flow::Returning
+        Flow::Returning(false)
     } else {
-        analysis::Flow::Normal
+        Flow::Normal
     };
 
     match l {
         0 => Ok(Disasm::new(
             Instruction::new("PUSH", vec![op::wrap("{", register_list_operand, "}")]),
             2,
-            analysis::Flow::Normal,
+            Flow::Normal,
             vec![],
         )),
         1 => Ok(Disasm::new(
@@ -818,7 +819,7 @@ where
     Ok(Disasm::new(
         Instruction::new("BKPT", vec![op::lit(immed as u32)]),
         2,
-        analysis::Flow::Normal,
+        Flow::Calling,
         targets,
     ))
 }
