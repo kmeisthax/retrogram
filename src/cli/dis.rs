@@ -1,5 +1,6 @@
 //! High-level CLI routines
 
+use crate::analysis::ReferenceKind;
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::{analysis, ast, input, maths, memory, project};
 use clap::ArgMatches;
@@ -68,7 +69,28 @@ where
         //TODO: This routine unnecessarily scans blocks that already exist for
         //each run-through. We should find a way to stop that.
         for block in disassembly_blocks.iter() {
-            for xref_id in db.find_xrefs_from(block.as_start(), block.as_length().clone()) {
+            for target in db
+                .find_xrefs_from(block.as_start(), block.as_length().clone())
+                .filter_map(|xref_id| db.xref(xref_id))
+                .filter(|xref| matches!(xref.kind(), ReferenceKind::Code))
+                .filter_map(|xref| xref.as_target())
+            {
+                let target_block_id = db.find_block_membership(target).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The given memory location has not yet been successfully analyzed. Please scan it first."))?;
+                let target_block = db.block(target_block_id).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "LOGIC ERROR: The given PC returned a block ID that doesn't exist.",
+                    )
+                })?;
+
+                if !disassembly_blocks.contains(target_block) {
+                    found_targets = true;
+                    target_blocks.insert(target_block);
+                }
+            }
+
+            let mut has_subroutine_xrefs = false;
+            for xref_id in db.find_xrefs_to(block.as_start(), block.as_length().clone()) {
                 let xref = db.xref(xref_id).ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
@@ -76,20 +98,29 @@ where
                     )
                 })?;
 
-                if let (analysis::ReferenceKind::Code, Some(target)) =
-                    (xref.kind(), xref.as_target())
+                if matches!(xref.kind(), analysis::ReferenceKind::Code) {
+                    has_subroutine_xrefs = true;
+                }
+            }
+
+            if !has_subroutine_xrefs {
+                for source in db
+                    .find_xrefs_from(block.as_start(), block.as_length().clone())
+                    .filter_map(|xref_id| db.xref(xref_id))
+                    .filter(|xref| matches!(xref.kind(), ReferenceKind::Code))
+                    .map(|xref| xref.as_source())
                 {
-                    let target_block_id = db.find_block_membership(target).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The given memory location has not yet been successfully analyzed. Please scan it first."))?;
-                    let target_block = db.block(target_block_id).ok_or_else(|| {
+                    let source_block_id = db.find_block_membership(source).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The given memory location has not yet been successfully analyzed. Please scan it first."))?;
+                    let source_block = db.block(source_block_id).ok_or_else(|| {
                         io::Error::new(
                             io::ErrorKind::NotFound,
                             "LOGIC ERROR: The given PC returned a block ID that doesn't exist.",
                         )
                     })?;
 
-                    if !disassembly_blocks.contains(target_block) {
+                    if !disassembly_blocks.contains(source_block) {
                         found_targets = true;
-                        target_blocks.insert(target_block);
+                        target_blocks.insert(source_block);
                     }
                 }
             }
