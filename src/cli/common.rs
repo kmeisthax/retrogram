@@ -130,7 +130,7 @@ impl FromStr for Command {
             "scan" => Ok(Command::Scan),
             "chadtronic-scan" => Ok(Command::Scan),
             "import" => Ok(Command::Import),
-            "backrefs" => Ok(Command::Backreference),
+            "backref" => Ok(Command::Backreference),
             "name" => Ok(Command::Rename),
             "rename" => Ok(Command::Rename),
             "trace" => Ok(Command::Trace),
