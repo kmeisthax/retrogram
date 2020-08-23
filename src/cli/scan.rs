@@ -199,8 +199,6 @@ where
     for block_id in db.undertraced_blocks().iter() {
         let block = db.block(*block_id).unwrap();
 
-        eprintln!("Starting trace from {}", block.as_start());
-
         let mut forks = BinaryHeap::new();
         let mut first_state = poweron_state.clone();
 
@@ -214,15 +212,7 @@ where
         while let Some(fork) = forks.pop() {
             let (branches, pc, state, trace) = fork.into_parts();
 
-            if branches > 5.0 {
-                //TODO: better heuristic please
-                //TODO: this should retrieve the block's total fork score
-                //TODO: what happens if we overtrace a block (say a utility fn)
-                //      while it's still in the undertraced list?
-                continue;
-            }
-
-            eprintln!("Processing trace fork from {}", pc);
+            eprintln!("Tracing from ${:X} ({} forks remain)", pc, forks.len());
 
             let (new_pc, trace, post_state, prerequisites) =
                 trace_until_fork(&pc, trace, bus, &state, arch)?;
@@ -235,7 +225,29 @@ where
 
             let context_new_pc = post_state.contextualize_pointer(new_pc.clone());
 
-            eprintln!("Prerequisites missing: {:?}", prerequisites);
+            eprintln!(
+                "At ${:X}, we need to know: {:?}",
+                context_new_pc, prerequisites
+            );
+
+            let mut extra_branch_bits = 0.0;
+            for pr in prerequisites.iter() {
+                extra_branch_bits += pr.necessary_forks(&post_state, bus) as f64;
+            }
+
+            let extra_branches = (2.0 as f64).powf(extra_branch_bits);
+
+            if (branches + extra_branches) > (2.0 as f64).powf(5.0) {
+                //TODO: better heuristic please
+                //TODO: this should retrieve the block's total fork score
+                //TODO: what happens if we overtrace a block (say a utility fn)
+                //      while it's still in the undertraced list?
+                eprintln!(
+                    "Trace at ${:X} is too deep (adds {} forks on top of {} existing)",
+                    new_pc, extra_branches, branches
+                );
+                continue;
+            }
 
             for result_fork in Fork::make_forks(
                 branches,
