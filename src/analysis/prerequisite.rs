@@ -332,6 +332,7 @@ where
                     }
 
                     state_list = new_state_list;
+                    count = count + AR::Offset::one();
                 }
 
                 state_list
