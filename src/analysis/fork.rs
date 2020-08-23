@@ -66,13 +66,12 @@ where
         let mut state_list = HashSet::new();
         state_list.insert(post_state.clone());
 
-        let mut addl_branch_bits = num_branches as f64;
+        let mut addl_branch_bits = 0.0;
         let mut is_empty = true;
 
         for prerequisite in prerequisites {
             //TODO: If the prerequisite list has overlaps, then this will be wrong
-            addl_branch_bits +=
-                (2.0 as f64).powf(prerequisite.necessary_forks(&post_state, bus) as f64);
+            addl_branch_bits += prerequisite.necessary_forks(&post_state, bus) as f64;
 
             state_list = prerequisite.fork_state(&state_list, bus);
             is_empty = false;
@@ -91,7 +90,7 @@ where
 
         for state in state_list {
             fork_list.push(Fork {
-                num_branches: addl_branch_bits as f64,
+                num_branches: num_branches + (2.0 as f64).powf(addl_branch_bits),
                 pc: pc.clone(),
                 pre_state: state,
                 trace: trace.clone(),
