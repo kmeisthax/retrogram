@@ -286,10 +286,6 @@ where
         self.label_symbols.get(label).copied()
     }
 
-    pub fn insert_block(&mut self, block: analysis::Block<P, S>) {
-        self.blocks.push(block)
-    }
-
     pub fn symbol(&self, symbol_id: usize) -> Option<&Symbol<P>> {
         self.symbols.get(symbol_id)
     }
@@ -319,6 +315,18 @@ where
         }
 
         None
+    }
+
+    /// Add a block to the database.
+    ///
+    /// If the block already exists (or at least, there is one at the start of
+    /// this block) then insertion will silently fail.
+    pub fn insert_block(&mut self, block: analysis::Block<P, S>) {
+        if self.find_block_membership(block.as_start()).is_some() {
+            return;
+        }
+
+        self.blocks.push(block)
     }
 
     /// Given a block number and a split point, split the block and return the
