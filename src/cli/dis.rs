@@ -1,6 +1,6 @@
 //! High-level CLI routines
 
-use crate::analysis::ReferenceKind;
+use crate::analysis::{Block, ReferenceKind};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::{analysis, ast, input, maths, memory, project};
 use clap::ArgMatches;
@@ -131,7 +131,27 @@ where
         }
     }
 
+    let mut merged_blocks = Vec::new();
+    let mut last_block: Option<Block<AR::PtrVal, AR::Offset>> = None;
     for block in disassembly_blocks {
+        if let Some(lblock) = last_block {
+            if lblock.can_coalesce(&block) {
+                last_block = Some(lblock.coalesce(block));
+            } else {
+                merged_blocks.push(lblock);
+                last_block = Some(block);
+            }
+        } else {
+            last_block = Some(block);
+            continue;
+        }
+    }
+
+    if let Some(lblock) = last_block {
+        merged_blocks.push(lblock);
+    }
+
+    for block in merged_blocks {
         let (orig_asm, _xrefs, pc_offset, _blocks, terminating_error) =
             analysis::disassemble_block(block.as_start().clone(), bus, arch);
         if let Some(pc_offset) = pc_offset {

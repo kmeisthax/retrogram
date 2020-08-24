@@ -77,6 +77,25 @@ where
 
         false
     }
+
+    /// Check if this and another block can be merged together.
+    pub fn can_coalesce(&self, other: &Self) -> bool {
+        let end = self.start.clone() + self.length.clone();
+
+        end == other.start
+    }
+
+    /// Merge this and another block together.
+    ///
+    /// The result will likely be invalid if the blocks are not compatible, see
+    /// `can_coalesce`.
+    pub fn coalesce(self, other: Self) -> Self {
+        Block {
+            start: self.start,
+            length: self.length + other.length,
+            traces: self.traces + other.traces,
+        }
+    }
 }
 
 #[cfg(test)]
