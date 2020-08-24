@@ -82,6 +82,15 @@ where
     }
 
     for block in blocks {
+        if let Some(bnum) = db.find_block_membership(block.as_start()) {
+            eprintln!(
+                "Block at ${:X} already exists, skipping in favor of {}.",
+                block.as_start(),
+                bnum
+            );
+            continue;
+        }
+
         db.insert_block(block);
     }
 
