@@ -1,7 +1,7 @@
 //! CLI support for non-command bits
 
 use crate::cli::common::{resolve_program, Command};
-use crate::{cli, project};
+use crate::{cli, project, tui};
 use clap::{Arg, ArgSettings};
 use std::io;
 use std::str::FromStr;
@@ -57,7 +57,7 @@ pub fn main() -> io::Result<()> {
             cli::Command::Trace => cli::trace(&prog, submatches.unwrap())?,
         };
     } else {
-        eprintln!("Please enter a command");
+        tui::main();
     }
 
     Ok(())

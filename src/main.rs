@@ -20,6 +20,7 @@ mod maths;
 pub mod platform;
 pub mod project;
 pub mod reg;
+mod tui;
 
 use std::io;
 
