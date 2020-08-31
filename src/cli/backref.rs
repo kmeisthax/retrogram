@@ -87,6 +87,6 @@ pub fn backref<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result
     let mut file = fs::File::open(image)?;
 
     with_architecture!(prog, file, |bus, _fmt_sec, fmt_instr, arch| {
-        backref_inner(prog, start_spec, bus, fmt_instr, arch)
+        backref_inner(prog, start_spec, &bus, fmt_instr, arch)
     })
 }

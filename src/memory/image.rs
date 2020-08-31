@@ -31,6 +31,15 @@ where
     /// for the appropriately named banking value.
     fn decode_addr(&self, ptr: &Pointer<AR::PtrVal>, base: AR::PtrVal) -> Option<usize>;
 
+    /// Encode an image offset to an architectural pointer.
+    ///
+    /// If the offset is invalid, then this function should yield `None`. All
+    /// offsets beyond `image_size` must be `None`.
+    fn encode_addr(&self, ioffset: usize, base: AR::PtrVal) -> Option<Pointer<AR::PtrVal>>;
+
+    /// Get the size of the image.
+    fn image_size(&self) -> usize;
+
     /// Produce a list of prerequisites necessary to fully decode a particular
     /// address.
     fn decode_prerequisites(&self, ptr: AR::PtrVal, base: AR::PtrVal) -> Vec<Prerequisite<AR>>;

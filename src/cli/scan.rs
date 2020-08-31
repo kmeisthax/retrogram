@@ -369,6 +369,6 @@ pub fn scan<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()
     let mut file = fs::File::open(image)?;
 
     with_architecture!(prog, file, |bus, _fmt_s, fmt_i, arch| {
-        scan_for_arch(prog, start_spec, bus, arch, fmt_i, argv)
+        scan_for_arch(prog, start_spec, &bus, arch, fmt_i, argv)
     })
 }

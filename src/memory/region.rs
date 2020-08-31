@@ -48,7 +48,7 @@ use std::io;
 /// "huge memory"); we still wouldn't be able to model the machine's ported I/O
 /// space. Pointers on x86 would need to be an enum of port and memory space
 /// addresses, with offsets being straight integers.
-struct Region<AR>
+pub struct Region<AR>
 where
     AR: Architecture,
 {
@@ -98,6 +98,20 @@ where
         }
 
         false
+    }
+
+    /// Decode an image offset into a contextual pointer.
+    pub fn encode_image_offset(&self, ioffset: usize) -> Option<Pointer<AR::PtrVal>> {
+        self.image.encode_addr(ioffset, self.start.clone())
+    }
+
+    pub fn image_size(&self) -> usize {
+        self.image.image_size()
+    }
+
+    /// Retrieve data from the image.
+    pub fn retrieve(&self, offset: usize, count: usize) -> Option<&[AR::Byte]> {
+        self.image.retrieve(offset, count)
     }
 }
 
@@ -160,12 +174,50 @@ where
             image,
         });
     }
+
+    pub fn iter_images(&self) -> impl Iterator<Item = &Region<AR>> {
+        self.views.iter()
+    }
+
+    /// Get the total number of installed regions.
+    pub fn region_count(&self) -> usize {
+        self.views.len()
+    }
+
+    /// Get the image size for a given region.
+    pub fn region_image_size(&self, region: usize) -> Option<usize> {
+        self.views.get(region).map(|r| r.image_size())
+    }
+
+    /// Encode an image offset within a region as a pointer.
+    pub fn region_encode_image_offset(
+        &self,
+        region: usize,
+        ioffset: usize,
+    ) -> Option<Pointer<AR::PtrVal>> {
+        self.views
+            .get(region)
+            .and_then(|r| r.encode_image_offset(ioffset))
+    }
+
+    /// Encode an image offset within a region as a pointer.
+    pub fn region_retrieve(
+        &self,
+        region: usize,
+        ioffset: usize,
+        count: usize,
+    ) -> Option<&[AR::Byte]> {
+        self.views
+            .get(region)
+            .and_then(|r| r.retrieve(ioffset, count))
+    }
 }
 
 impl<AR> Memory<AR>
 where
     AR: Architecture + 'static,
     AR::Offset: Offset<AR::PtrVal> + TryInto<usize>,
+    <AR::Offset as TryInto<usize>>::Error: std::fmt::Debug,
 {
     pub fn install_mem(
         &mut self,
@@ -177,44 +229,44 @@ where
     ) {
         self.views.push(Region {
             start,
-            length,
+            length: length.clone(),
             read_memtype,
             write_memtype,
             exec_memtype,
-            image: Box::new(UnknownImage::new()),
+            image: Box::new(UnknownImage::new(length.try_into().unwrap())),
         });
     }
 
     pub fn install_ram(&mut self, start: AR::PtrVal, length: AR::Offset) {
         self.views.push(Region {
             start,
-            length,
+            length: length.clone(),
             read_memtype: Behavior::Memory,
             write_memtype: Behavior::Memory,
             exec_memtype: Behavior::Memory,
-            image: Box::new(UnknownImage::new()),
+            image: Box::new(UnknownImage::new(length.try_into().unwrap())),
         });
     }
 
     pub fn install_io(&mut self, start: AR::PtrVal, length: AR::Offset) {
         self.views.push(Region {
             start,
-            length,
+            length: length.clone(),
             read_memtype: Behavior::MappedIO,
             write_memtype: Behavior::MappedIO,
             exec_memtype: Behavior::MappedIO,
-            image: Box::new(UnknownImage::new()),
+            image: Box::new(UnknownImage::new(length.try_into().unwrap())),
         });
     }
 
     pub fn install_openbus(&mut self, start: AR::PtrVal, length: AR::Offset) {
         self.views.push(Region {
             start,
-            length,
+            length: length.clone(),
             read_memtype: Behavior::Invalid,
             write_memtype: Behavior::Invalid,
             exec_memtype: Behavior::Invalid,
-            image: Box::new(UnknownImage::new()),
+            image: Box::new(UnknownImage::new(length.try_into().unwrap())),
         });
     }
 

@@ -13,6 +13,8 @@ pub mod analysis;
 pub mod arch;
 pub mod asm;
 pub mod ast;
+
+#[macro_use]
 pub mod cli;
 pub mod database;
 pub mod input;

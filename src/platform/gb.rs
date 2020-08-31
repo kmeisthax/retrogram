@@ -2,14 +2,18 @@
 
 use crate::analysis::Prerequisite;
 use crate::arch::sm83;
+use crate::memory::Pointer;
 use crate::reg::{Convertable, State, Symbolic};
 use crate::{memory, reg};
+use std::collections::HashMap;
 use std::io;
 
 /// Any type which decodes the banked memory region (0x4000) of a Game Boy ROM
 /// image.
 trait Mapper {
     fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize>;
+
+    fn encode_banked_addr(&self, ioffset: usize) -> Option<memory::Pointer<sm83::PtrVal>>;
 
     fn context_mask(&self) -> u64;
 
@@ -38,6 +42,17 @@ impl LinearMapper {
 impl Mapper for LinearMapper {
     fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize> {
         Some(((ptr.as_pointer() & 0x3FFF) + 0x4000) as usize)
+    }
+
+    fn encode_banked_addr(&self, ioffset: usize) -> Option<Pointer<sm83::PtrVal>> {
+        if ioffset < 0x8000 {
+            let pval = 0x4000 + (ioffset & 0x3FFF) as sm83::PtrVal;
+            let ptr = Pointer::from_ptrval_and_contexts(pval, HashMap::new());
+
+            Some(ptr)
+        } else {
+            None
+        }
     }
 
     fn context_mask(&self) -> u64 {
@@ -71,6 +86,21 @@ impl Mapper for MBC1Mapper {
             Some(0x60) => None,
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None,
+        }
+    }
+
+    fn encode_banked_addr(&self, ioffset: usize) -> Option<Pointer<sm83::PtrVal>> {
+        let pval = 0x4000 + (ioffset & 0x3FFF) as sm83::PtrVal;
+        let bank = ioffset >> 18;
+
+        if bank < 0x80 {
+            let mut contexts = HashMap::new();
+
+            contexts.insert("R".to_string(), Symbolic::from(bank as u64));
+
+            Some(Pointer::from_ptrval_and_contexts(pval, contexts))
+        } else {
+            None
         }
     }
 
@@ -122,6 +152,21 @@ impl Mapper for MBC2Mapper {
         }
     }
 
+    fn encode_banked_addr(&self, ioffset: usize) -> Option<Pointer<sm83::PtrVal>> {
+        let pval = 0x4000 + (ioffset & 0x3FFF) as sm83::PtrVal;
+        let bank = ioffset >> 18;
+
+        if bank < 0x10 {
+            let mut contexts = HashMap::new();
+
+            contexts.insert("R".to_string(), Symbolic::from(bank as u64));
+
+            Some(Pointer::from_ptrval_and_contexts(pval, contexts))
+        } else {
+            None
+        }
+    }
+
     fn context_mask(&self) -> u64 {
         0x0F
     }
@@ -157,6 +202,21 @@ impl Mapper for MBC3Mapper {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None,
+        }
+    }
+
+    fn encode_banked_addr(&self, ioffset: usize) -> Option<Pointer<sm83::PtrVal>> {
+        let pval = 0x4000 + (ioffset & 0x3FFF) as sm83::PtrVal;
+        let bank = ioffset >> 18;
+
+        if bank < 0x80 {
+            let mut contexts = HashMap::new();
+
+            contexts.insert("R".to_string(), Symbolic::from(bank as u64));
+
+            Some(Pointer::from_ptrval_and_contexts(pval, contexts))
+        } else {
+            None
         }
     }
 
@@ -200,6 +260,21 @@ impl Mapper for MBC5Mapper {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
             None => None,
+        }
+    }
+
+    fn encode_banked_addr(&self, ioffset: usize) -> Option<Pointer<sm83::PtrVal>> {
+        let pval = 0x4000 + (ioffset & 0x3FFF) as sm83::PtrVal;
+        let bank = ioffset >> 18;
+
+        if bank < 0x200 {
+            let mut contexts = HashMap::new();
+
+            contexts.insert("R".to_string(), Symbolic::from(bank as u64));
+
+            Some(Pointer::from_ptrval_and_contexts(pval, contexts))
+        } else {
+            None
         }
     }
 
@@ -293,6 +368,29 @@ where
             "R".to_string(),
             self.mapper.context_mask(),
         )]
+    }
+
+    fn encode_addr(&self, ioffset: usize, base: sm83::PtrVal) -> Option<Pointer<sm83::PtrVal>> {
+        if ioffset >= self.data.len() {
+            return None;
+        }
+
+        if base == 0x0000 {
+            if ioffset < 0x4000 {
+                Some(Pointer::from_ptrval_and_contexts(
+                    ioffset as sm83::PtrVal,
+                    HashMap::new(),
+                ))
+            } else {
+                None
+            }
+        } else {
+            self.mapper.encode_banked_addr(ioffset)
+        }
+    }
+
+    fn image_size(&self) -> usize {
+        self.data.len()
     }
 
     fn minimize_context(

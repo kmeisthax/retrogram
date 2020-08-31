@@ -461,6 +461,6 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
     let mut file = fs::File::open(image)?;
 
     with_architecture!(prog, file, |bus, _fmt_s, fmt_i, arch| {
-        trace_for_arch(prog, argv, start_spec, bus, fmt_i, arch)
+        trace_for_arch(prog, argv, start_spec, &bus, fmt_i, arch)
     })
 }

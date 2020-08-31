@@ -13,7 +13,7 @@ mod trace;
 mod traits;
 
 pub use backref::backref;
-pub use common::Command;
+pub use common::{resolve_program_config, Command};
 pub use dis::dis;
 pub use import::import;
 pub use main::main;

@@ -259,13 +259,13 @@ where
 /// across each architecture's particular type system.
 macro_rules! with_architecture {
     ($prog:ident, $image_file:ident, |$bus:ident, $fmt_section:ident, $fmt_instr:ident, $arch:ident| $callback:block) => {
-        match crate::cli::common::resolve_program_config($prog)? {
+        match crate::cli::resolve_program_config($prog)? {
             (
                 crate::arch::ArchName::SM83,
                 crate::platform::PlatformName::GB,
                 crate::asm::AssemblerName::RGBDS,
             ) => {
-                let $bus = &crate::platform::gb::construct_platform(&mut $image_file)?;
+                let $bus = crate::platform::gb::construct_platform(&mut $image_file)?;
                 let $fmt_section = crate::asm::rgbds::format_section::<
                     crate::arch::sm83::PtrVal,
                     crate::arch::sm83::Data,
@@ -280,7 +280,7 @@ macro_rules! with_architecture {
                 crate::platform::PlatformName::AGB,
                 crate::asm::AssemblerName::ARMIPS,
             ) => {
-                let $bus = &crate::platform::agb::construct_platform(&mut $image_file)?;
+                let $bus = crate::platform::agb::construct_platform(&mut $image_file)?;
                 let $fmt_section = crate::asm::armips::format_section::<
                     crate::arch::aarch32::PtrVal,
                     crate::arch::aarch32::Data,

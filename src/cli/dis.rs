@@ -203,6 +203,6 @@ pub fn dis<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()>
     let mut file = fs::File::open(image)?;
 
     with_architecture!(prog, file, |bus, fmt_section, _fmt_instr, arch| {
-        dis_inner(prog, start_spec, bus, fmt_section, arch)
+        dis_inner(prog, start_spec, &bus, fmt_section, arch)
     })
 }

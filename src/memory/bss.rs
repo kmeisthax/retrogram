@@ -6,6 +6,7 @@ use crate::arch::Architecture;
 use crate::maths::CheckedSub;
 use crate::memory::{Image, Offset, Pointer};
 use crate::reg;
+use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
 
@@ -17,15 +18,17 @@ where
     AR: Architecture,
 {
     phantom_arch: PhantomData<AR>,
+    size: usize,
 }
 
 impl<AR> UnknownImage<AR>
 where
     AR: Architecture,
 {
-    pub fn new() -> Self {
+    pub fn new(size: usize) -> Self {
         Self {
             phantom_arch: PhantomData,
+            size,
         }
     }
 }
@@ -46,6 +49,15 @@ where
         }
     }
 
+    fn encode_addr(&self, ioffset: usize, base: AR::PtrVal) -> Option<Pointer<AR::PtrVal>> {
+        let pval = base + AR::Offset::try_from(ioffset).ok()?;
+        Some(Pointer::from_ptrval_and_contexts(pval, HashMap::new()))
+    }
+
+    fn image_size(&self) -> usize {
+        self.size
+    }
+
     fn decode_prerequisites(&self, _ptr: AR::PtrVal, _base: AR::PtrVal) -> Vec<Prerequisite<AR>> {
         Vec::new()
     }
@@ -62,11 +74,16 @@ where
 pub struct UnknownBankedImage {
     banking_ctxt: &'static str,
     mask: u64,
+    size: usize,
 }
 
 impl UnknownBankedImage {
-    pub fn new(banking_ctxt: &'static str, mask: u64) -> Self {
-        Self { banking_ctxt, mask }
+    pub fn new(banking_ctxt: &'static str, mask: u64, size: usize) -> Self {
+        Self {
+            banking_ctxt,
+            mask,
+            size,
+        }
     }
 }
 
@@ -84,6 +101,15 @@ where
             Some(p) => AR::Offset::try_from(p).ok()?.try_into().ok(),
             None => None,
         }
+    }
+
+    fn encode_addr(&self, ioffset: usize, base: AR::PtrVal) -> Option<Pointer<AR::PtrVal>> {
+        let pval = base + AR::Offset::try_from(ioffset).ok()?;
+        Some(Pointer::from_ptrval_and_contexts(pval, HashMap::new()))
+    }
+
+    fn image_size(&self) -> usize {
+        self.size
     }
 
     fn minimize_context(&self, ptr: Pointer<AR::PtrVal>) -> Pointer<AR::PtrVal> {

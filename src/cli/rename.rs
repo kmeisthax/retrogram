@@ -64,6 +64,6 @@ pub fn rename<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<
     let mut file = fs::File::open(image)?;
 
     with_architecture!(prog, file, |bus, _fmt_section, _fmt_instr, arch| {
-        rename_inner(prog, from_spec, to_spec, bus, arch)
+        rename_inner(prog, from_spec, to_spec, &bus, arch)
     })
 }
