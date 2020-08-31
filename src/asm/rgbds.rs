@@ -294,7 +294,7 @@ where
                     }
                 }
                 ast::Directive::EmitData(data) => {
-                    if data.is_empty() {
+                    if !data.is_empty() {
                         write!(f, "    db ")?;
 
                         for byte in data {
