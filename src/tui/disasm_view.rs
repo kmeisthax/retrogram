@@ -6,7 +6,7 @@ use crate::memory::Memory;
 use crate::project::ProjectDatabase;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::{Printer, View, XY};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
@@ -35,6 +35,9 @@ where
     /// The section-formatting callback.
     fmt_section: FMT,
 
+    /// The architecture itself.
+    arch: AR,
+
     /// Phantom literal data.
     phantom_literal: PhantomData<L>,
 }
@@ -50,6 +53,7 @@ where
         prog_name: &str,
         bus: Arc<Memory<AR>>,
         fmt_section: FMT,
+        arch: AR,
     ) -> Self {
         let s = Self {
             pjdb,
@@ -58,6 +62,7 @@ where
             region_cursor: 0,
             image_offset_cursor: 0,
             fmt_section,
+            arch,
             phantom_literal: PhantomData,
         };
 
@@ -148,11 +153,17 @@ where
     L: 'static + CompatibleLiteral<AR>,
     AR: 'static + Architecture,
     FMT: 'static + Fn(&Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
+    AR::Offset: TryInto<usize>,
     <AR::Offset as TryFrom<u8>>::Error: std::fmt::Debug,
+    <AR::Offset as TryInto<usize>>::Error: std::fmt::Debug,
 {
     fn draw(&self, printer: &Printer) {
         let mut ioffset = self.image_offset_cursor;
         let mut roffset = self.region_cursor;
+
+        let mut db_lock = self.pjdb.write().unwrap();
+
+        let db = db_lock.get_database_mut(&self.prog_name);
 
         for line in 0..printer.size.y {
             if self.bus.region_count() == 0 {
@@ -171,7 +182,29 @@ where
             }
 
             if let Some(enc) = self.bus.region_encode_image_offset(roffset, ioffset) {
-                if let Some(data) = self.bus.region_retrieve(roffset, ioffset, 1) {
+                if let Some(_block) = db.find_block_membership(&enc).and_then(|bid| db.block(bid)) {
+                    let disasm = self.arch.disassemble(&enc, &self.bus);
+
+                    match disasm {
+                        Ok(disasm) => {
+                            let mut instr_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
+                                Section::new("");
+                            instr_directive.append_directive(
+                                Directive::EmitInstr(
+                                    disasm.as_instr().clone(),
+                                    disasm.next_offset(),
+                                ),
+                                enc.clone(),
+                            );
+
+                            let instr = (self.fmt_section)(&instr_directive);
+                            printer.print((0, line), &format!("${:X}: {}", enc, instr.trim()));
+
+                            ioffset += disasm.next_offset().try_into().unwrap();
+                        }
+                        Err(e) => printer.print((0, line), &format!("${:?}: Error ({})", enc, e)),
+                    }
+                } else if let Some(data) = self.bus.region_retrieve(roffset, ioffset, 1) {
                     let mut data_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
                         Section::new("");
                     data_directive
