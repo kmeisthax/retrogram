@@ -17,7 +17,7 @@ pub fn main(program: &Program) -> io::Result<()> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(program, file, |bus, _fmt_section, _fmt_instr, _arch| {
+    with_architecture!(program, file, |bus, fmt_section, _fmt_instr, _arch| {
         let pjdb = Arc::new(RwLock::new(
             match ProjectDatabase::read(program.as_database_path()) {
                 Ok(pjdb) => pjdb,
@@ -36,7 +36,7 @@ pub fn main(program: &Program) -> io::Result<()> {
         })?;
         let bus = Arc::new(bus);
 
-        siv.add_fullscreen_layer(DisassemblyView::new(pjdb, prog_name, bus));
+        siv.add_fullscreen_layer(DisassemblyView::new(pjdb, prog_name, bus, fmt_section));
 
         Ok(())
     })?;

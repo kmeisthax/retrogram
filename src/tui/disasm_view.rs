@@ -1,19 +1,29 @@
 //! Disassembly view
 
-use crate::arch::Architecture;
-use crate::memory::{Memory, Pointer};
+use crate::arch::{Architecture, CompatibleLiteral};
+use crate::ast::{Directive, Section};
+use crate::memory::Memory;
 use crate::project::ProjectDatabase;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::{Printer, View, XY};
+use std::convert::TryFrom;
+use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
 /// Renders a disassembly in a TUI context.
-pub struct DisassemblyView<AR>
+pub struct DisassemblyView<L, AR, FMT>
 where
+    L: CompatibleLiteral<AR>,
     AR: Architecture,
+    FMT: Fn(&Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
 {
+    /// The database repository to pull information from.
     pjdb: Arc<RwLock<ProjectDatabase<AR::PtrVal, AR::Offset>>>,
+
+    /// The name of the program to show.
     prog_name: String,
+
+    /// The memory bus containing all of the images to inspect.
     bus: Arc<Memory<AR>>,
 
     /// The index of the region at the top of the screen.
@@ -21,16 +31,25 @@ where
 
     /// The image offset of the top of the screen.
     image_offset_cursor: usize,
+
+    /// The section-formatting callback.
+    fmt_section: FMT,
+
+    /// Phantom literal data.
+    phantom_literal: PhantomData<L>,
 }
 
-impl<AR> DisassemblyView<AR>
+impl<L, AR, FMT> DisassemblyView<L, AR, FMT>
 where
+    L: CompatibleLiteral<AR>,
     AR: Architecture,
+    FMT: Fn(&Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
 {
     pub fn new(
         pjdb: Arc<RwLock<ProjectDatabase<AR::PtrVal, AR::Offset>>>,
         prog_name: &str,
         bus: Arc<Memory<AR>>,
+        fmt_section: FMT,
     ) -> Self {
         let s = Self {
             pjdb,
@@ -38,6 +57,8 @@ where
             bus,
             region_cursor: 0,
             image_offset_cursor: 0,
+            fmt_section,
+            phantom_literal: PhantomData,
         };
 
         s.pjdb
@@ -122,9 +143,12 @@ where
     }
 }
 
-impl<AR> View for DisassemblyView<AR>
+impl<L, AR, FMT> View for DisassemblyView<L, AR, FMT>
 where
+    L: 'static + CompatibleLiteral<AR>,
     AR: 'static + Architecture,
+    FMT: 'static + Fn(&Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
+    <AR::Offset as TryFrom<u8>>::Error: std::fmt::Debug,
 {
     fn draw(&self, printer: &Printer) {
         let mut ioffset = self.image_offset_cursor;
@@ -148,9 +172,23 @@ where
 
             if let Some(enc) = self.bus.region_encode_image_offset(roffset, ioffset) {
                 if let Some(data) = self.bus.region_retrieve(roffset, ioffset, 1) {
-                    printer.print((0, line), &format!("${:X}: db ${:X}", enc, data[0]));
+                    let mut data_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
+                        Section::new("");
+                    data_directive
+                        .append_directive(Directive::EmitData(data.to_vec()), enc.clone());
+
+                    let data = (self.fmt_section)(&data_directive);
+                    printer.print((0, line), &format!("${:X}: {}", enc, data.trim()));
                 } else {
-                    printer.print((0, line), &format!("${:X}: ds 1", enc));
+                    let mut space_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
+                        Section::new("");
+                    space_directive.append_directive(
+                        Directive::EmitSpace(AR::Offset::try_from(1).unwrap()),
+                        enc.clone(),
+                    );
+
+                    let space = (self.fmt_section)(&space_directive);
+                    printer.print((0, line), &format!("${:X}: {}", enc, space.trim()));
                 }
             } else {
                 printer.print((0, line), &format!("Invalid offset! ${:X}", ioffset));
