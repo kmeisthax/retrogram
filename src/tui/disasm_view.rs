@@ -2,7 +2,7 @@
 
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::ast::{Directive, Section};
-use crate::memory::Memory;
+use crate::memory::{Memory, Tumbler};
 use crate::project::ProjectDatabase;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::{Printer, View, XY};
@@ -27,10 +27,7 @@ where
     bus: Arc<Memory<AR>>,
 
     /// The index of the region at the top of the screen.
-    region_cursor: usize,
-
-    /// The image offset of the top of the screen.
-    image_offset_cursor: usize,
+    position: Tumbler,
 
     /// The current view size.
     size: XY<usize>,
@@ -62,8 +59,7 @@ where
             pjdb,
             prog_name: prog_name.to_string(),
             bus,
-            region_cursor: 0,
-            image_offset_cursor: 0,
+            position: Tumbler::default(),
             size: (0, 0).into(),
             fmt_section,
             arch,
@@ -79,145 +75,37 @@ where
         s
     }
 
-    /// Get the index and length of the next region.
-    ///
-    /// If `None`, then the bus is empty.
-    pub fn next_region(&self, region: usize) -> Option<(usize, usize)> {
-        let mut next_r = region.checked_add(1).unwrap_or(0);
-        let mut max_io = self.bus.region_image_size(next_r);
-        if max_io.is_none() {
-            next_r = 0;
-            max_io = self.bus.region_image_size(next_r);
-        }
-
-        Some((next_r, max_io?))
-    }
-
-    /// Get the index and length of the current region, or if it's invalid,
-    /// then the index of some other region.
-    ///
-    /// This returns a new region index, image offset, and max offset.
-    ///
-    /// If `None`, then the bus is empty.
-    pub fn valid_region(&self) -> Option<(usize, usize, usize)> {
-        let mut this_r = self.region_cursor;
-        let mut this_i = self.image_offset_cursor;
-        let mut max_io = self.bus.region_image_size(this_r);
-        if max_io.is_none() {
-            this_r = 0;
-            this_i = 0;
-            max_io = self.bus.region_image_size(this_r);
-        }
-
-        Some((this_r, this_i, max_io?))
-    }
-
-    /// Get the index and length of the previous region.
-    ///
-    /// If `None`, then the bus is empty.
-    pub fn prev_region(&self, region: usize) -> Option<(usize, usize)> {
-        let max_r = self.bus.region_count();
-        let mut prev_r = region
-            .checked_sub(1)
-            .unwrap_or_else(|| max_r.saturating_sub(1));
-        let mut max_io = self.bus.region_image_size(prev_r);
-        if max_io.is_none() {
-            prev_r = max_r.saturating_sub(1);
-            max_io = self.bus.region_image_size(prev_r);
-        }
-
-        Some((prev_r, max_io?))
-    }
-
-    /// Calculate the region and image offset indicies some number of bytes
-    /// ahead.
-    ///
-    /// If `None`, then the bus is empty.
-    pub fn scroll_forward_by_offset(&mut self, mut amount: usize) -> Option<(usize, usize)> {
-        let (mut next_r, mut next_io, mut max_io) = self.valid_region()?;
-
-        while amount > 0 {
-            let remaining_io = max_io.saturating_sub(next_io);
-            if remaining_io < amount {
-                let (r_plus, r_plus_max_io) = self.next_region(next_r).unwrap();
-
-                max_io = r_plus_max_io;
-                next_r = r_plus;
-                next_io = 0;
-                amount = amount.saturating_sub(remaining_io);
-            } else {
-                next_io += amount;
-                amount = 0;
-            }
-        }
-
-        Some((next_r, next_io))
-    }
-
     /// Move the cursor down by one.
-    ///
-    /// This is written to wrap the disassembly view around when it gets to the
-    /// end.
     pub fn cursor_down(&mut self) {
-        if let Some((next_r, next_io)) = self.scroll_forward_by_offset(1) {
-            self.region_cursor = next_r;
-            self.image_offset_cursor = next_io;
+        if let Some(position) = self.position.scroll_forward_by_offset(&self.bus, 1) {
+            self.position = position;
         }
     }
 
     /// Move the cursor down by one page.
-    ///
-    /// This is written to wrap the disassembly view around when it gets to the
-    /// end.
     pub fn page_down(&mut self) {
-        if let Some((next_r, next_io)) = self.scroll_forward_by_offset(self.size.y) {
-            self.region_cursor = next_r;
-            self.image_offset_cursor = next_io;
+        if let Some(position) = self
+            .position
+            .scroll_forward_by_offset(&self.bus, self.size.y)
+        {
+            self.position = position;
         }
-    }
-
-    /// Calculate the region and image offset indicies some number of bytes
-    /// behind.
-    ///
-    /// If `None`, then the bus is empty.
-    pub fn scroll_backward_by_offset(&mut self, mut amount: usize) -> Option<(usize, usize)> {
-        let (mut next_r, mut next_io, mut _max_io) = self.valid_region()?;
-
-        while amount > 0 {
-            if next_io < amount {
-                let (r_minus, r_minus_max_io) = self.prev_region(next_r).unwrap();
-
-                next_r = r_minus;
-                next_io = r_minus_max_io.saturating_sub(1);
-                amount = amount.saturating_sub(next_io);
-            } else {
-                next_io -= amount;
-                amount = 0;
-            }
-        }
-
-        Some((next_r, next_io))
     }
 
     /// Move the cursor up by one.
-    ///
-    /// This is written to wrap the disassembly view around when it gets to the
-    /// start.
     pub fn cursor_up(&mut self) {
-        if let Some((next_r, next_io)) = self.scroll_backward_by_offset(1) {
-            self.region_cursor = next_r;
-            self.image_offset_cursor = next_io;
+        if let Some(position) = self.position.scroll_backward_by_offset(&self.bus, 1) {
+            self.position = position;
         }
     }
 
     /// Move the cursor down by one page.
-    ///
-    /// This is written to wrap the disassembly view around when it gets to the
-    /// end.
     pub fn page_up(&mut self) {
-        if let Some((next_r, next_io)) = self.scroll_backward_by_offset(self.size.y) {
-            self.region_cursor = next_r;
-            self.image_offset_cursor = next_io;
+        if let Some(position) = self
+            .position
+            .scroll_backward_by_offset(&self.bus, self.size.y)
+        {
+            self.position = position;
         }
     }
 }
@@ -232,8 +120,7 @@ where
     <AR::Offset as TryInto<usize>>::Error: std::fmt::Debug,
 {
     fn draw(&self, printer: &Printer) {
-        let mut ioffset = self.image_offset_cursor;
-        let mut roffset = self.region_cursor;
+        let mut position = self.position;
 
         let mut db_lock = self.pjdb.write().unwrap();
 
@@ -245,17 +132,7 @@ where
                 break;
             }
 
-            if ioffset >= self.bus.region_image_size(roffset).unwrap() {
-                roffset += 1;
-                ioffset = 0;
-            }
-
-            if roffset >= self.bus.region_count() {
-                roffset = 0;
-                ioffset = 0;
-            }
-
-            if let Some(enc) = self.bus.region_encode_image_offset(roffset, ioffset) {
+            if let Some(enc) = self.bus.encode_tumbler(position) {
                 if let Some(_block) = db.find_block_membership(&enc).and_then(|bid| db.block(bid)) {
                     let disasm = self.arch.disassemble(&enc, &self.bus);
 
@@ -274,11 +151,17 @@ where
                             let instr = (self.fmt_section)(&instr_directive);
                             printer.print((0, line), &format!("${:X}: {}", enc, instr.trim()));
 
-                            ioffset += disasm.next_offset().try_into().unwrap();
+                            position = position
+                                .scroll_forward_by_offset(
+                                    &self.bus,
+                                    disasm.next_offset().try_into().unwrap(),
+                                )
+                                .unwrap();
+                            continue;
                         }
                         Err(e) => printer.print((0, line), &format!("${:?}: Error ({})", enc, e)),
                     }
-                } else if let Some(data) = self.bus.region_retrieve(roffset, ioffset, 1) {
+                } else if let Some(data) = self.bus.retrieve_at_tumbler(position, 1) {
                     let mut data_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
                         Section::new("");
                     data_directive
@@ -298,10 +181,13 @@ where
                     printer.print((0, line), &format!("${:X}: {}", enc, space.trim()));
                 }
             } else {
-                printer.print((0, line), &format!("Invalid offset! ${:X}", ioffset));
+                printer.print(
+                    (0, line),
+                    &format!("Invalid offset! ${:X}", position.image_index()),
+                );
             }
 
-            ioffset += 1;
+            position = position.scroll_forward_by_offset(&self.bus, 1).unwrap();
         }
     }
 

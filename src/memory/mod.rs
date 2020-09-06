@@ -8,6 +8,7 @@ mod image;
 mod region;
 mod rombin;
 mod traits;
+mod tumbler;
 
 pub use behavior::Action;
 pub use behavior::Behavior;
@@ -16,6 +17,7 @@ pub use endianness::Endianness;
 pub use image::Image;
 pub use region::Memory;
 pub use traits::*;
+pub use tumbler::Tumbler;
 
 #[cfg(test)]
 mod tests;

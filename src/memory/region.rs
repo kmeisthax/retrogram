@@ -6,7 +6,7 @@ use crate::arch::Architecture;
 use crate::maths::CheckedSub;
 use crate::memory::bss::UnknownImage;
 use crate::memory::rombin::ROMBinaryImage;
-use crate::memory::{Behavior, Desegmentable, Endianness, Image, Offset, Pointer};
+use crate::memory::{Behavior, Desegmentable, Endianness, Image, Offset, Pointer, Tumbler};
 use crate::reg::{State, Symbolic};
 use crate::{memory, reg};
 use num::traits::{One, Zero};
@@ -189,27 +189,18 @@ where
         self.views.get(region).map(|r| r.image_size())
     }
 
-    /// Encode an image offset within a region as a pointer.
-    pub fn region_encode_image_offset(
-        &self,
-        region: usize,
-        ioffset: usize,
-    ) -> Option<Pointer<AR::PtrVal>> {
+    /// Encode a tumbler into an image address.
+    pub fn encode_tumbler(&self, position: Tumbler) -> Option<Pointer<AR::PtrVal>> {
         self.views
-            .get(region)
-            .and_then(|r| r.encode_image_offset(ioffset))
+            .get(position.region_index())
+            .and_then(|r| r.encode_image_offset(position.image_index()))
     }
 
-    /// Encode an image offset within a region as a pointer.
-    pub fn region_retrieve(
-        &self,
-        region: usize,
-        ioffset: usize,
-        count: usize,
-    ) -> Option<&[AR::Byte]> {
+    /// Retrieve a certain number of bytes at a given tumbler index.
+    pub fn retrieve_at_tumbler(&self, position: Tumbler, count: usize) -> Option<&[AR::Byte]> {
         self.views
-            .get(region)
-            .and_then(|r| r.retrieve(ioffset, count))
+            .get(position.region_index())
+            .and_then(|r| r.retrieve(position.image_index(), count))
     }
 }
 
