@@ -385,11 +385,9 @@ where
     where
         S: Serializer,
     {
-        let mut map = serializer.serialize_map(Some(self.databases.len()))?;
+        let mut map = serializer.serialize_map(Some(1))?;
 
-        for (k, v) in self.databases.iter() {
-            map.serialize_entry(&k, &v)?;
-        }
+        map.serialize_entry("databases", &self.databases)?;
 
         map.end()
     }
