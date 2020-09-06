@@ -65,6 +65,7 @@ where
     let mut blocks = Vec::new();
     let mut cur_block_pc = start_pc.clone();
     let mut cur_blk_size = AR::Offset::zero();
+    let mut cur_blk_pcs = vec![pc.clone()];
     let mut error = None;
 
     loop {
@@ -102,14 +103,20 @@ where
 
                 pc = pc.contextualize(new_pcval);
                 cur_blk_size = new_blk_size;
+                cur_blk_pcs.push(pc.clone());
 
                 if disasm.flow().is_branching() {
-                    blocks.push(analysis::Block::from_parts(
-                        cur_block_pc.clone(),
-                        cur_blk_size,
-                    ));
+                    let mut new_block =
+                        analysis::Block::from_parts(cur_block_pc.clone(), cur_blk_size);
+
+                    for pc in cur_blk_pcs {
+                        new_block.mark_instr_at(pc);
+                    }
+
+                    blocks.push(new_block);
                     cur_block_pc = pc.clone();
                     cur_blk_size = AR::Offset::zero();
+                    cur_blk_pcs = vec![pc.clone()];
                 }
 
                 if disasm.flow().is_final() {
@@ -124,7 +131,13 @@ where
     }
 
     if cur_blk_size > AR::Offset::zero() {
-        blocks.push(analysis::Block::from_parts(cur_block_pc, cur_blk_size));
+        let mut new_block = analysis::Block::from_parts(cur_block_pc, cur_blk_size);
+
+        for pc in cur_blk_pcs {
+            new_block.mark_instr_at(pc);
+        }
+
+        blocks.push(new_block);
     }
 
     let maybe_offset = pc.as_pointer().clone() - start_pc.as_pointer().clone();
