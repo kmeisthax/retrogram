@@ -3,7 +3,10 @@
 use crate::analysis::Mappable;
 use crate::cli::Nameable;
 use crate::memory;
+use crate::memory::Pointer;
 use serde::{Deserialize, Serialize};
+use std::cmp::min;
+use std::collections::BTreeSet;
 
 /// Represents a sequence of instructions with the following properties:
 ///
@@ -17,12 +20,24 @@ use serde::{Deserialize, Serialize};
 pub struct Block<P, S>
 where
     P: Mappable + Nameable,
+    S: Mappable,
 {
     /// The start pointer of the block.
     start: memory::Pointer<P>,
 
     /// The offset to the end of the block.
     length: S,
+
+    /// A list of offsets known to be the start of instructions within the
+    /// block.
+    ///
+    /// Offsets beyond the length of the block should be ignored, nor should
+    /// they be allowed to remain in the offsets list.
+    ///
+    /// This is a `BTreeSet` purely because a `HashSet` would prohibit us from
+    /// deriving `Ord`. In practice, it should never come into play when
+    /// ordering blocks.
+    instr_offsets: BTreeSet<S>,
 
     /// The number of traces that have been executed within this block.
     traces: u32,
@@ -31,11 +46,13 @@ where
 impl<P, S> Block<P, S>
 where
     P: Mappable + Nameable,
+    S: Mappable,
 {
     pub fn from_parts(start: memory::Pointer<P>, length: S) -> Self {
         Block {
             start,
             length,
+            instr_offsets: BTreeSet::new(),
             traces: 0,
         }
     }
@@ -62,7 +79,7 @@ where
 impl<P, S> Block<P, S>
 where
     P: memory::PtrNum<S> + Mappable + Nameable,
-    S: memory::Offset<P>,
+    S: memory::Offset<P> + Mappable,
 {
     pub fn is_ptr_within_block(&self, ptr: &memory::Pointer<P>) -> bool {
         if self.start.as_pointer() <= ptr.as_pointer() {
@@ -81,8 +98,9 @@ where
     /// Check if this and another block can be merged together.
     pub fn can_coalesce(&self, other: &Self) -> bool {
         let end = self.start.clone() + self.length.clone();
+        let other_end = other.start.clone() + other.length.clone();
 
-        end == other.start
+        end == other.start || other_end == self.start
     }
 
     /// Merge this and another block together.
@@ -90,11 +108,62 @@ where
     /// The result will likely be invalid if the blocks are not compatible, see
     /// `can_coalesce`.
     pub fn coalesce(self, other: Self) -> Self {
+        let is_reversed = other.start < self.start;
+        let first_start = min(self.start.clone(), other.start.clone());
+
+        let instr_offsets = if is_reversed {
+            other
+                .instr_offsets
+                .iter()
+                .cloned()
+                .chain(
+                    self.instr_offsets
+                        .iter()
+                        .cloned()
+                        .map(|o| o + other.length.clone()),
+                )
+                .collect()
+        } else {
+            self.instr_offsets
+                .iter()
+                .cloned()
+                .chain(
+                    other
+                        .instr_offsets
+                        .iter()
+                        .cloned()
+                        .map(|s| s + self.length.clone()),
+                )
+                .collect()
+        };
+
         Block {
-            start: self.start,
+            start: first_start,
             length: self.length + other.length,
+            instr_offsets,
             traces: self.traces + other.traces,
         }
+    }
+
+    /// Mark an instruction at a given address.
+    ///
+    /// If the given pointer is outside the bounds of the block, it will not be
+    /// added to this block.
+    pub fn mark_instr_at(&mut self, instr_ptr: Pointer<P>) {
+        if self.start.is_context_eq(&instr_ptr) {
+            if let Ok(instr_offset) =
+                S::try_from(instr_ptr.as_pointer().clone() - self.start.as_pointer().clone())
+            {
+                if instr_offset < self.length {
+                    self.instr_offsets.insert(instr_offset);
+                }
+            }
+        }
+    }
+
+    /// Iterate the list of instruction offsets within this block.
+    pub fn instr_offsets<'a>(&'a self) -> impl 'a + Iterator<Item = S> {
+        self.instr_offsets.iter().cloned()
     }
 }
 
@@ -162,5 +231,23 @@ mod tests {
         let block = Block::from_parts(base, 0x50);
 
         assert!(!block.is_ptr_within_block(&tgt));
+    }
+
+    #[test]
+    fn block_offsets() {
+        let mut block = Block::from_parts(Pointer::from(0x100), 0x50);
+
+        block.mark_instr_at(Pointer::from(0x105));
+
+        let mut tgt = Pointer::from(0x109);
+        tgt.set_platform_context("R", Symbolic::from(1));
+
+        block.mark_instr_at(tgt);
+
+        block.mark_instr_at(Pointer::from(0x195));
+
+        let offsets: Vec<u32> = block.instr_offsets().collect();
+
+        assert_eq!(vec![0x5], offsets);
     }
 }
