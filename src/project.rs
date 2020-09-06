@@ -1,17 +1,18 @@
 //! Project file structures
 
-use crate::analysis::Mappable;
 use crate::arch::ArchName;
+use crate::arch::Architecture;
 use crate::asm::AssemblerName;
-use crate::cli::Nameable;
-use crate::database;
-use crate::database::ExternalFormat;
+use crate::database::{Database, ExternalFormat};
 use crate::platform::PlatformName;
 use clap::{App, Arg, ArgMatches, ArgSettings};
-use serde::{Deserialize, Serialize};
+use serde::de::{MapAccess, Visitor};
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::str::FromStr;
-use std::{fs, io};
+use std::{fmt, fs, io};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Program {
@@ -317,18 +318,26 @@ impl Project {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ProjectDatabase<P, S>
+#[derive(Debug)]
+pub struct ProjectDatabase<AR>
 where
-    P: Mappable + Nameable,
+    AR: Architecture,
 {
-    databases: HashMap<String, database::Database<P, S>>,
+    databases: HashMap<String, Database<AR>>,
 }
 
-impl<P, S> ProjectDatabase<P, S>
+impl<AR> Default for ProjectDatabase<AR>
 where
-    for<'dw> P: Mappable + Nameable + Deserialize<'dw>,
-    for<'dw> S: Deserialize<'dw>,
+    AR: Architecture,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<AR> ProjectDatabase<AR>
+where
+    AR: Architecture,
 {
     pub fn read(filename: &str) -> io::Result<Self> {
         let db_file = fs::File::open(filename)?;
@@ -336,13 +345,7 @@ where
 
         Ok(dbs)
     }
-}
 
-impl<P, S> ProjectDatabase<P, S>
-where
-    P: Mappable + Nameable + Serialize,
-    S: Serialize,
-{
     pub fn write(&self, filename: &str) -> io::Result<()> {
         let db_file = fs::File::create(filename)?;
         serde_json::to_writer_pretty(db_file, self).map_err(|e| {
@@ -352,39 +355,84 @@ where
             )
         })
     }
-}
 
-impl<P, S> Default for ProjectDatabase<P, S>
-where
-    P: Mappable + Nameable,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<P, S> ProjectDatabase<P, S>
-where
-    P: Mappable + Nameable,
-{
     pub fn new() -> Self {
         ProjectDatabase {
             databases: HashMap::new(),
         }
     }
 
-    pub fn get_database(&self, db_name: &str) -> Option<&database::Database<P, S>> {
+    pub fn get_database(&self, db_name: &str) -> Option<&Database<AR>> {
         self.databases.get(db_name)
     }
 
-    pub fn get_database_mut(&mut self, db_name: &str) -> &mut database::Database<P, S> {
+    pub fn get_database_mut(&mut self, db_name: &str) -> &mut Database<AR> {
         if !self.databases.contains_key(db_name) {
-            self.databases
-                .insert(db_name.to_string(), database::Database::new());
+            self.databases.insert(db_name.to_string(), Database::new());
         }
 
         self.databases
             .get_mut(db_name)
             .expect("I just inserted it, it should be there.")
+    }
+}
+
+impl<AR> Serialize for ProjectDatabase<AR>
+where
+    AR: Architecture,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(self.databases.len()))?;
+
+        for (k, v) in self.databases.iter() {
+            map.serialize_entry(&k, &v)?;
+        }
+
+        map.end()
+    }
+}
+
+impl<'dw, AR> Deserialize<'dw> for ProjectDatabase<AR>
+where
+    AR: Architecture,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'dw>,
+    {
+        pub struct PDBVisitor<AR>(PhantomData<AR>);
+
+        impl<'dw, AR> Visitor<'dw> for PDBVisitor<AR>
+        where
+            AR: Architecture,
+        {
+            type Value = ProjectDatabase<AR>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(formatter, "a valid project database")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'dw>,
+            {
+                let mut pjdb = ProjectDatabase::new();
+
+                while let Some((key, value)) =
+                    map.next_entry::<String, HashMap<String, Database<AR>>>()?
+                {
+                    if key == "databases" {
+                        pjdb.databases = value;
+                    }
+                }
+
+                Ok(pjdb)
+            }
+        }
+
+        Ok(deserializer.deserialize_map(PDBVisitor::<AR>(PhantomData))?)
     }
 }

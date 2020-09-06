@@ -18,7 +18,7 @@ where
     FMT: Fn(&Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
 {
     /// The database repository to pull information from.
-    pjdb: Arc<RwLock<ProjectDatabase<AR::PtrVal, AR::Offset>>>,
+    pjdb: Arc<RwLock<ProjectDatabase<AR>>>,
 
     /// The name of the program to show.
     prog_name: String,
@@ -52,7 +52,7 @@ where
     FMT: Fn(&Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
 {
     pub fn new(
-        pjdb: Arc<RwLock<ProjectDatabase<AR::PtrVal, AR::Offset>>>,
+        pjdb: Arc<RwLock<ProjectDatabase<AR>>>,
         prog_name: &str,
         bus: Arc<Memory<AR>>,
         fmt_section: FMT,

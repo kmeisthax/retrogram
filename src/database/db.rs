@@ -1,12 +1,11 @@
 //! Implementation of core database type
 
 use crate::analysis::Mappable;
+use crate::arch::Architecture;
 use crate::cli::Nameable;
 use crate::{analysis, ast, memory};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fmt::UpperHex;
-use std::ops::Add;
 
 fn gimme_a_ptr<P>() -> HashMap<memory::Pointer<P>, usize>
 where
@@ -58,20 +57,20 @@ where
 
 /// A repository of information obtained from the program under analysis.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Database<P, S>
+pub struct Database<AR>
 where
-    P: Mappable + Nameable,
+    AR: Architecture,
 {
-    symbols: Vec<Symbol<P>>,
+    symbols: Vec<Symbol<AR::PtrVal>>,
 
     #[serde(skip, default = "im_stale")]
     was_deserialized: bool,
 
     /// A list of program regions.
-    blocks: Vec<analysis::Block<P, S>>,
+    blocks: Vec<analysis::Block<AR::PtrVal, AR::Offset>>,
 
     /// A list of all cross-references in the program.
-    xrefs: Vec<analysis::Reference<P>>,
+    xrefs: Vec<analysis::Reference<AR::PtrVal>>,
 
     /// A list of all labels in the program.
     #[serde(skip, default = "gimme_a_lbl")]
@@ -79,29 +78,29 @@ where
 
     /// A list of all pointer values in the program which have a label.
     #[serde(skip, default = "gimme_a_ptr")]
-    pointer_symbols: HashMap<memory::Pointer<P>, usize>,
+    pointer_symbols: HashMap<memory::Pointer<AR::PtrVal>, usize>,
 
     /// A list of crossreferences sorted by source address.
     #[serde(skip, default = "gimme_xref")]
-    xref_source_index: BTreeMap<memory::Pointer<P>, HashSet<usize>>,
+    xref_source_index: BTreeMap<memory::Pointer<AR::PtrVal>, HashSet<usize>>,
 
     /// A list of crossreferences sorted by target address.
     #[serde(skip, default = "gimme_xref")]
-    xref_target_index: BTreeMap<memory::Pointer<P>, HashSet<usize>>,
+    xref_target_index: BTreeMap<memory::Pointer<AR::PtrVal>, HashSet<usize>>,
 }
 
-impl<P, S> Default for Database<P, S>
+impl<AR> Default for Database<AR>
 where
-    P: Mappable + Nameable,
+    AR: Architecture,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<P, S> Database<P, S>
+impl<AR> Database<AR>
 where
-    P: Mappable + Nameable,
+    AR: Architecture,
 {
     pub fn new() -> Self {
         Database {
@@ -151,7 +150,7 @@ where
     }
 
     /// Create a new symbol association.
-    pub fn insert_symbol(&mut self, label: ast::Label, ptr: memory::Pointer<P>) {
+    pub fn insert_symbol(&mut self, label: ast::Label, ptr: memory::Pointer<AR::PtrVal>) {
         let id = self.symbols.len();
 
         self.symbols.push(Symbol(label.clone(), ptr.clone()));
@@ -166,7 +165,7 @@ where
         &mut self,
         sym_id: usize,
         new_label: Option<ast::Label>,
-        new_pointer: Option<memory::Pointer<P>>,
+        new_pointer: Option<memory::Pointer<AR::PtrVal>>,
     ) {
         if let Some(sym) = self.symbols.get_mut(sym_id) {
             if let Some(new_label) = new_label {
@@ -191,7 +190,11 @@ where
     /// repoint it to the new pointer. Furthermore, if a placeholder label
     /// already refers to the same location, we change that symbol's label to
     /// match the request.
-    pub fn upsert_symbol(&mut self, new_label: ast::Label, for_pointer: memory::Pointer<P>) {
+    pub fn upsert_symbol(
+        &mut self,
+        new_label: ast::Label,
+        for_pointer: memory::Pointer<AR::PtrVal>,
+    ) {
         if let Some(sym_id) = self.label_symbol(&new_label) {
             if let Some(sym) = self.symbol(sym_id) {
                 if *sym.as_pointer() == for_pointer {
@@ -220,12 +223,9 @@ where
     /// Create a label for a location that is not named in the database.
     pub fn insert_placeholder_label(
         &mut self,
-        ptr: memory::Pointer<P>,
+        ptr: memory::Pointer<AR::PtrVal>,
         kind: analysis::ReferenceKind,
-    ) -> ast::Label
-    where
-        P: UpperHex,
-    {
+    ) -> ast::Label {
         let mut name = format!("{}", kind);
 
         for (_, key, cval) in ptr.iter_contexts() {
@@ -242,7 +242,7 @@ where
         ast::Label::new(&name, None)
     }
 
-    pub fn insert_crossreference(&mut self, myref: analysis::Reference<P>) {
+    pub fn insert_crossreference(&mut self, myref: analysis::Reference<AR::PtrVal>) {
         let id = self.xrefs.len();
         let source_bucket = self
             .xref_source_index
@@ -278,7 +278,7 @@ where
         }
     }
 
-    pub fn pointer_symbol(&self, ptr: &memory::Pointer<P>) -> Option<usize> {
+    pub fn pointer_symbol(&self, ptr: &memory::Pointer<AR::PtrVal>) -> Option<usize> {
         self.pointer_symbols.get(ptr).copied()
     }
 
@@ -286,27 +286,21 @@ where
         self.label_symbols.get(label).copied()
     }
 
-    pub fn symbol(&self, symbol_id: usize) -> Option<&Symbol<P>> {
+    pub fn symbol(&self, symbol_id: usize) -> Option<&Symbol<AR::PtrVal>> {
         self.symbols.get(symbol_id)
     }
 
-    pub fn block(&self, block_id: usize) -> Option<&analysis::Block<P, S>> {
+    pub fn block(&self, block_id: usize) -> Option<&analysis::Block<AR::PtrVal, AR::Offset>> {
         self.blocks.get(block_id)
     }
 
-    pub fn xref(&self, xref_id: usize) -> Option<&analysis::Reference<P>> {
+    pub fn xref(&self, xref_id: usize) -> Option<&analysis::Reference<AR::PtrVal>> {
         self.xrefs.get(xref_id)
     }
-}
 
-impl<P, S> Database<P, S>
-where
-    P: Mappable + Nameable + memory::PtrNum<S>,
-    S: memory::Offset<P>,
-{
     /// Find which block of the program's control-flow graph contains this
     /// pointer.
-    pub fn find_block_membership(&self, ptr: &memory::Pointer<P>) -> Option<usize> {
+    pub fn find_block_membership(&self, ptr: &memory::Pointer<AR::PtrVal>) -> Option<usize> {
         //TODO: This needs to be way higher performance than a linear scan
         for (i, ref block) in self.blocks.iter().enumerate() {
             if block.is_ptr_within_block(ptr) {
@@ -321,7 +315,7 @@ where
     ///
     /// If the block already exists (or at least, there is one at the start of
     /// this block) then insertion will silently fail.
-    pub fn insert_block(&mut self, block: analysis::Block<P, S>) {
+    pub fn insert_block(&mut self, block: analysis::Block<AR::PtrVal, AR::Offset>) {
         if self.find_block_membership(block.as_start()).is_some() {
             return;
         }
@@ -336,7 +330,7 @@ where
     /// block is created and it's id is returned. Otherwise, None is returned.
     ///
     /// If an invalid block ID is given, this function also returns None.
-    pub fn split_block(&mut self, block_id: usize, new_size: S) -> Option<usize> {
+    pub fn split_block(&mut self, block_id: usize, new_size: AR::Offset) -> Option<usize> {
         let block = self.blocks.get_mut(block_id);
 
         if let Some(block) = block {
@@ -363,12 +357,9 @@ where
     /// from that memory range.
     pub fn find_xrefs_from<'a>(
         &'a self,
-        from_start: &memory::Pointer<P>,
-        from_length: S,
-    ) -> impl Iterator<Item = usize> + 'a
-    where
-        <P as Add<S>>::Output: Into<P>,
-    {
+        from_start: &memory::Pointer<AR::PtrVal>,
+        from_length: AR::Offset,
+    ) -> impl Iterator<Item = usize> + 'a {
         let from_end = from_start.clone() + from_length;
 
         self.xref_source_index
@@ -382,12 +373,9 @@ where
     /// memory range.
     pub fn find_xrefs_to<'a>(
         &'a self,
-        to_start: &memory::Pointer<P>,
-        to_length: S,
-    ) -> impl Iterator<Item = usize> + 'a
-    where
-        <P as Add<S>>::Output: Into<P>,
-    {
+        to_start: &memory::Pointer<AR::PtrVal>,
+        to_length: AR::Offset,
+    ) -> impl Iterator<Item = usize> + 'a {
         let to_end = to_start.clone() + to_length;
 
         self.xref_target_index

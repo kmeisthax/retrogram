@@ -1,10 +1,11 @@
 use crate::analysis::Block;
+use crate::arch::tests::TestArchitecture;
 use crate::database::Database;
 use crate::memory::Pointer;
 
 #[test]
 fn block_splitting() {
-    let mut db = Database::new();
+    let mut db = Database::<TestArchitecture>::new();
     let start_ptr = Pointer::from(0x150);
 
     db.insert_block(Block::from_parts(start_ptr.clone(), 0x10));

@@ -32,7 +32,7 @@ use std::str::FromStr;
 /// can consume contexts from the list and assign contexts to the pointer.
 pub fn parse_ptr<AR>(
     text_str: &str,
-    db: &database::Database<AR::PtrVal, AR::Offset>,
+    db: &database::Database<AR>,
     bus: &memory::Memory<AR>,
     _arch: AR,
 ) -> Option<memory::Pointer<AR::PtrVal>>

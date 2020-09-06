@@ -35,6 +35,9 @@ pub mod sm83;
 
 mod traits;
 
+#[cfg(test)]
+pub mod tests;
+
 pub use traits::Architecture;
 pub use traits::CompatibleLiteral;
 

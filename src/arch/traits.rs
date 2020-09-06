@@ -7,6 +7,7 @@ use crate::maths::{Numerical, Popcount};
 use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, State};
 use num::Bounded;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt::{Debug, Display};
@@ -41,7 +42,9 @@ where
         + Mappable
         + Nameable
         + Ord
-        + Bounded,
+        + Bounded
+        + Serialize
+        + for<'dw> Deserialize<'dw>,
     Self::Byte: Bitwise
         + Numerical
         + Popcount<Output = Self::Byte>
@@ -49,9 +52,17 @@ where
         + Mappable
         + Nameable
         + Ord
-        + Bounded,
-    Self::PtrVal: PtrNum<Self::Offset> + Mappable + Nameable,
-    Self::Offset: Offset<Self::PtrVal> + Mappable + Nameable + Numerical,
+        + Bounded
+        + Serialize
+        + for<'dw> Deserialize<'dw>,
+    Self::PtrVal:
+        PtrNum<Self::Offset> + Mappable + Nameable + Serialize + for<'dw> Deserialize<'dw>,
+    Self::Offset: Offset<Self::PtrVal>
+        + Mappable
+        + Nameable
+        + Numerical
+        + Serialize
+        + for<'dw> Deserialize<'dw>,
 {
     /// The type which represents all possible register names in a given
     /// architecture.

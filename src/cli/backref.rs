@@ -1,7 +1,7 @@
 //! Backreference list command for retrogram
 
 use crate::arch::{Architecture, CompatibleLiteral};
-use crate::{analysis, ast, cli, input, maths, memory, project};
+use crate::{analysis, ast, input, maths, memory, project};
 use clap::ArgMatches;
 use num_traits::One;
 use std::{fs, io};
@@ -16,9 +16,7 @@ fn backref_inner<L, FMT, AR>(
 where
     L: CompatibleLiteral<AR>,
     AR: Architecture,
-    for<'dw> AR::PtrVal: serde::Deserialize<'dw> + serde::Serialize + maths::FromStrRadix,
-    for<'dw> AR::Offset: cli::Nameable + serde::Deserialize<'dw> + serde::Serialize,
-    for<'dw> AR::Byte: serde::Deserialize<'dw>,
+    AR::PtrVal: maths::FromStrRadix,
     FMT: Fn(&ast::Instruction<L>) -> String,
 {
     let mut pjdb = project::ProjectDatabase::read(prog.as_database_path())?;

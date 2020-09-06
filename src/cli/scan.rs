@@ -18,7 +18,7 @@ use std::{fmt, fs, io};
 /// Scan a specific starting PC and add the results of the analysis to the
 /// database.
 fn scan_pc_for_arch<L, AR>(
-    db: &mut database::Database<AR::PtrVal, AR::Offset>,
+    db: &mut database::Database<AR>,
     start_pc: &memory::Pointer<AR::PtrVal>,
     bus: &memory::Memory<AR>,
     arch: AR,
@@ -133,7 +133,7 @@ where
 /// This function yields false if it's execution yielded no additional code. It
 /// will also yield the addresses of any code that threw errors when analyzed.
 fn exhaust_all_static_scans<L, AR>(
-    db: &mut Database<AR::PtrVal, AR::Offset>,
+    db: &mut Database<AR>,
     bus: &memory::Memory<AR>,
     arch: AR,
 ) -> (bool, HashSet<Pointer<AR::PtrVal>>)
@@ -191,7 +191,7 @@ where
 /// to check for any new unanalyzed static references after the tracing has
 /// completed.
 fn exhaust_all_dynamic_scans<L, AR>(
-    db: &mut Database<AR::PtrVal, AR::Offset>,
+    db: &mut Database<AR>,
     bus: &memory::Memory<AR>,
     arch: AR,
     poweron_state: State<AR>,

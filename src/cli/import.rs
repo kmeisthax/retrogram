@@ -1,26 +1,24 @@
 //! Import command: Copies data from an external data source into the Retrogram
 //! analysis database
 
-use crate::analysis::Mappable;
+use crate::arch::Architecture;
 use crate::cli::common::resolve_source;
-use crate::cli::Nameable;
 use crate::{arch, database, platform, project};
 use clap::ArgMatches;
 use std::{fs, io};
 
-pub fn import_for_arch<P, S, IMP>(
+pub fn import_for_arch<AR, IMP>(
     prog: &project::Program,
     datasrc: &project::DataSource,
     imp: IMP,
 ) -> io::Result<()>
 where
-    for<'dw> P: Mappable + Nameable + serde::Deserialize<'dw>,
-    for<'dw> S: serde::Deserialize<'dw>,
+    AR: Architecture,
     IMP: Fn(
         &project::Program,
         &project::DataSource,
         &mut [io::BufReader<fs::File>],
-        &mut database::Database<P, S>,
+        &mut database::Database<AR>,
     ) -> io::Result<()>,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {

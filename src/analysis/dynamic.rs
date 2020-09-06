@@ -83,7 +83,7 @@ where
 pub fn analyze_trace_log<L, AR>(
     trace: &Trace<AR>,
     bus: &Memory<AR>,
-    database: &mut Database<AR::PtrVal, AR::Offset>,
+    database: &mut Database<AR>,
     arch: AR,
 ) -> analysis::Result<HashSet<usize>, AR>
 where

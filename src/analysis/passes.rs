@@ -142,7 +142,7 @@ where
 /// from the Database.
 pub fn replace_operand_with_label<L, AR>(
     src_operand: Operand<L>,
-    db: &mut Database<AR::PtrVal, AR::Offset>,
+    db: &mut Database<AR>,
     start_addr: &memory::Pointer<AR::PtrVal>,
     memory: &memory::Memory<AR>,
     refkind: ReferenceKind,
@@ -195,7 +195,7 @@ where
 /// automatically generated and added to the database.
 pub fn replace_labels<L, AR>(
     src_assembly: ast::Section<L, AR::PtrVal, AR::Byte, AR::Offset>,
-    db: &mut Database<AR::PtrVal, AR::Offset>,
+    db: &mut Database<AR>,
     memory: &memory::Memory<AR>,
 ) -> ast::Section<L, AR::PtrVal, AR::Byte, AR::Offset>
 where
@@ -235,14 +235,14 @@ where
 
 /// Given an Assembly, create a new Assembly with all labels inserted from the
 /// database.
-pub fn inject_labels<L, P, MV, S>(
-    src_assembly: ast::Section<L, P, MV, S>,
-    db: &Database<P, S>,
-) -> ast::Section<L, P, MV, S>
+pub fn inject_labels<L, AR>(
+    src_assembly: ast::Section<L, AR::PtrVal, AR::Byte, AR::Offset>,
+    db: &Database<AR>,
+) -> ast::Section<L, AR::PtrVal, AR::Byte, AR::Offset>
 where
     L: Literal,
-    P: Mappable + Nameable,
-    ast::Directive<L, P, MV, S>: Clone,
+    AR: Architecture,
+    ast::Directive<L, AR::PtrVal, AR::Byte, AR::Offset>: Clone,
 {
     let mut dst_assembly = ast::Section::new(src_assembly.section_name());
 
