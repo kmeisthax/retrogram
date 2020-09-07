@@ -77,16 +77,22 @@ where
 
     /// Move the cursor down by one.
     pub fn cursor_down(&mut self) {
-        if let Some(position) = self.position.scroll_forward_by_offset(&self.bus, 1) {
+        let mut db_lock = self.pjdb.write().unwrap();
+        let db = db_lock.get_database_mut(&self.prog_name);
+
+        if let Some(position) = self.position.scroll_forward_by_lines(&self.bus, db, 1) {
             self.position = position;
         }
     }
 
     /// Move the cursor down by one page.
     pub fn page_down(&mut self) {
+        let mut db_lock = self.pjdb.write().unwrap();
+        let db = db_lock.get_database_mut(&self.prog_name);
+
         if let Some(position) = self
             .position
-            .scroll_forward_by_offset(&self.bus, self.size.y)
+            .scroll_forward_by_lines(&self.bus, db, self.size.y)
         {
             self.position = position;
         }
@@ -94,16 +100,22 @@ where
 
     /// Move the cursor up by one.
     pub fn cursor_up(&mut self) {
-        if let Some(position) = self.position.scroll_backward_by_offset(&self.bus, 1) {
+        let mut db_lock = self.pjdb.write().unwrap();
+        let db = db_lock.get_database_mut(&self.prog_name);
+
+        if let Some(position) = self.position.scroll_backward_by_lines(&self.bus, db, 1) {
             self.position = position;
         }
     }
 
     /// Move the cursor down by one page.
     pub fn page_up(&mut self) {
+        let mut db_lock = self.pjdb.write().unwrap();
+        let db = db_lock.get_database_mut(&self.prog_name);
+
         if let Some(position) = self
             .position
-            .scroll_backward_by_offset(&self.bus, self.size.y)
+            .scroll_backward_by_lines(&self.bus, db, self.size.y)
         {
             self.position = position;
         }
@@ -150,14 +162,6 @@ where
 
                             let instr = (self.fmt_section)(&instr_directive);
                             printer.print((0, line), &format!("${:X}: {}", enc, instr.trim()));
-
-                            position = position
-                                .scroll_forward_by_offset(
-                                    &self.bus,
-                                    disasm.next_offset().try_into().unwrap(),
-                                )
-                                .unwrap();
-                            continue;
                         }
                         Err(e) => printer.print((0, line), &format!("${:?}: Error ({})", enc, e)),
                     }
@@ -187,7 +191,7 @@ where
                 );
             }
 
-            position = position.scroll_forward_by_offset(&self.bus, 1).unwrap();
+            position = position.scroll_forward_by_lines(&self.bus, db, 1).unwrap();
         }
     }
 

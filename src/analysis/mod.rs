@@ -12,7 +12,7 @@ mod reference;
 mod trace;
 mod traits;
 
-pub use block::Block;
+pub use block::{Block, InstrLocation};
 pub use disasm::Disasm;
 pub use dynamic::{analyze_trace_log, trace_until_fork};
 pub use error::Error;

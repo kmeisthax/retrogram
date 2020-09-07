@@ -95,6 +95,124 @@ where
         false
     }
 
+    /// Given a pointer, return the instruction it may be part of.
+    pub fn align_to_instruction(&self, ptr: &memory::Pointer<P>) -> Option<memory::Pointer<P>> {
+        if self.start.is_context_eq(ptr) && self.start.as_pointer() <= ptr.as_pointer() {
+            let block_offset =
+                S::try_from(ptr.as_pointer().clone() - self.start.as_pointer().clone());
+
+            if let Ok(block_offset) = block_offset {
+                let adjusted_block_offset = self
+                    .instr_offsets
+                    .range(..=block_offset.clone())
+                    .next_back()
+                    .cloned()
+                    .unwrap_or(block_offset);
+
+                return Some(self.start.clone() + adjusted_block_offset);
+            }
+        }
+
+        None
+    }
+
+    /// Given a pointer into the block, yield the offset of the previous
+    /// instruction in this block, `count` instructions back.
+    ///
+    /// Pointers which are "between instructions" are treated as if they
+    /// pointed to the last valid instruction offset prior to the current
+    /// pointer.
+    ///
+    /// The location of the last instruction is returned as an `InstrLocation`,
+    /// please see it's documentation for more info.
+    ///
+    /// If `None`, the pointer is outside of the current block already.
+    pub fn last_instruction(
+        &self,
+        ptr: &memory::Pointer<P>,
+        count: usize,
+    ) -> Option<InstrLocation<S>> {
+        if self.start.is_context_eq(ptr) && self.start.as_pointer() <= ptr.as_pointer() {
+            let block_offset =
+                S::try_from(ptr.as_pointer().clone() - self.start.as_pointer().clone());
+
+            if let Ok(block_offset) = block_offset {
+                let adjusted_block_offset = self
+                    .instr_offsets
+                    .range(..=block_offset.clone())
+                    .next_back()
+                    .cloned()
+                    .unwrap_or(block_offset);
+
+                let mut last_i = count;
+                for (i, instr_offset) in self
+                    .instr_offsets
+                    .range(..=adjusted_block_offset)
+                    .rev()
+                    .enumerate()
+                {
+                    last_i = count.saturating_sub(i);
+
+                    if i == count {
+                        return Some(InstrLocation::InsideBlock(instr_offset.clone()));
+                    }
+                }
+
+                return Some(InstrLocation::OutsideBlock(last_i));
+            }
+        }
+
+        None
+    }
+
+    /// Given a pointer into the block, yield the offset of the next
+    /// instruction in the block.
+    ///
+    /// Pointers which are "between instructions" are treated as if they
+    /// pointed to the last valid instruction offset prior to the current
+    /// pointer.
+    ///
+    /// The location of the next instruction is returned as an `InstrLocation`,
+    /// please see it's documentation for more info.
+    ///
+    /// If `None`, the pointer is outside of the current block already.
+    pub fn next_instruction(
+        &self,
+        ptr: &memory::Pointer<P>,
+        count: usize,
+    ) -> Option<InstrLocation<S>> {
+        if self.start.is_context_eq(ptr) && self.start.as_pointer() <= ptr.as_pointer() {
+            let block_offset =
+                S::try_from(ptr.as_pointer().clone() - self.start.as_pointer().clone());
+
+            if let Ok(block_offset) = block_offset {
+                let adjusted_block_offset = self
+                    .instr_offsets
+                    .range(..=block_offset.clone())
+                    .next_back()
+                    .cloned()
+                    .unwrap_or(block_offset);
+
+                let mut last_i = count;
+                for (i, instr_offset) in self
+                    .instr_offsets
+                    .range(adjusted_block_offset..)
+                    .enumerate()
+                {
+                    last_i = count.saturating_sub(i);
+
+                    if i == count {
+                        return Some(InstrLocation::InsideBlock(instr_offset.clone()));
+                    }
+                }
+
+                return Some(InstrLocation::OutsideBlock(last_i));
+            }
+        }
+
+        None
+    }
+
     /// Check if this and another block can be merged together.
     pub fn can_coalesce(&self, other: &Self) -> bool {
         let end = self.start.clone() + self.length.clone();
@@ -167,9 +285,25 @@ where
     }
 }
 
+/// Represents the result of searching for an instruction within a block.
+///
+/// A previous or next instruction can be present either within or outside of
+/// a given block.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum InstrLocation<S> {
+    /// The requested instruction exists within this block at this offset.
+    InsideBlock(S),
+
+    /// The requested instruction exists outside the current block.
+    ///
+    /// The `usize` offset here should be treated as a `Tumbler` scroll offset
+    /// relative to the memory bus that generated the block you queried.
+    OutsideBlock(usize),
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::analysis::Block;
+    use crate::analysis::{Block, InstrLocation};
     use crate::memory::Pointer;
     use crate::reg::Symbolic;
 
@@ -249,5 +383,126 @@ mod tests {
         let offsets: Vec<u32> = block.instr_offsets().collect();
 
         assert_eq!(vec![0x5], offsets);
+    }
+
+    #[test]
+    fn block_align_to_instr() {
+        let mut block = Block::from_parts(Pointer::from(0x100), 0x50);
+
+        block.mark_instr_at(Pointer::from(0x100));
+        block.mark_instr_at(Pointer::from(0x103));
+        block.mark_instr_at(Pointer::from(0x106));
+        block.mark_instr_at(Pointer::from(0x107));
+        block.mark_instr_at(Pointer::from(0x108));
+        block.mark_instr_at(Pointer::from(0x109));
+        block.mark_instr_at(Pointer::from(0x10C));
+        block.mark_instr_at(Pointer::from(0x10D));
+        block.mark_instr_at(Pointer::from(0x10E));
+        block.mark_instr_at(Pointer::from(0x10F));
+
+        assert_eq!(
+            block.align_to_instruction(&Pointer::from(0x103)),
+            Some(Pointer::from(0x103))
+        );
+        assert_eq!(
+            block.align_to_instruction(&Pointer::from(0x102)),
+            Some(Pointer::from(0x100))
+        );
+        assert_eq!(
+            block.align_to_instruction(&Pointer::from(0x104)),
+            Some(Pointer::from(0x103))
+        );
+    }
+
+    #[test]
+    fn block_last_instr() {
+        let mut block = Block::from_parts(Pointer::from(0x100), 0x50);
+
+        block.mark_instr_at(Pointer::from(0x100));
+        block.mark_instr_at(Pointer::from(0x103));
+        block.mark_instr_at(Pointer::from(0x106));
+        block.mark_instr_at(Pointer::from(0x107));
+        block.mark_instr_at(Pointer::from(0x108));
+        block.mark_instr_at(Pointer::from(0x109));
+        block.mark_instr_at(Pointer::from(0x10C));
+        block.mark_instr_at(Pointer::from(0x10D));
+        block.mark_instr_at(Pointer::from(0x10E));
+        block.mark_instr_at(Pointer::from(0x10F));
+
+        assert_eq!(
+            block.last_instruction(&Pointer::from(0x107), 1),
+            Some(InstrLocation::InsideBlock(0x6))
+        );
+
+        assert_eq!(
+            block.last_instruction(&Pointer::from(0x100), 1),
+            Some(InstrLocation::OutsideBlock(1))
+        );
+
+        assert_eq!(
+            block.last_instruction(&Pointer::from(0x102), 1),
+            Some(InstrLocation::OutsideBlock(1))
+        );
+
+        assert_eq!(
+            block.last_instruction(&Pointer::from(0x105), 1),
+            Some(InstrLocation::InsideBlock(0))
+        );
+
+        assert_eq!(
+            block.last_instruction(&Pointer::from(0x10F), 3),
+            Some(InstrLocation::InsideBlock(0xC))
+        );
+
+        assert_eq!(
+            block.last_instruction(&Pointer::from(0x107), 5),
+            Some(InstrLocation::OutsideBlock(2))
+        );
+    }
+
+    #[test]
+    fn block_next_instr() {
+        let mut block = Block::from_parts(Pointer::from(0x100), 0x50);
+
+        block.mark_instr_at(Pointer::from(0x100));
+        block.mark_instr_at(Pointer::from(0x103));
+        block.mark_instr_at(Pointer::from(0x106));
+        block.mark_instr_at(Pointer::from(0x107));
+        block.mark_instr_at(Pointer::from(0x108));
+        block.mark_instr_at(Pointer::from(0x109));
+        block.mark_instr_at(Pointer::from(0x10C));
+        block.mark_instr_at(Pointer::from(0x10D));
+        block.mark_instr_at(Pointer::from(0x10E));
+        block.mark_instr_at(Pointer::from(0x10F));
+
+        assert_eq!(
+            block.next_instruction(&Pointer::from(0x107), 1),
+            Some(InstrLocation::InsideBlock(0x8))
+        );
+
+        assert_eq!(
+            block.next_instruction(&Pointer::from(0x10F), 1),
+            Some(InstrLocation::OutsideBlock(1))
+        );
+
+        assert_eq!(
+            block.next_instruction(&Pointer::from(0x11F), 1),
+            Some(InstrLocation::OutsideBlock(1))
+        );
+
+        assert_eq!(
+            block.next_instruction(&Pointer::from(0x105), 1),
+            Some(InstrLocation::InsideBlock(0x6))
+        );
+
+        assert_eq!(
+            block.next_instruction(&Pointer::from(0x100), 3),
+            Some(InstrLocation::InsideBlock(0x7))
+        );
+
+        assert_eq!(
+            block.next_instruction(&Pointer::from(0x10C), 5),
+            Some(InstrLocation::OutsideBlock(2))
+        );
     }
 }

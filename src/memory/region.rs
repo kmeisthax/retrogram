@@ -196,6 +196,19 @@ where
             .and_then(|r| r.encode_image_offset(position.image_index()))
     }
 
+    /// Decode an image address into a tumbler.
+    pub fn decode_tumbler(&self, ptr: Pointer<AR::PtrVal>) -> Option<Tumbler> {
+        for (region_index, view) in self.views.iter().enumerate() {
+            if view.is_ptr_within(ptr.clone()) {
+                if let Some(image_index) = view.image.decode_addr(&ptr, view.start.clone()) {
+                    return Some((region_index, image_index).into());
+                }
+            }
+        }
+
+        None
+    }
+
     /// Retrieve a certain number of bytes at a given tumbler index.
     pub fn retrieve_at_tumbler(&self, position: Tumbler, count: usize) -> Option<&[AR::Byte]> {
         self.views
