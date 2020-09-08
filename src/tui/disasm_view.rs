@@ -133,6 +133,31 @@ where
         address.len()
     }
 
+    /// Draw any labels at a given address.
+    ///
+    /// The returned size is the length of the rendered label.
+    fn draw_labels(
+        &self,
+        printer: &Printer,
+        pos: XY<usize>,
+        enc: &Pointer<AR::PtrVal>,
+        db: &mut Database<AR>,
+    ) -> usize {
+        if let Some(sym) = db.pointer_symbol(enc).and_then(|id| db.symbol(id)) {
+            let mut new_assembly = Section::new("");
+
+            new_assembly
+                .append_directive(Directive::DeclareLabel(sym.as_label().clone()), enc.clone());
+
+            let label_string = (self.fmt_section)(&new_assembly);
+            printer.print(pos, label_string.trim());
+
+            return label_string.trim().len();
+        }
+
+        0
+    }
+
     /// Draw an instruction to the screen.
     fn draw_instr(
         &self,
@@ -155,7 +180,7 @@ where
                 instr_directive = replace_labels(instr_directive, db, &self.bus);
 
                 let instr = (self.fmt_section)(&instr_directive);
-                printer.print(pos, &instr.trim().to_string());
+                printer.print(pos, instr.trim());
             }
             Err(e) => printer.print(pos, &format!("Error ({})", e)),
         }
@@ -186,7 +211,13 @@ where
             }
 
             if let Some(enc) = self.bus.encode_tumbler(position) {
-                let addr_width = self.draw_addr(printer, XY::new(0, line), &enc);
+                let mut addr_width = self.draw_addr(printer, XY::new(0, line), &enc);
+
+                let label_width = self.draw_labels(printer, XY::new(addr_width, line), &enc, db);
+                if label_width > 0 {
+                    addr_width += label_width + 1;
+                }
+
                 if let Some(_block) = db.find_block_membership(&enc).and_then(|bid| db.block(bid)) {
                     self.draw_instr(printer, XY::new(addr_width, line), &enc, &mut db);
                 } else if let Some(data) = self.bus.retrieve_at_tumbler(position, 1) {
