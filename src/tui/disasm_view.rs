@@ -2,7 +2,7 @@
 
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::ast::{Directive, Section};
-use crate::memory::{Memory, Tumbler};
+use crate::memory::{Memory, Pointer, Tumbler};
 use crate::project::ProjectDatabase;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::{Printer, View, XY};
@@ -120,6 +120,35 @@ where
             self.position = position;
         }
     }
+
+    /// Draw an address to the screen.
+    fn draw_addr(&self, printer: &Printer, pos: XY<usize>, enc: &Pointer<AR::PtrVal>) -> usize {
+        let address = format!("${:X}: ", enc);
+
+        printer.print(pos, &address);
+
+        address.len()
+    }
+
+    /// Draw an instruction to the screen.
+    fn draw_instr(&self, printer: &Printer, pos: XY<usize>, enc: &Pointer<AR::PtrVal>) {
+        let disasm = self.arch.disassemble(&enc, &self.bus);
+
+        match disasm {
+            Ok(disasm) => {
+                let mut instr_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
+                    Section::new("");
+                instr_directive.append_directive(
+                    Directive::EmitInstr(disasm.as_instr().clone(), disasm.next_offset()),
+                    enc.clone(),
+                );
+
+                let instr = (self.fmt_section)(&instr_directive);
+                printer.print(pos, &instr.trim().to_string());
+            }
+            Err(e) => printer.print(pos, &format!("Error ({})", e)),
+        }
+    }
 }
 
 impl<L, AR, FMT> View for DisassemblyView<L, AR, FMT>
@@ -145,26 +174,9 @@ where
             }
 
             if let Some(enc) = self.bus.encode_tumbler(position) {
+                let addr_width = self.draw_addr(printer, XY::new(0, line), &enc);
                 if let Some(_block) = db.find_block_membership(&enc).and_then(|bid| db.block(bid)) {
-                    let disasm = self.arch.disassemble(&enc, &self.bus);
-
-                    match disasm {
-                        Ok(disasm) => {
-                            let mut instr_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
-                                Section::new("");
-                            instr_directive.append_directive(
-                                Directive::EmitInstr(
-                                    disasm.as_instr().clone(),
-                                    disasm.next_offset(),
-                                ),
-                                enc.clone(),
-                            );
-
-                            let instr = (self.fmt_section)(&instr_directive);
-                            printer.print((0, line), &format!("${:X}: {}", enc, instr.trim()));
-                        }
-                        Err(e) => printer.print((0, line), &format!("${:?}: Error ({})", enc, e)),
-                    }
+                    self.draw_instr(printer, XY::new(addr_width, line), &enc);
                 } else if let Some(data) = self.bus.retrieve_at_tumbler(position, 1) {
                     let mut data_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
                         Section::new("");
@@ -172,7 +184,7 @@ where
                         .append_directive(Directive::EmitData(data.to_vec()), enc.clone());
 
                     let data = (self.fmt_section)(&data_directive);
-                    printer.print((0, line), &format!("${:X}: {}", enc, data.trim()));
+                    printer.print(XY::new(addr_width, line), &data.trim().to_string());
                 } else {
                     let mut space_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
                         Section::new("");
@@ -182,7 +194,7 @@ where
                     );
 
                     let space = (self.fmt_section)(&space_directive);
-                    printer.print((0, line), &format!("${:X}: {}", enc, space.trim()));
+                    printer.print(XY::new(addr_width, line), &space.trim().to_string());
                 }
             } else {
                 printer.print(
