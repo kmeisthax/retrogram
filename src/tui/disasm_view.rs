@@ -1,7 +1,9 @@
 //! Disassembly view
 
+use crate::analysis::replace_labels;
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::ast::{Directive, Section};
+use crate::database::Database;
 use crate::memory::{Memory, Pointer, Tumbler};
 use crate::project::ProjectDatabase;
 use cursive::event::{Callback, Event, EventResult, Key};
@@ -45,6 +47,7 @@ where
 impl<L, AR, FMT> DisassemblyView<L, AR, FMT>
 where
     L: CompatibleLiteral<AR>,
+    L::PtrVal: Into<AR::PtrVal>,
     AR: Architecture,
     FMT: Fn(&Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
 {
@@ -131,7 +134,13 @@ where
     }
 
     /// Draw an instruction to the screen.
-    fn draw_instr(&self, printer: &Printer, pos: XY<usize>, enc: &Pointer<AR::PtrVal>) {
+    fn draw_instr(
+        &self,
+        printer: &Printer,
+        pos: XY<usize>,
+        enc: &Pointer<AR::PtrVal>,
+        db: &mut Database<AR>,
+    ) {
         let disasm = self.arch.disassemble(&enc, &self.bus);
 
         match disasm {
@@ -142,6 +151,8 @@ where
                     Directive::EmitInstr(disasm.as_instr().clone(), disasm.next_offset()),
                     enc.clone(),
                 );
+
+                instr_directive = replace_labels(instr_directive, db, &self.bus);
 
                 let instr = (self.fmt_section)(&instr_directive);
                 printer.print(pos, &instr.trim().to_string());
@@ -155,6 +166,7 @@ impl<L, AR, FMT> View for DisassemblyView<L, AR, FMT>
 where
     L: 'static + CompatibleLiteral<AR>,
     AR: 'static + Architecture,
+    L::PtrVal: Into<AR::PtrVal>,
     FMT: 'static + Fn(&Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
     AR::Offset: TryInto<usize>,
     <AR::Offset as TryFrom<u8>>::Error: std::fmt::Debug,
@@ -165,7 +177,7 @@ where
 
         let mut db_lock = self.pjdb.write().unwrap();
 
-        let db = db_lock.get_database_mut(&self.prog_name);
+        let mut db = db_lock.get_database_mut(&self.prog_name);
 
         for line in 0..printer.size.y {
             if self.bus.region_count() == 0 {
@@ -176,7 +188,7 @@ where
             if let Some(enc) = self.bus.encode_tumbler(position) {
                 let addr_width = self.draw_addr(printer, XY::new(0, line), &enc);
                 if let Some(_block) = db.find_block_membership(&enc).and_then(|bid| db.block(bid)) {
-                    self.draw_instr(printer, XY::new(addr_width, line), &enc);
+                    self.draw_instr(printer, XY::new(addr_width, line), &enc, &mut db);
                 } else if let Some(data) = self.bus.retrieve_at_tumbler(position, 1) {
                     let mut data_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
                         Section::new("");
