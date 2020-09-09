@@ -334,20 +334,11 @@ where
         let block = self.blocks.get_mut(block_id);
 
         if let Some(block) = block {
-            if &new_size < block.as_length() {
-                let remaining_size = block.as_length().clone() - new_size.clone();
-                let new_block_start = block
-                    .as_start()
-                    .contextualize(block.as_start().as_pointer().clone() + new_size.clone());
+            let new_block = block.split_block(new_size)?;
+            let id = self.blocks.len();
+            self.blocks.push(new_block);
 
-                *block = analysis::Block::from_parts(block.as_start().clone(), new_size);
-                let new_block = analysis::Block::from_parts(new_block_start, remaining_size);
-
-                let id = self.blocks.len();
-                self.blocks.push(new_block);
-
-                return Some(id);
-            }
+            return Some(id);
         }
 
         None
