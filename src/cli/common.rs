@@ -258,7 +258,7 @@ where
 /// particular architecture. It is responsible for instantiating your code
 /// across each architecture's particular type system.
 macro_rules! with_architecture {
-    ($prog:ident, $image_file:ident, |$bus:ident, $fmt_section:ident, $fmt_instr:ident, $arch:ident| $callback:block) => {
+    ($prog:ident, $image_file:ident, |$bus:ident, $arch:ident, $asm:ident| $callback:block) => {
         match crate::cli::resolve_program_config($prog)? {
             (
                 crate::arch::ArchName::SM83,
@@ -266,12 +266,7 @@ macro_rules! with_architecture {
                 crate::asm::AssemblerName::RGBDS,
             ) => {
                 let $bus = crate::platform::gb::construct_platform(&mut $image_file)?;
-                let $fmt_section = crate::asm::rgbds::format_section::<
-                    crate::arch::sm83::PtrVal,
-                    crate::arch::sm83::Data,
-                    crate::arch::sm83::Offset,
-                >;
-                let $fmt_instr = crate::asm::rgbds::format_instr;
+                let $asm = crate::asm::rgbds::RGBDS();
                 let $arch = crate::arch::sm83::SM83();
                 $callback
             }
@@ -281,12 +276,7 @@ macro_rules! with_architecture {
                 crate::asm::AssemblerName::ARMIPS,
             ) => {
                 let $bus = crate::platform::agb::construct_platform(&mut $image_file)?;
-                let $fmt_section = crate::asm::armips::format_section::<
-                    crate::arch::aarch32::PtrVal,
-                    crate::arch::aarch32::Data,
-                    crate::arch::aarch32::Offset,
-                >;
-                let $fmt_instr = crate::asm::armips::format_instr;
+                let $asm = crate::asm::armips::ARMIPS();
                 let $arch = crate::arch::aarch32::AArch32();
                 $callback
             }

@@ -2,7 +2,7 @@
 
 use crate::analysis::{analyze_trace_log, trace_until_fork, Prerequisite, Trace, TraceEvent};
 use crate::arch::{Architecture, CompatibleLiteral};
-use crate::ast::Instruction;
+use crate::asm::Assembler;
 use crate::cli::common::reg_parse;
 use crate::input::parse_ptr;
 use crate::maths::FromStrRadix;
@@ -43,16 +43,11 @@ impl NextAction {
 }
 
 /// Print a tracelog out to the console as a table.
-fn print_tracelog<L, AR, FMTI>(
-    trace: Trace<AR>,
-    bus: &Memory<AR>,
-    arch: AR,
-    fmt_i: FMTI,
-) -> io::Result<()>
+fn print_tracelog<AR, ASM>(trace: Trace<AR>, bus: &Memory<AR>, arch: AR, asm: ASM) -> io::Result<()>
 where
-    L: CompatibleLiteral<AR>,
     AR: Architecture,
-    FMTI: Fn(&Instruction<L>) -> String,
+    ASM: Assembler,
+    ASM::Literal: CompatibleLiteral<AR>,
 {
     let mut pc_list = vec![];
     let mut instr_list = vec![];
@@ -64,7 +59,14 @@ where
                 let disasm = arch.disassemble(pc, bus).map_err(Into::<io::Error>::into)?;
 
                 pc_list.push(format!("${:X}", pc));
-                instr_list.push(fmt_i(disasm.as_instr()).to_string());
+
+                let mut instr_data = Vec::new();
+                asm.emit_instr(&mut instr_data, disasm.as_instr())
+                    .map_err(Into::<io::Error>::into)?;
+
+                instr_list.push(String::from_utf8(instr_data).map_err(|e| {
+                    io::Error::new(io::ErrorKind::Other, format!("UTF-8 parsing error: {}", e))
+                })?);
                 event_list.push("".to_string());
             }
             TraceEvent::RegisterSet(reg, val) => {
@@ -337,13 +339,13 @@ where
     Ok(())
 }
 
-fn trace_for_arch<'a, L, AR, FMTI>(
+fn trace_for_arch<'a, AR, ASM>(
     prog: &project::Program,
     argv: &ArgMatches<'a>,
     start_spec: &str,
     bus: &Memory<AR>,
-    fmt_i: FMTI,
     arch: AR,
+    asm: ASM,
 ) -> io::Result<()>
 where
     AR: 'static + Architecture,
@@ -351,8 +353,8 @@ where
     AR::Byte: FromStrRadix,
     for<'dw> AR::PtrVal: Deserialize<'dw> + FromStrRadix,
     for<'dw> AR::Offset: Deserialize<'dw>,
-    L: CompatibleLiteral<AR>,
-    FMTI: Copy + Fn(&Instruction<L>) -> String,
+    ASM: Assembler,
+    ASM::Literal: CompatibleLiteral<AR>,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
@@ -404,7 +406,7 @@ where
 
                 traced_blocks = traced_blocks
                     .union(
-                        &analyze_trace_log::<L, AR>(&trace, bus, db, arch)
+                        &analyze_trace_log::<ASM::Literal, AR>(&trace, bus, db, arch)
                             .map_err(Into::<io::Error>::into)?,
                     )
                     .copied()
@@ -414,7 +416,7 @@ where
                 missing = new_missing;
                 pc = state.contextualize_pointer(halt_pc);
 
-                print_tracelog(trace, bus, arch, fmt_i)?;
+                print_tracelog(trace, bus, arch, asm.clone())?;
 
                 print_prereqs(pc.clone(), missing.iter());
             }
@@ -460,7 +462,7 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus, _fmt_s, fmt_i, arch| {
-        trace_for_arch(prog, argv, start_spec, &bus, fmt_i, arch)
+    with_architecture!(prog, file, |bus, arch, asm| {
+        trace_for_arch(prog, argv, start_spec, &bus, arch, asm)
     })
 }

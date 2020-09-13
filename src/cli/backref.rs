@@ -1,23 +1,24 @@
 //! Backreference list command for retrogram
 
 use crate::arch::{Architecture, CompatibleLiteral};
-use crate::{analysis, ast, input, maths, memory, project};
+use crate::asm::Assembler;
+use crate::{analysis, input, maths, memory, project};
 use clap::ArgMatches;
 use num_traits::One;
 use std::{fs, io};
 
-fn backref_inner<L, FMT, AR>(
+fn backref_inner<AR, ASM>(
     prog: &project::Program,
     start_spec: &str,
     bus: &memory::Memory<AR>,
-    fmt: FMT,
     arch: AR,
+    asm: ASM,
 ) -> io::Result<()>
 where
-    L: CompatibleLiteral<AR>,
     AR: Architecture,
     AR::PtrVal: maths::FromStrRadix,
-    FMT: Fn(&ast::Instruction<L>) -> String,
+    ASM: Assembler,
+    ASM::Literal: CompatibleLiteral<AR>,
 {
     let mut pjdb = project::ProjectDatabase::read(prog.as_database_path())?;
     let db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
@@ -43,10 +44,12 @@ where
                 Ok(disasm) => {
                     let instr_asm = disasm.as_instr();
 
+                    println!("{:X}: ", xref.as_source());
+
+                    asm.emit_instr(&mut io::stdout(), instr_asm)?;
+
                     println!(
-                        "{:X}: {} ({})",
-                        xref.as_source(),
-                        fmt(instr_asm),
+                        " ({})",
                         match xref.kind() {
                             analysis::ReferenceKind::Unknown => "Unknown",
                             analysis::ReferenceKind::Data => "Data",
@@ -84,7 +87,7 @@ pub fn backref<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus, _fmt_sec, fmt_instr, arch| {
-        backref_inner(prog, start_spec, &bus, fmt_instr, arch)
+    with_architecture!(prog, file, |bus, arch, asm| {
+        backref_inner(prog, start_spec, &bus, arch, asm)
     })
 }

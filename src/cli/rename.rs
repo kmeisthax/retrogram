@@ -63,7 +63,7 @@ pub fn rename<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus, _fmt_section, _fmt_instr, arch| {
+    with_architecture!(prog, file, |bus, arch, _asm| {
         rename_inner(prog, from_spec, to_spec, &bus, arch)
     })
 }

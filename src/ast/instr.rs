@@ -30,6 +30,10 @@ where
         &self.opcode
     }
 
+    pub fn operand_count(&self) -> usize {
+        self.operands.len()
+    }
+
     pub fn iter_operands(&self) -> slice::Iter<Operand<L>> {
         self.operands.iter()
     }

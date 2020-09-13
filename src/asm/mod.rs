@@ -2,6 +2,9 @@
 
 pub mod armips;
 pub mod rgbds;
+mod traits;
+
+pub use traits::Assembler;
 
 use serde::Serialize;
 use std::str;

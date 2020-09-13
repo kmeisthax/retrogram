@@ -13,6 +13,9 @@ where
     /// Underlying cause of error is I/O related
     IOError(io::Error),
 
+    /// Underlying cause of error is formatting related
+    FormatError(fmt::Error),
+
     /// Read an unconstrained value from memory.
     ///
     /// Unconstrained means that the value returned from the memory model has
@@ -62,6 +65,7 @@ where
 
         match self {
             IOError(e) => write!(f, "I/O error: {}", e),
+            FormatError(e) => write!(f, "Formatting error: {}", e),
             Error::UnconstrainedMemory(p) => write!(f, "Location {:X} is not valid", p),
             UnconstrainedRegister => write!(f, "Prereq analysis failed for instruction"),
             InvalidInstruction => write!(f, "Invalid instruction"),
@@ -84,6 +88,7 @@ where
 
         match self {
             IOError(e) => Some(e),
+            FormatError(e) => Some(e),
             _ => None,
         }
     }

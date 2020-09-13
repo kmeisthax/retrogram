@@ -2,25 +2,26 @@
 
 use crate::analysis::{Block, ReferenceKind};
 use crate::arch::{Architecture, CompatibleLiteral};
-use crate::{analysis, ast, input, maths, memory, project};
+use crate::asm::Assembler;
+use crate::{analysis, input, maths, memory, project};
 use clap::ArgMatches;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::{fs, io};
 
-fn dis_inner<L, FMT, AR>(
+fn dis_inner<AR, ASM>(
     prog: &project::Program,
     start_spec: &str,
     bus: &memory::Memory<AR>,
-    format: FMT,
     arch: AR,
+    asm: ASM,
 ) -> io::Result<()>
 where
-    L: CompatibleLiteral<AR, PtrVal = AR::PtrVal>,
     AR: Architecture,
     for<'dw> AR::PtrVal: serde::Deserialize<'dw> + maths::FromStrRadix,
     for<'dw> AR::Offset: serde::Deserialize<'dw>,
-    FMT: Fn(&ast::Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
+    ASM: Assembler,
+    ASM::Literal: CompatibleLiteral<AR, PtrVal = AR::PtrVal>,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
@@ -186,7 +187,8 @@ where
         let labeled_asm = analysis::replace_labels(orig_asm, db, bus);
         let injected_asm = analysis::inject_labels(labeled_asm, db);
         let orgd_asm = analysis::inject_orgs(injected_asm);
-        println!("{}", format(&orgd_asm));
+
+        asm.emit_section(&mut io::stdout(), &orgd_asm)?;
     }
 
     Ok(())
@@ -202,7 +204,7 @@ pub fn dis<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()>
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus, fmt_section, _fmt_instr, arch| {
-        dis_inner(prog, start_spec, &bus, fmt_section, arch)
+    with_architecture!(prog, file, |bus, arch, asm| {
+        dis_inner(prog, start_spec, &bus, arch, asm)
     })
 }

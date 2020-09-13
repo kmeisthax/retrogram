@@ -2,7 +2,7 @@
 
 use crate::analysis::{analyze_trace_log, trace_until_fork, Fork, Trace};
 use crate::arch::{Architecture, CompatibleLiteral};
-use crate::ast::Instruction;
+use crate::asm::Assembler;
 use crate::cli::common::reg_parse;
 use crate::database::Database;
 use crate::maths::FromStrRadix;
@@ -283,16 +283,15 @@ where
 ///
 /// TODO: The current set of lifetime bounds preclude the use of zero-copy
 /// deserialization. We should figure out a way around that.
-fn scan_for_arch<'a, L, AR, FMTI>(
+fn scan_for_arch<'a, AR, ASM>(
     prog: &project::Program,
     start_spec: &str,
     bus: &memory::Memory<AR>,
     arch: AR,
-    _fmt_i: FMTI, // This shouldn't be necessary...
+    _asm: ASM,
     argv: &ArgMatches<'a>,
 ) -> io::Result<()>
 where
-    L: CompatibleLiteral<AR>,
     AR: Architecture,
     AR::Word: TryInto<u64> + FromStrRadix,
     for<'dw> AR::PtrVal: serde::Deserialize<'dw> + serde::Serialize + maths::FromStrRadix,
@@ -301,7 +300,8 @@ where
     reg::Symbolic<AR::Word>: Bitwise,
     reg::Symbolic<AR::Byte>: Default + Bitwise,
     analysis::Error<AR>: Into<io::Error>,
-    FMTI: Fn(&Instruction<L>) -> String,
+    ASM: Assembler,
+    ASM::Literal: CompatibleLiteral<AR>,
 {
     let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
@@ -325,7 +325,7 @@ where
     let start_pc = input::parse_ptr(start_spec, db, bus, arch)
         .expect("Must specify a valid address to analyze");
     eprintln!("Starting scan from {:X}", start_pc);
-    match scan_pc_for_arch::<L, AR>(&mut db, &start_pc, bus, arch) {
+    match scan_pc_for_arch::<ASM::Literal, AR>(&mut db, &start_pc, bus, arch) {
         Ok(_) => {}
         Err(e) => {
             eprintln!("Initial scan failed due to {}", e);
@@ -335,15 +335,19 @@ where
     };
 
     loop {
-        let (did_find_code, _) = exhaust_all_static_scans::<L, AR>(&mut db, bus, arch);
+        let (did_find_code, _) = exhaust_all_static_scans::<ASM::Literal, AR>(&mut db, bus, arch);
         if !did_find_code {
             break;
         }
 
         if is_tracing_allowed {
-            let did_trace_branches =
-                exhaust_all_dynamic_scans::<L, AR>(&mut db, bus, arch, poweron_state.clone())
-                    .map_err(Into::<io::Error>::into)?;
+            let did_trace_branches = exhaust_all_dynamic_scans::<ASM::Literal, AR>(
+                &mut db,
+                bus,
+                arch,
+                poweron_state.clone(),
+            )
+            .map_err(Into::<io::Error>::into)?;
             if !did_trace_branches {
                 break;
             }
@@ -368,7 +372,7 @@ pub fn scan<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus, _fmt_s, fmt_i, arch| {
-        scan_for_arch(prog, start_spec, &bus, arch, fmt_i, argv)
+    with_architecture!(prog, file, |bus, arch, asm| {
+        scan_for_arch(prog, start_spec, &bus, arch, asm, argv)
     })
 }

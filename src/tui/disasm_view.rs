@@ -1,21 +1,20 @@
 //! Disassembly view
 
 use crate::arch::{Architecture, CompatibleLiteral};
-use crate::ast::{Directive, Section};
+use crate::asm::Assembler;
 use crate::memory::{Memory, Tumbler};
 use crate::project::ProjectDatabase;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::{Printer, View, XY};
 use std::convert::{TryFrom, TryInto};
-use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
 /// Renders a disassembly in a TUI context.
-pub struct DisassemblyView<L, AR, FMT>
+pub struct DisassemblyView<AR, ASM>
 where
-    L: CompatibleLiteral<AR>,
     AR: Architecture,
-    FMT: Fn(&Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
+    ASM: Assembler,
+    ASM::Literal: CompatibleLiteral<AR>,
 {
     /// The database repository to pull information from.
     pjdb: Arc<RwLock<ProjectDatabase<AR>>>,
@@ -32,28 +31,25 @@ where
     /// The current view size.
     size: XY<usize>,
 
-    /// The section-formatting callback.
-    fmt_section: FMT,
-
     /// The architecture itself.
     arch: AR,
 
-    /// Phantom literal data.
-    phantom_literal: PhantomData<L>,
+    /// The assembler syntax to format things with.
+    asm: ASM,
 }
 
-impl<L, AR, FMT> DisassemblyView<L, AR, FMT>
+impl<AR, ASM> DisassemblyView<AR, ASM>
 where
-    L: CompatibleLiteral<AR>,
     AR: Architecture,
-    FMT: Fn(&Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
+    ASM: Assembler,
+    ASM::Literal: CompatibleLiteral<AR>,
 {
     pub fn new(
         pjdb: Arc<RwLock<ProjectDatabase<AR>>>,
         prog_name: &str,
         bus: Arc<Memory<AR>>,
-        fmt_section: FMT,
         arch: AR,
+        asm: ASM,
     ) -> Self {
         let s = Self {
             pjdb,
@@ -61,9 +57,8 @@ where
             bus,
             position: Tumbler::default(),
             size: (0, 0).into(),
-            fmt_section,
             arch,
-            phantom_literal: PhantomData,
+            asm,
         };
 
         s.pjdb
@@ -122,14 +117,14 @@ where
     }
 }
 
-impl<L, AR, FMT> View for DisassemblyView<L, AR, FMT>
+impl<AR, ASM> View for DisassemblyView<AR, ASM>
 where
-    L: 'static + CompatibleLiteral<AR>,
     AR: 'static + Architecture,
-    FMT: 'static + Fn(&Section<L, AR::PtrVal, AR::Byte, AR::Offset>) -> String,
     AR::Offset: TryInto<usize>,
     <AR::Offset as TryFrom<u8>>::Error: std::fmt::Debug,
     <AR::Offset as TryInto<usize>>::Error: std::fmt::Debug,
+    ASM: 'static + Assembler,
+    ASM::Literal: CompatibleLiteral<AR>,
 {
     fn draw(&self, printer: &Printer) {
         let mut position = self.position;
@@ -150,38 +145,27 @@ where
 
                     match disasm {
                         Ok(disasm) => {
-                            let mut instr_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
-                                Section::new("");
-                            instr_directive.append_directive(
-                                Directive::EmitInstr(
-                                    disasm.as_instr().clone(),
-                                    disasm.next_offset(),
-                                ),
-                                enc.clone(),
-                            );
+                            let mut instr_data = Vec::new();
+                            self.asm
+                                .emit_instr(&mut instr_data, &disasm.as_instr())
+                                .unwrap();
 
-                            let instr = (self.fmt_section)(&instr_directive);
+                            let instr = String::from_utf8(instr_data).unwrap();
                             printer.print((0, line), &format!("${:X}: {}", enc, instr.trim()));
                         }
                         Err(e) => printer.print((0, line), &format!("${:?}: Error ({})", enc, e)),
                     }
                 } else if let Some(data) = self.bus.retrieve_at_tumbler(position, 1) {
-                    let mut data_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
-                        Section::new("");
-                    data_directive
-                        .append_directive(Directive::EmitData(data.to_vec()), enc.clone());
+                    let mut data_data = Vec::new();
+                    self.asm.emit_data(&mut data_data, data).unwrap();
 
-                    let data = (self.fmt_section)(&data_directive);
+                    let data = String::from_utf8(data_data).unwrap();
                     printer.print((0, line), &format!("${:X}: {}", enc, data.trim()));
                 } else {
-                    let mut space_directive: Section<L, AR::PtrVal, AR::Byte, AR::Offset> =
-                        Section::new("");
-                    space_directive.append_directive(
-                        Directive::EmitSpace(AR::Offset::try_from(1).unwrap()),
-                        enc.clone(),
-                    );
+                    let mut space_data = Vec::new();
+                    self.asm.emit_space(&mut space_data, 1).unwrap();
 
-                    let space = (self.fmt_section)(&space_directive);
+                    let space = String::from_utf8(space_data).unwrap();
                     printer.print((0, line), &format!("${:X}: {}", enc, space.trim()));
                 }
             } else {
