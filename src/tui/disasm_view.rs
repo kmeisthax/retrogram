@@ -1,12 +1,14 @@
 //! Disassembly view
 
 use crate::arch::{Architecture, CompatibleLiteral};
-use crate::asm::Assembler;
+use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
 use crate::memory::{Memory, Tumbler};
 use crate::project::ProjectDatabase;
 use cursive::event::{Callback, Event, EventResult, Key};
+use cursive::theme::{ColorStyle, Color, BaseColor, PaletteColor};
 use cursive::{Printer, View, XY};
 use std::convert::{TryFrom, TryInto};
+use std::io::Write;
 use std::sync::{Arc, RwLock};
 
 /// Renders a disassembly in a TUI context.
@@ -139,40 +141,54 @@ where
                 break;
             }
 
+            let mut at = AnnotatedText::new();
+
             if let Some(enc) = self.bus.encode_tumbler(position) {
+                at.change_annotation(AnnotationKind::Syntactic);
+                write!(at.as_writer(), "${:X}: ", enc);
+
                 if let Some(_block) = db.find_block_membership(&enc).and_then(|bid| db.block(bid)) {
                     let disasm = self.arch.disassemble(&enc, &self.bus);
 
                     match disasm {
                         Ok(disasm) => {
-                            let mut instr_data = Vec::new();
-                            self.asm
-                                .emit_instr(&mut instr_data, &disasm.as_instr())
-                                .unwrap();
-
-                            let instr = String::from_utf8(instr_data).unwrap();
-                            printer.print((0, line), &format!("${:X}: {}", enc, instr.trim()));
+                            at.emit_instr(self.asm.clone(), &disasm.as_instr()).unwrap();
                         }
-                        Err(e) => printer.print((0, line), &format!("${:?}: Error ({})", enc, e)),
+                        Err(e) => {
+                            at.change_annotation(AnnotationKind::Error);
+                            writeln!(at.as_writer(), "Error ({})", e);
+                        }
                     }
                 } else if let Some(data) = self.bus.retrieve_at_tumbler(position, 1) {
-                    let mut data_data = Vec::new();
-                    self.asm.emit_data(&mut data_data, data).unwrap();
-
-                    let data = String::from_utf8(data_data).unwrap();
-                    printer.print((0, line), &format!("${:X}: {}", enc, data.trim()));
+                    at.emit_data(self.asm.clone(), data).unwrap();
                 } else {
-                    let mut space_data = Vec::new();
-                    self.asm.emit_space(&mut space_data, 1).unwrap();
-
-                    let space = String::from_utf8(space_data).unwrap();
-                    printer.print((0, line), &format!("${:X}: {}", enc, space.trim()));
+                    at.emit_space(self.asm.clone(), 1).unwrap();
                 }
             } else {
-                printer.print(
-                    (0, line),
-                    &format!("Invalid offset! ${:X}", position.image_index()),
+                at.change_annotation(AnnotationKind::Error);
+                writeln!(
+                    at.as_writer(),
+                    "Invalid offset! ${:X}",
+                    position.image_index()
                 );
+            }
+
+            let mut pos = 0;
+
+            for res in at.iter_annotations() {
+                let (text, annotation) = res.unwrap();
+                let color_style = match annotation {
+                    AnnotationKind::Syntactic => ColorStyle::new(PaletteColor::Primary, PaletteColor::View),
+                    AnnotationKind::Comment => ColorStyle::new(Color::Dark(BaseColor::Green), PaletteColor::View),
+                    AnnotationKind::Label => ColorStyle::new(Color::Dark(BaseColor::Blue), PaletteColor::View),
+                    AnnotationKind::Data => ColorStyle::new(Color::Dark(BaseColor::Yellow), PaletteColor::View),
+                    AnnotationKind::Opcode => ColorStyle::new(Color::Dark(BaseColor::Cyan), PaletteColor::View),
+                    AnnotationKind::Error => ColorStyle::new(Color::Dark(BaseColor::Red), PaletteColor::View),
+                };
+
+                printer.with_color(color_style, |printer| printer.print((pos, line), text.trim()));
+
+                pos += text.trim().len();
             }
 
             position = position.scroll_forward_by_lines(&self.bus, db, 1).unwrap();

@@ -1,9 +1,11 @@
 //! Interop with different assembler syntaxes
 
+mod annotator;
 pub mod armips;
 pub mod rgbds;
 mod traits;
 
+pub use annotator::{AnnotatedText, AnnotationKind};
 pub use traits::Assembler;
 
 use serde::Serialize;
