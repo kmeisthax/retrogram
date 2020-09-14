@@ -38,3 +38,15 @@ where
     /// Declare a comment.
     DeclareComment(String),
 }
+
+impl<L, P, MV, S> Directive<L, P, MV, S>
+where
+    L: Literal,
+{
+    pub fn is_emit_instr(&self) -> bool {
+        match self {
+            Self::EmitInstr(_, _) => true,
+            _ => false,
+        }
+    }
+}

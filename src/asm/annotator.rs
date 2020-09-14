@@ -225,7 +225,7 @@ impl AnnotatedText {
     }
 
     /// Emit a label declaration into annotated text.
-    fn emit_label_decl<ASM>(&mut self, asm: ASM, label: &Label) -> Result<()>
+    pub fn emit_label_decl<ASM>(&mut self, asm: ASM, label: &Label) -> Result<()>
     where
         ASM: Assembler,
     {

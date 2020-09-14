@@ -7,6 +7,7 @@ use crate::ast::{Literal, Operand};
 use crate::cli::Nameable;
 use crate::database::Database;
 use crate::maths::CheckedAdd;
+use crate::memory::Pointer;
 use crate::{analysis, ast, memory};
 use num::Zero;
 use std::collections::HashSet;
@@ -162,13 +163,14 @@ pub fn replace_operand_with_label<L, AR>(
 ) -> Operand<L>
 where
     AR: Architecture,
-    L: Literal<PtrVal = AR::PtrVal>,
+    L: CompatibleLiteral<AR>,
+    L::PtrVal: Into<AR::PtrVal>,
     Operand<L>: Clone,
 {
     match src_operand {
         ast::Operand::Literal(l) if l.is_pointer() => {
-            let pt = l.into_pointer().unwrap();
-            let cpt = memory.minimize_context(pt);
+            let (pt, ctxt) = l.into_pointer().unwrap().into_ptrval_and_contexts();
+            let cpt = memory.minimize_context(Pointer::from_ptrval_and_contexts(pt.into(), ctxt));
 
             if let Some(sym_id) = db.pointer_symbol(&cpt) {
                 let sym = db
@@ -213,7 +215,8 @@ pub fn replace_labels<L, AR>(
 ) -> ast::Section<L, AR::PtrVal, AR::Byte, AR::Offset>
 where
     AR: Architecture,
-    L: Literal<PtrVal = AR::PtrVal>,
+    L: CompatibleLiteral<AR>,
+    L::PtrVal: Into<AR::PtrVal>,
     Operand<L>: Clone,
 {
     let mut dst_assembly = ast::Section::new(src_assembly.section_name());

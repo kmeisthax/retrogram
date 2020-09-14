@@ -16,7 +16,12 @@ use std::str::FromStr;
 /// Indicates a `Literal` that is specifically compatible with a given
 /// architecture's formatting needs.
 pub trait CompatibleLiteral<AR>:
-    Literal + From<AR::Word> + From<AR::Byte> + From<AR::Offset> + From<Pointer<AR::PtrVal>>
+    Literal
+    + From<AR::Word>
+    + From<AR::Byte>
+    + From<AR::Offset>
+    + From<AR::PtrVal>
+    + From<Pointer<AR::PtrVal>>
 where
     AR: Architecture,
 {
@@ -25,7 +30,12 @@ where
 impl<T, AR> CompatibleLiteral<AR> for T
 where
     AR: Architecture,
-    T: Literal + From<AR::Word> + From<AR::Byte> + From<AR::Offset> + From<Pointer<AR::PtrVal>>,
+    T: Literal
+        + From<AR::Word>
+        + From<AR::Byte>
+        + From<AR::Offset>
+        + From<AR::PtrVal>
+        + From<Pointer<AR::PtrVal>>,
 {
 }
 

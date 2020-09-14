@@ -283,6 +283,41 @@ where
     pub fn instr_offsets<'a>(&'a self) -> impl 'a + Iterator<Item = S> {
         self.instr_offsets.iter().cloned()
     }
+
+    /// Reduce the length of this block, and produce a new block with a smaller
+    /// size.
+    ///
+    /// The lower half of the block will be this block, modified inline. The
+    /// upper half will be returned. This function yields `None` if the new
+    /// size requested is longer than the current block, and no change occurs.
+    pub fn split_block(&mut self, new_size: S) -> Option<Self> {
+        if &new_size < self.as_length() {
+            let remaining_size = self.as_length().clone() - new_size.clone();
+            let new_block_start = self
+                .as_start()
+                .contextualize(self.as_start().as_pointer().clone() + new_size.clone());
+
+            let mut new_block = Block::from_parts(new_block_start, remaining_size);
+            new_block.traces = self.traces;
+            new_block.instr_offsets = self
+                .instr_offsets
+                .iter()
+                .filter_map(|o| o.clone().checked_sub(new_size.clone()))
+                .collect();
+
+            self.length = new_size.clone();
+            self.instr_offsets = self
+                .instr_offsets
+                .iter()
+                .cloned()
+                .filter(|o| o < &new_size.clone())
+                .collect();
+
+            return Some(new_block);
+        }
+
+        None
+    }
 }
 
 /// Represents the result of searching for an instruction within a block.

@@ -1,11 +1,13 @@
 //! Disassembly view
 
+use crate::analysis::replace_labels;
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
+use crate::ast::{Directive, Literal, Section};
 use crate::memory::{Memory, Tumbler};
 use crate::project::ProjectDatabase;
 use cursive::event::{Callback, Event, EventResult, Key};
-use cursive::theme::{ColorStyle, Color, BaseColor, PaletteColor};
+use cursive::theme::{BaseColor, Color, ColorStyle, PaletteColor};
 use cursive::{Printer, View, XY};
 use std::convert::{TryFrom, TryInto};
 use std::io::Write;
@@ -126,14 +128,15 @@ where
     <AR::Offset as TryFrom<u8>>::Error: std::fmt::Debug,
     <AR::Offset as TryInto<usize>>::Error: std::fmt::Debug,
     ASM: 'static + Assembler,
-    ASM::Literal: CompatibleLiteral<AR>,
+    ASM::Literal: CompatibleLiteral<AR> + Clone,
+    <ASM::Literal as Literal>::PtrVal: Clone + Into<AR::PtrVal>,
 {
     fn draw(&self, printer: &Printer) {
         let mut position = self.position;
 
         let mut db_lock = self.pjdb.write().unwrap();
 
-        let db = db_lock.get_database_mut(&self.prog_name);
+        let mut db = db_lock.get_database_mut(&self.prog_name);
 
         for line in 0..printer.size.y {
             if self.bus.region_count() == 0 {
@@ -147,12 +150,37 @@ where
                 at.change_annotation(AnnotationKind::Syntactic);
                 write!(at.as_writer(), "${:X}: ", enc);
 
+                if let Some(sym) = db.pointer_symbol(&enc).and_then(|id| db.symbol(id)) {
+                    at.emit_label_decl(self.asm.clone(), sym.as_label());
+                }
+
                 if let Some(_block) = db.find_block_membership(&enc).and_then(|bid| db.block(bid)) {
                     let disasm = self.arch.disassemble(&enc, &self.bus);
 
                     match disasm {
                         Ok(disasm) => {
-                            at.emit_instr(self.asm.clone(), &disasm.as_instr()).unwrap();
+                            let mut instr_directive: Section<
+                                ASM::Literal,
+                                AR::PtrVal,
+                                AR::Byte,
+                                AR::Offset,
+                            > = Section::new("");
+
+                            instr_directive.append_directive(
+                                Directive::EmitInstr(
+                                    disasm.as_instr().clone(),
+                                    disasm.next_offset(),
+                                ),
+                                enc.clone(),
+                            );
+
+                            instr_directive = replace_labels(instr_directive, db, &self.bus);
+
+                            for (directive, _size) in instr_directive.iter_directives() {
+                                if directive.is_emit_instr() {
+                                    at.emit_instr(self.asm.clone(), &disasm.as_instr()).unwrap();
+                                }
+                            }
                         }
                         Err(e) => {
                             at.change_annotation(AnnotationKind::Error);
@@ -178,15 +206,29 @@ where
             for res in at.iter_annotations() {
                 let (text, annotation) = res.unwrap();
                 let color_style = match annotation {
-                    AnnotationKind::Syntactic => ColorStyle::new(PaletteColor::Primary, PaletteColor::View),
-                    AnnotationKind::Comment => ColorStyle::new(Color::Dark(BaseColor::Green), PaletteColor::View),
-                    AnnotationKind::Label => ColorStyle::new(Color::Dark(BaseColor::Blue), PaletteColor::View),
-                    AnnotationKind::Data => ColorStyle::new(Color::Dark(BaseColor::Yellow), PaletteColor::View),
-                    AnnotationKind::Opcode => ColorStyle::new(Color::Dark(BaseColor::Cyan), PaletteColor::View),
-                    AnnotationKind::Error => ColorStyle::new(Color::Dark(BaseColor::Red), PaletteColor::View),
+                    AnnotationKind::Syntactic => {
+                        ColorStyle::new(PaletteColor::Primary, PaletteColor::View)
+                    }
+                    AnnotationKind::Comment => {
+                        ColorStyle::new(Color::Dark(BaseColor::Green), PaletteColor::View)
+                    }
+                    AnnotationKind::Label => {
+                        ColorStyle::new(Color::Dark(BaseColor::Blue), PaletteColor::View)
+                    }
+                    AnnotationKind::Data => {
+                        ColorStyle::new(Color::Dark(BaseColor::Yellow), PaletteColor::View)
+                    }
+                    AnnotationKind::Opcode => {
+                        ColorStyle::new(Color::Dark(BaseColor::Cyan), PaletteColor::View)
+                    }
+                    AnnotationKind::Error => {
+                        ColorStyle::new(Color::Dark(BaseColor::Red), PaletteColor::View)
+                    }
                 };
 
-                printer.with_color(color_style, |printer| printer.print((pos, line), text.trim()));
+                printer.with_color(color_style, |printer| {
+                    printer.print((pos, line), text.trim())
+                });
 
                 pos += text.trim().len();
             }
