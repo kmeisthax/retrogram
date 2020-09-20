@@ -1,10 +1,12 @@
 //! Memory space navigation
 
-use crate::analysis::InstrLocation;
+use crate::analysis::{InstrLocation, replace_labels};
 use crate::arch::Architecture;
 use crate::database::Database;
 use crate::maths::CheckedSub;
-use crate::memory::Memory;
+use crate::memory::{Memory, Pointer};
+use crate::asm::Assembler;
+use crate::ast::{Section, Directive};
 use num_traits::{One, Zero};
 
 /// A discrete space on a given memory bus that allows indexing through the
@@ -24,6 +26,9 @@ pub struct Tumbler {
 
     /// An offset into the region being referenced.
     image_index: usize,
+
+    /// An offset into each line within the individual location's disassembly.
+    line_index: usize,
 }
 
 impl Default for Tumbler {
@@ -31,15 +36,17 @@ impl Default for Tumbler {
         Tumbler {
             region_index: 0,
             image_index: 0,
+            line_index: 0,
         }
     }
 }
 
-impl From<(usize, usize)> for Tumbler {
-    fn from(pair: (usize, usize)) -> Tumbler {
+impl From<(usize, usize, usize)> for Tumbler {
+    fn from(pair: (usize, usize, usize)) -> Tumbler {
         Tumbler {
             region_index: pair.0,
             image_index: pair.1,
+            line_index: pair.2,
         }
     }
 }
@@ -112,6 +119,35 @@ impl Tumbler {
         }
 
         Some((prev_r, max_io?))
+    }
+
+    /// Determine how many lines of disassembly exist at a particular memory
+    /// location.
+    pub fn disasm_lines_at_location<AR, ASM>(&self, arch: AR, asm: ASM, bus: &Memory<AR>, db: &mut Database<AR>, loc: &Pointer<AR::PtrVal>) -> usize where AR: Architecture, ASM: Assembler {
+        if let Some(_) = db.find_block_membership(loc).and_then(|id| db.block(id)) {
+            match arch.disassemble(loc, bus) {
+                Ok(disasm) => {
+                    let mut instr_directive = Section::new("");
+
+                    instr_directive.append_directive(Directive::EmitInstr(disasm.as_instr().clone(), disasm.next_offset()), loc.clone());
+
+                    instr_directive = replace_labels(instr_directive, db, bus);
+
+                    let mut disasm = "";
+
+                    for (directive, _size) in instr_directive.iter_directives() {
+                        if directive.is_emit_instr() {
+                            asm.emit_instr(&mut disasm, directive);
+                        }
+                    }
+
+                    disasm.matches("\n").count()
+                },
+                Err(e) => 1
+            }
+        } else {
+            1
+        }
     }
 
     /// Produce a tumbler a given number of lines ahead.
