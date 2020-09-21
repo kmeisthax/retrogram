@@ -50,3 +50,16 @@ where
         }
     }
 }
+
+impl<L, P, MV, S> Directive<L, P, MV, S>
+where
+    L: Literal,
+    S: Clone,
+{
+    pub fn as_emit_instr(&self) -> Option<(&Instruction<L>, S)> {
+        match self {
+            Self::EmitInstr(instr, size) => Some((instr, size.clone())),
+            _ => None,
+        }
+    }
+}

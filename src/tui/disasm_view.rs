@@ -4,7 +4,8 @@ use crate::analysis::replace_labels;
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
 use crate::ast::{Directive, Literal, Section};
-use crate::memory::{Memory, Tumbler};
+use crate::database::Database;
+use crate::memory::{Memory, Pointer, Tumbler};
 use crate::project::ProjectDatabase;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::theme::{BaseColor, Color, ColorStyle, PaletteColor};
@@ -47,7 +48,48 @@ where
     AR: Architecture,
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
+    <ASM::Literal as Literal>::PtrVal: Clone + Into<AR::PtrVal>,
 {
+    /// Determine how many lines of disassembly exist at a particular memory
+    /// location.
+    pub fn disasm_lines_at_location(
+        &self,
+        bus: &Memory<AR>,
+        db: &mut Database<AR>,
+        loc: &Pointer<AR::PtrVal>,
+    ) -> usize {
+        if let Some(_) = db.find_block_membership(loc).and_then(|id| db.block(id)) {
+            match self.arch.disassemble(loc, bus) {
+                Ok(disasm) => {
+                    let mut instr_directive = Section::new("");
+
+                    instr_directive.append_directive(
+                        Directive::EmitInstr(disasm.as_instr().clone(), disasm.next_offset()),
+                        loc.clone(),
+                    );
+
+                    instr_directive = replace_labels(instr_directive, db, bus);
+
+                    let mut disasm = Vec::new();
+
+                    for (directive, _size) in instr_directive.iter_directives() {
+                        if directive.is_emit_instr() {
+                            //TODO: Become errors.
+                            self.asm
+                                .emit_instr(&mut disasm, directive.as_emit_instr().unwrap().0)
+                                .unwrap();
+                        }
+                    }
+
+                    std::str::from_utf8(&disasm).unwrap().matches("\n").count()
+                }
+                Err(_e) => 1,
+            }
+        } else {
+            1
+        }
+    }
+
     pub fn new(
         pjdb: Arc<RwLock<ProjectDatabase<AR>>>,
         prog_name: &str,
@@ -71,7 +113,12 @@ where
         let mut db_lock = self.pjdb.write().unwrap();
         let db = db_lock.get_database_mut(&self.prog_name);
 
-        if let Some(position) = self.position.scroll_forward_by_lines(&self.bus, db, 1) {
+        if let Some(position) = self.position.scroll_forward_by_lines(
+            &self.bus,
+            db,
+            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+            1,
+        ) {
             self.position = position;
         }
     }
@@ -81,10 +128,12 @@ where
         let mut db_lock = self.pjdb.write().unwrap();
         let db = db_lock.get_database_mut(&self.prog_name);
 
-        if let Some(position) = self
-            .position
-            .scroll_forward_by_lines(&self.bus, db, self.size.y)
-        {
+        if let Some(position) = self.position.scroll_forward_by_lines(
+            &self.bus,
+            db,
+            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+            self.size.y,
+        ) {
             self.position = position;
         }
     }
@@ -94,7 +143,12 @@ where
         let mut db_lock = self.pjdb.write().unwrap();
         let db = db_lock.get_database_mut(&self.prog_name);
 
-        if let Some(position) = self.position.scroll_backward_by_lines(&self.bus, db, 1) {
+        if let Some(position) = self.position.scroll_backward_by_lines(
+            &self.bus,
+            db,
+            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+            1,
+        ) {
             self.position = position;
         }
     }
@@ -104,10 +158,12 @@ where
         let mut db_lock = self.pjdb.write().unwrap();
         let db = db_lock.get_database_mut(&self.prog_name);
 
-        if let Some(position) = self
-            .position
-            .scroll_backward_by_lines(&self.bus, db, self.size.y)
-        {
+        if let Some(position) = self.position.scroll_backward_by_lines(
+            &self.bus,
+            db,
+            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+            self.size.y,
+        ) {
             self.position = position;
         }
     }
@@ -128,7 +184,7 @@ where
 
         let mut db_lock = self.pjdb.write().unwrap();
 
-        let mut db = db_lock.get_database_mut(&self.prog_name);
+        let db = db_lock.get_database_mut(&self.prog_name);
 
         for line in 0..printer.size.y {
             if self.bus.region_count() == 0 {
@@ -225,7 +281,14 @@ where
                 pos += text.trim().len();
             }
 
-            position = position.scroll_forward_by_lines(&self.bus, db, 1).unwrap();
+            position = position
+                .scroll_forward_by_lines(
+                    &self.bus,
+                    db,
+                    &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                    1,
+                )
+                .unwrap();
         }
     }
 

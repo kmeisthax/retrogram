@@ -201,7 +201,7 @@ where
         for (region_index, view) in self.views.iter().enumerate() {
             if view.is_ptr_within(ptr.clone()) {
                 if let Some(image_index) = view.image.decode_addr(&ptr, view.start.clone()) {
-                    return Some((region_index, image_index).into());
+                    return Some((region_index, image_index, 0).into());
                 }
             }
         }

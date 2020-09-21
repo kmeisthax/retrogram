@@ -10,28 +10,6 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::marker::PhantomData;
 
-fn gimme_a_ptr<P>() -> HashMap<memory::Pointer<P>, usize>
-where
-    P: analysis::Mappable,
-{
-    HashMap::new()
-}
-
-fn gimme_a_lbl() -> HashMap<ast::Label, usize> {
-    HashMap::new()
-}
-
-fn gimme_xref<P>() -> BTreeMap<P, HashSet<usize>>
-where
-    P: analysis::Mappable,
-{
-    BTreeMap::new()
-}
-
-fn im_stale() -> bool {
-    true
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Symbol<P>(ast::Label, memory::Pointer<P>)
 where
@@ -66,7 +44,7 @@ where
 {
     symbols: Vec<Symbol<AR::PtrVal>>,
 
-    #[serde(skip, default = "im_stale")]
+    #[serde(skip)]
     was_deserialized: bool,
 
     /// A list of program regions.
@@ -76,19 +54,19 @@ where
     xrefs: Vec<analysis::Reference<AR::PtrVal>>,
 
     /// A list of all labels in the program.
-    #[serde(skip, default = "gimme_a_lbl")]
+    #[serde(skip)]
     label_symbols: HashMap<ast::Label, usize>,
 
     /// A list of all pointer values in the program which have a label.
-    #[serde(skip, default = "gimme_a_ptr")]
+    #[serde(skip)]
     pointer_symbols: HashMap<memory::Pointer<AR::PtrVal>, usize>,
 
     /// A list of crossreferences sorted by source address.
-    #[serde(skip, default = "gimme_xref")]
+    #[serde(skip)]
     xref_source_index: BTreeMap<memory::Pointer<AR::PtrVal>, HashSet<usize>>,
 
     /// A list of crossreferences sorted by target address.
-    #[serde(skip, default = "gimme_xref")]
+    #[serde(skip)]
     xref_target_index: BTreeMap<memory::Pointer<AR::PtrVal>, HashSet<usize>>,
 }
 
@@ -118,7 +96,7 @@ where
     where
         V: SeqAccess<'dw>,
     {
-        let db = Database::new();
+        let mut db = Database::new();
 
         db.symbols = seq
             .next_element()?
@@ -179,7 +157,7 @@ where
     where
         D: Deserializer<'dw>,
     {
-        let mine = deserializer.deserialize_struct(
+        let mut mine = deserializer.deserialize_struct(
             "Database",
             &["symbols", "blocks", "xrefs"],
             DatabaseVisitor::<AR>(PhantomData),
