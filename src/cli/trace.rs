@@ -371,7 +371,6 @@ where
             "You did not specify a name for the program to disassemble.",
         )
     })?);
-    db.update_indexes();
 
     let mut pc = parse_ptr(start_spec, db, bus, arch).ok_or_else(|| {
         io::Error::new(

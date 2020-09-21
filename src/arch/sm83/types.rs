@@ -4,6 +4,7 @@ use crate::arch::sm83::{disassemble, prereq, trace};
 use crate::arch::Architecture;
 use crate::memory::{Memory, Pointer};
 use crate::{analysis, ast, memory, reg};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::{fmt, result, str};
 
@@ -150,7 +151,7 @@ pub type Disasm<L> = analysis::Disasm<L, PtrVal, Offset>;
 pub type Result<T> = analysis::Result<T, SM83>;
 
 /// Architectural type for SM83
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SM83();
 
 impl Architecture for SM83 {

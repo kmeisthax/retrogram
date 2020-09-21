@@ -5,11 +5,12 @@ use crate::arch::Architecture;
 use crate::ast::Literal;
 use crate::memory::{Memory, Pointer};
 use crate::reg::State;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// Test architecture for use when testing things that are generic over an
 /// entire architecture.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestArchitecture;
 
 impl Architecture for TestArchitecture {

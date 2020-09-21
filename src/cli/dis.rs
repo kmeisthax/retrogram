@@ -38,7 +38,6 @@ where
             "You did not specify a name for the program to disassemble.",
         )
     })?);
-    db.update_indexes();
 
     let start_pc = input::parse_ptr(start_spec, db, bus, arch).ok_or_else(|| {
         io::Error::new(
@@ -133,7 +132,7 @@ where
     }
 
     let mut merged_blocks = Vec::new();
-    let mut last_block: Option<Block<AR::PtrVal, AR::Offset>> = None;
+    let mut last_block: Option<Block<AR>> = None;
     for block in disassembly_blocks {
         if let Some(lblock) = last_block {
             if lblock.can_coalesce(&block) {

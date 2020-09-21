@@ -4,6 +4,7 @@ use crate::arch::aarch32::{architectural_ctxt_parse, disassemble, prereq, trace}
 use crate::arch::Architecture;
 use crate::memory::Pointer;
 use crate::{analysis, ast, memory, reg};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::{fmt, result, str};
 
@@ -181,7 +182,7 @@ pub type Disasm<L> = analysis::Disasm<L, PtrVal, Offset>;
 pub type Result<T> = analysis::Result<T, AArch32>;
 
 /// Architectural type for AArch32
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AArch32();
 
 impl Architecture for AArch32 {

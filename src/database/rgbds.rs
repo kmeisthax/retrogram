@@ -40,8 +40,6 @@ where
     Some(out)
 }
 
-//&project::Program, &project::DataSource, &mut [fs::File], &mut database::Database<P, S>
-
 /// Read the symbols from an RGBDS symbol file.
 pub fn parse_symbol_file(
     _prog: &project::Program,

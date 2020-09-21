@@ -36,7 +36,6 @@ where
             "You did not specify a name for the program to disassemble.",
         )
     })?);
-    db.update_indexes();
 
     let mut files = Vec::new();
     for filename in datasrc.iter_files() {

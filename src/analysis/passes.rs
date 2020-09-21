@@ -23,7 +23,7 @@ where
     ast::Section<L, AR::PtrVal, AR::Byte, AR::Offset>,
     HashSet<analysis::Reference<AR::PtrVal>>,
     Option<AR::Offset>,
-    Vec<analysis::Block<AR::PtrVal, AR::Offset>>,
+    Vec<analysis::Block<AR>>,
     Option<analysis::Error<AR>>,
 );
 

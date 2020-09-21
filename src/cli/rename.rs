@@ -27,7 +27,6 @@ where
             "You did not specify a name for the program to disassemble.",
         )
     })?);
-    db.update_indexes();
 
     let from_pc = input::parse_ptr(from_spec, db, bus, arch).ok_or_else(|| {
         io::Error::new(

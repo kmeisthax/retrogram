@@ -4,8 +4,11 @@ use crate::analysis::Mappable;
 use crate::arch::Architecture;
 use crate::cli::Nameable;
 use crate::{analysis, ast, memory};
+use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fmt;
+use std::marker::PhantomData;
 
 fn gimme_a_ptr<P>() -> HashMap<memory::Pointer<P>, usize>
 where
@@ -56,7 +59,7 @@ where
 }
 
 /// A repository of information obtained from the program under analysis.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Database<AR>
 where
     AR: Architecture,
@@ -67,7 +70,7 @@ where
     was_deserialized: bool,
 
     /// A list of program regions.
-    blocks: Vec<analysis::Block<AR::PtrVal, AR::Offset>>,
+    blocks: Vec<analysis::Block<AR>>,
 
     /// A list of all cross-references in the program.
     xrefs: Vec<analysis::Reference<AR::PtrVal>>,
@@ -87,6 +90,105 @@ where
     /// A list of crossreferences sorted by target address.
     #[serde(skip, default = "gimme_xref")]
     xref_target_index: BTreeMap<memory::Pointer<AR::PtrVal>, HashSet<usize>>,
+}
+
+#[derive(Deserialize)]
+#[serde(field_identifier, rename_all = "lowercase")]
+enum DatabaseField {
+    Symbols,
+    Blocks,
+    Xrefs,
+}
+
+struct DatabaseVisitor<AR>(PhantomData<AR>)
+where
+    AR: Architecture;
+
+impl<'dw, AR> Visitor<'dw> for DatabaseVisitor<AR>
+where
+    AR: Architecture,
+{
+    type Value = Database<AR>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("struct Database")
+    }
+
+    fn visit_seq<V>(self, mut seq: V) -> Result<Database<AR>, V::Error>
+    where
+        V: SeqAccess<'dw>,
+    {
+        let db = Database::new();
+
+        db.symbols = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+        db.blocks = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+        db.xrefs = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::invalid_length(2, &self))?;
+
+        Ok(db)
+    }
+
+    fn visit_map<V>(self, mut map: V) -> Result<Database<AR>, V::Error>
+    where
+        V: MapAccess<'dw>,
+    {
+        let mut db = Database::new();
+
+        db.was_deserialized = true;
+
+        while let Some(key) = map.next_key()? {
+            match key {
+                DatabaseField::Symbols => {
+                    if !db.symbols.is_empty() {
+                        return Err(de::Error::duplicate_field("symbols"));
+                    }
+
+                    db.symbols = map.next_value()?;
+                }
+                DatabaseField::Blocks => {
+                    if !db.blocks.is_empty() {
+                        return Err(de::Error::duplicate_field("blocks"));
+                    }
+
+                    db.blocks = map.next_value()?;
+                }
+                DatabaseField::Xrefs => {
+                    if !db.xrefs.is_empty() {
+                        return Err(de::Error::duplicate_field("xrefs"));
+                    }
+
+                    db.xrefs = map.next_value()?;
+                }
+            }
+        }
+
+        Ok(db)
+    }
+}
+
+impl<'dw, AR> Deserialize<'dw> for Database<AR>
+where
+    AR: Architecture,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'dw>,
+    {
+        let mine = deserializer.deserialize_struct(
+            "Database",
+            &["symbols", "blocks", "xrefs"],
+            DatabaseVisitor::<AR>(PhantomData),
+        )?;
+
+        mine.update_indexes();
+
+        Ok(mine)
+    }
 }
 
 impl<AR> Default for Database<AR>
@@ -115,10 +217,11 @@ where
         }
     }
 
-    /// Regenerate internal indexes that aren't serialized to disk
+    /// Regenerate internal indexes that aren't serialized to disk.
     ///
-    /// TODO: Find a way to get rid of this and do it alongside deserialization
-    pub fn update_indexes(&mut self) {
+    /// This is automatically called by `Deserialize`. It is not necessary to
+    /// call it outside of that context.
+    fn update_indexes(&mut self) {
         if self.was_deserialized {
             for (id, Symbol(lbl, ptr)) in self.symbols.iter().enumerate() {
                 self.label_symbols.insert(lbl.clone(), id);
@@ -290,7 +393,7 @@ where
         self.symbols.get(symbol_id)
     }
 
-    pub fn block(&self, block_id: usize) -> Option<&analysis::Block<AR::PtrVal, AR::Offset>> {
+    pub fn block(&self, block_id: usize) -> Option<&analysis::Block<AR>> {
         self.blocks.get(block_id)
     }
 
@@ -315,7 +418,7 @@ where
     ///
     /// If the block already exists (or at least, there is one at the start of
     /// this block) then insertion will silently fail.
-    pub fn insert_block(&mut self, block: analysis::Block<AR::PtrVal, AR::Offset>) {
+    pub fn insert_block(&mut self, block: analysis::Block<AR>) {
         if self.find_block_membership(block.as_start()).is_some() {
             return;
         }

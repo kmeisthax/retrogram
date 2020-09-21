@@ -55,7 +55,7 @@ where
         arch: AR,
         asm: ASM,
     ) -> Self {
-        let s = Self {
+        Self {
             pjdb,
             prog_name: prog_name.to_string(),
             bus,
@@ -63,15 +63,7 @@ where
             size: (0, 0).into(),
             arch,
             asm,
-        };
-
-        s.pjdb
-            .write()
-            .unwrap()
-            .get_database_mut(&s.prog_name)
-            .update_indexes();
-
-        s
+        }
     }
 
     /// Move the cursor down by one.

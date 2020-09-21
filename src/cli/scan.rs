@@ -313,7 +313,6 @@ where
     };
 
     let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
-    db.update_indexes();
 
     let is_tracing_allowed = argv.is_present("dynamic");
     let mut poweron_state = State::default();

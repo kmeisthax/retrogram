@@ -1,12 +1,14 @@
 //! Analysis sections (e.g. blocks, subroutines, etc)
 
-use crate::analysis::Mappable;
-use crate::cli::Nameable;
+use crate::arch::Architecture;
+use crate::maths::CheckedSub;
 use crate::memory;
 use crate::memory::Pointer;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::collections::BTreeSet;
+use std::convert::TryFrom;
+use std::ops::Sub;
 
 /// Represents a sequence of instructions with the following properties:
 ///
@@ -17,16 +19,15 @@ use std::collections::BTreeSet;
 ///
 /// Effectively, it is a run of instructions with no jumps.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Block<P, S>
+pub struct Block<AR>
 where
-    P: Mappable + Nameable,
-    S: Mappable,
+    AR: Architecture,
 {
     /// The start pointer of the block.
-    start: memory::Pointer<P>,
+    start: memory::Pointer<AR::PtrVal>,
 
     /// The offset to the end of the block.
-    length: S,
+    length: AR::Offset,
 
     /// A list of offsets known to be the start of instructions within the
     /// block.
@@ -37,18 +38,18 @@ where
     /// This is a `BTreeSet` purely because a `HashSet` would prohibit us from
     /// deriving `Ord`. In practice, it should never come into play when
     /// ordering blocks.
-    instr_offsets: BTreeSet<S>,
+    instr_offsets: BTreeSet<AR::Offset>,
 
     /// The number of traces that have been executed within this block.
     traces: u32,
 }
 
-impl<P, S> Block<P, S>
+impl<AR> Block<AR>
 where
-    P: Mappable + Nameable,
-    S: Mappable,
+    AR: Architecture,
+    AR::Offset: TryFrom<<AR::PtrVal as Sub>::Output>,
 {
-    pub fn from_parts(start: memory::Pointer<P>, length: S) -> Self {
+    pub fn from_parts(start: memory::Pointer<AR::PtrVal>, length: AR::Offset) -> Self {
         Block {
             start,
             length,
@@ -57,11 +58,11 @@ where
         }
     }
 
-    pub fn as_start(&self) -> &memory::Pointer<P> {
+    pub fn as_start(&self) -> &memory::Pointer<AR::PtrVal> {
         &self.start
     }
 
-    pub fn as_length(&self) -> &S {
+    pub fn as_length(&self) -> &AR::Offset {
         &self.length
     }
 
@@ -74,18 +75,12 @@ where
     pub fn add_traces(&mut self, new_traces: u32) {
         self.traces = self.traces.saturating_add(new_traces);
     }
-}
 
-impl<P, S> Block<P, S>
-where
-    P: memory::PtrNum<S> + Mappable + Nameable,
-    S: memory::Offset<P> + Mappable,
-{
-    pub fn is_ptr_within_block(&self, ptr: &memory::Pointer<P>) -> bool {
+    pub fn is_ptr_within_block(&self, ptr: &memory::Pointer<AR::PtrVal>) -> bool {
         if self.start.as_pointer() <= ptr.as_pointer() {
             let diff = ptr.as_pointer().clone() - self.start.as_pointer().clone();
 
-            if let Ok(diff) = S::try_from(diff) {
+            if let Ok(diff) = AR::Offset::try_from(diff) {
                 if diff < self.length.clone() && self.start.is_context_eq(ptr) {
                     return true;
                 }
@@ -96,10 +91,13 @@ where
     }
 
     /// Given a pointer, return the instruction it may be part of.
-    pub fn align_to_instruction(&self, ptr: &memory::Pointer<P>) -> Option<memory::Pointer<P>> {
+    pub fn align_to_instruction(
+        &self,
+        ptr: &memory::Pointer<AR::PtrVal>,
+    ) -> Option<memory::Pointer<AR::PtrVal>> {
         if self.start.is_context_eq(ptr) && self.start.as_pointer() <= ptr.as_pointer() {
             let block_offset =
-                S::try_from(ptr.as_pointer().clone() - self.start.as_pointer().clone());
+                AR::Offset::try_from(ptr.as_pointer().clone() - self.start.as_pointer().clone());
 
             if let Ok(block_offset) = block_offset {
                 let adjusted_block_offset = self
@@ -129,12 +127,12 @@ where
     /// If `None`, the pointer is outside of the current block already.
     pub fn last_instruction(
         &self,
-        ptr: &memory::Pointer<P>,
+        ptr: &memory::Pointer<AR::PtrVal>,
         count: usize,
-    ) -> Option<InstrLocation<S>> {
+    ) -> Option<InstrLocation<AR::Offset>> {
         if self.start.is_context_eq(ptr) && self.start.as_pointer() <= ptr.as_pointer() {
             let block_offset =
-                S::try_from(ptr.as_pointer().clone() - self.start.as_pointer().clone());
+                AR::Offset::try_from(ptr.as_pointer().clone() - self.start.as_pointer().clone());
 
             if let Ok(block_offset) = block_offset {
                 let adjusted_block_offset = self
@@ -178,12 +176,12 @@ where
     /// If `None`, the pointer is outside of the current block already.
     pub fn next_instruction(
         &self,
-        ptr: &memory::Pointer<P>,
+        ptr: &memory::Pointer<AR::PtrVal>,
         count: usize,
-    ) -> Option<InstrLocation<S>> {
+    ) -> Option<InstrLocation<AR::Offset>> {
         if self.start.is_context_eq(ptr) && self.start.as_pointer() <= ptr.as_pointer() {
             let block_offset =
-                S::try_from(ptr.as_pointer().clone() - self.start.as_pointer().clone());
+                AR::Offset::try_from(ptr.as_pointer().clone() - self.start.as_pointer().clone());
 
             if let Ok(block_offset) = block_offset {
                 let adjusted_block_offset = self
@@ -267,11 +265,11 @@ where
     ///
     /// If the given pointer is outside the bounds of the block, it will not be
     /// added to this block.
-    pub fn mark_instr_at(&mut self, instr_ptr: Pointer<P>) {
+    pub fn mark_instr_at(&mut self, instr_ptr: Pointer<AR::PtrVal>) {
         if self.start.is_context_eq(&instr_ptr) {
-            if let Ok(instr_offset) =
-                S::try_from(instr_ptr.as_pointer().clone() - self.start.as_pointer().clone())
-            {
+            if let Ok(instr_offset) = AR::Offset::try_from(
+                instr_ptr.as_pointer().clone() - self.start.as_pointer().clone(),
+            ) {
                 if instr_offset < self.length {
                     self.instr_offsets.insert(instr_offset);
                 }
@@ -280,7 +278,7 @@ where
     }
 
     /// Iterate the list of instruction offsets within this block.
-    pub fn instr_offsets<'a>(&'a self) -> impl 'a + Iterator<Item = S> {
+    pub fn instr_offsets<'a>(&'a self) -> impl 'a + Iterator<Item = AR::Offset> {
         self.instr_offsets.iter().cloned()
     }
 
@@ -290,7 +288,7 @@ where
     /// The lower half of the block will be this block, modified inline. The
     /// upper half will be returned. This function yields `None` if the new
     /// size requested is longer than the current block, and no change occurs.
-    pub fn split_block(&mut self, new_size: S) -> Option<Self> {
+    pub fn split_block(&mut self, new_size: AR::Offset) -> Option<Self> {
         if &new_size < self.as_length() {
             let remaining_size = self.as_length().clone() - new_size.clone();
             let new_block_start = self
@@ -339,26 +337,27 @@ pub enum InstrLocation<S> {
 #[cfg(test)]
 mod tests {
     use crate::analysis::{Block, InstrLocation};
+    use crate::arch::tests::TestArchitecture;
     use crate::memory::Pointer;
     use crate::reg::Symbolic;
 
     #[test]
     fn block_within() {
-        let block = Block::from_parts(Pointer::from(0x100), 0x50);
+        let block: Block<TestArchitecture> = Block::from_parts(Pointer::from(0x100), 0x50);
 
         assert!(block.is_ptr_within_block(&Pointer::from(0x105)));
     }
 
     #[test]
     fn block_edge() {
-        let block = Block::from_parts(Pointer::from(0x100), 0x50);
+        let block: Block<TestArchitecture> = Block::from_parts(Pointer::from(0x100), 0x50);
 
         assert!(!block.is_ptr_within_block(&Pointer::from(0x150)));
     }
 
     #[test]
     fn block_underflow() {
-        let block = Block::from_parts(Pointer::from(0x100), 0x50);
+        let block: Block<TestArchitecture> = Block::from_parts(Pointer::from(0x100), 0x50);
 
         assert!(!block.is_ptr_within_block(&Pointer::from(0x50)));
     }
@@ -371,7 +370,7 @@ mod tests {
         let mut tgt = Pointer::from(0x105);
         tgt.set_arch_context("T", Symbolic::from(1));
 
-        let block = Block::from_parts(base, 0x50);
+        let block: Block<TestArchitecture> = Block::from_parts(base, 0x50);
 
         assert!(!block.is_ptr_within_block(&tgt));
     }
@@ -384,7 +383,7 @@ mod tests {
         let mut tgt = Pointer::from(0x105);
         tgt.set_platform_context("R", Symbolic::from(1));
 
-        let block = Block::from_parts(base, 0x50);
+        let block: Block<TestArchitecture> = Block::from_parts(base, 0x50);
 
         assert!(!block.is_ptr_within_block(&tgt));
     }
@@ -397,14 +396,14 @@ mod tests {
         let mut tgt = Pointer::from(0x105);
         tgt.set_platform_context("R", Symbolic::from(1));
 
-        let block = Block::from_parts(base, 0x50);
+        let block: Block<TestArchitecture> = Block::from_parts(base, 0x50);
 
         assert!(!block.is_ptr_within_block(&tgt));
     }
 
     #[test]
     fn block_offsets() {
-        let mut block = Block::from_parts(Pointer::from(0x100), 0x50);
+        let mut block: Block<TestArchitecture> = Block::from_parts(Pointer::from(0x100), 0x50);
 
         block.mark_instr_at(Pointer::from(0x105));
 
@@ -422,7 +421,7 @@ mod tests {
 
     #[test]
     fn block_align_to_instr() {
-        let mut block = Block::from_parts(Pointer::from(0x100), 0x50);
+        let mut block: Block<TestArchitecture> = Block::from_parts(Pointer::from(0x100), 0x50);
 
         block.mark_instr_at(Pointer::from(0x100));
         block.mark_instr_at(Pointer::from(0x103));
@@ -451,7 +450,7 @@ mod tests {
 
     #[test]
     fn block_last_instr() {
-        let mut block = Block::from_parts(Pointer::from(0x100), 0x50);
+        let mut block: Block<TestArchitecture> = Block::from_parts(Pointer::from(0x100), 0x50);
 
         block.mark_instr_at(Pointer::from(0x100));
         block.mark_instr_at(Pointer::from(0x103));
@@ -497,7 +496,7 @@ mod tests {
 
     #[test]
     fn block_next_instr() {
-        let mut block = Block::from_parts(Pointer::from(0x100), 0x50);
+        let mut block: Block<TestArchitecture> = Block::from_parts(Pointer::from(0x100), 0x50);
 
         block.mark_instr_at(Pointer::from(0x100));
         block.mark_instr_at(Pointer::from(0x103));
