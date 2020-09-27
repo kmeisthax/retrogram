@@ -61,6 +61,11 @@ impl Tumbler {
         self.image_index
     }
 
+    /// Retrieve the line-index component of this tumbler.
+    pub fn line_index(&self) -> usize {
+        self.line_index
+    }
+
     /// Get the tumbler parameters of the region after a given one.
     ///
     /// The image offset of the returned parameter is the *end* of the region,
@@ -183,7 +188,8 @@ impl Tumbler {
                                     .unwrap_or_else(AR::Offset::zero),
                         );
 
-                        let (new_r, new_io, _new_l, new_max_io) = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
+                        let (new_r, new_io, _new_l, new_max_io) =
+                            bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
 
                         if new_io < (new_max_io - 1) {
                             next_r = new_r;
@@ -252,7 +258,8 @@ impl Tumbler {
         {
             encoded = block.align_to_instruction(&encoded)?;
 
-            let (new_r, new_io, new_l, _new_max_io) = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
+            let (new_r, new_io, new_l, _new_max_io) =
+                bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
 
             if new_r != next_r || new_io != next_io {
                 next_r = new_r;
@@ -299,7 +306,8 @@ impl Tumbler {
                         // this one. This involves switching between tumbler
                         // and pointer form multiple times.
                         encoded = encoded.contextualize(block.as_start().as_pointer().clone());
-                        let (new_r, new_io, _new_l, _new_max_io) = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
+                        let (new_r, new_io, _new_l, _new_max_io) =
+                            bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
 
                         if new_io > 0 {
                             next_r = new_r;
@@ -358,7 +366,8 @@ impl Tumbler {
         {
             encoded = block.align_to_instruction(&encoded)?;
 
-            let (new_r, new_io, _new_l, _new_max_io) = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
+            let (new_r, new_io, _new_l, _new_max_io) =
+                bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
 
             if new_r != next_r || new_io != next_io {
                 next_r = new_r;
