@@ -185,8 +185,9 @@ where
         let mut db_lock = self.pjdb.write().unwrap();
 
         let db = db_lock.get_database_mut(&self.prog_name);
+        let mut line = 0;
 
-        for line in 0..printer.size.y {
+        while line < printer.size.y {
             if self.bus.region_count() == 0 {
                 printer.print((0, line), "Bus is empty!");
                 break;
@@ -274,11 +275,20 @@ where
                     }
                 };
 
-                printer.with_color(color_style, |printer| {
-                    printer.print((pos, line), text.trim())
-                });
+                for (i, text_line) in text.split('\n').enumerate() {
+                    if i > 0 {
+                        line += 1;
+                        pos = 0;
+                    }
 
-                pos += text.trim().len();
+                    printer.with_color(color_style, |printer| {
+                        printer.print((pos, line), text_line.trim());
+                    });
+
+                    if i == 0 {
+                        pos += text.trim().len();
+                    }
+                }
             }
 
             position = position
