@@ -183,11 +183,11 @@ impl Tumbler {
                                     .unwrap_or_else(AR::Offset::zero),
                         );
 
-                        let new_parts = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
+                        let (new_r, new_io, _new_l, new_max_io) = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
 
-                        if new_parts.1 < (new_parts.2 - 1) {
-                            next_r = new_parts.0;
-                            next_io = new_parts.1 + 1;
+                        if new_io < (new_max_io - 1) {
+                            next_r = new_r;
+                            next_io = new_io + 1;
                             next_l = 0;
                         } else {
                             let (r_plus, _r_plus_max_io, _r_plus_l) =
@@ -212,12 +212,12 @@ impl Tumbler {
                 }
 
                 let decoded = bus.decode_tumbler(encoded.clone())?;
-                let new_parts = decoded.valid_region(bus)?;
+                let (new_r, new_io, new_l, _new_max_io) = decoded.valid_region(bus)?;
 
-                if new_parts.0 != next_r || new_parts.1 != next_io {
-                    next_r = new_parts.0;
-                    next_io = new_parts.1;
-                    next_l = new_parts.2;
+                if new_r != next_r || new_io != next_io {
+                    next_r = new_r;
+                    next_io = new_io;
+                    next_l = new_l;
                 }
 
                 amount = amount.saturating_sub(1);
@@ -252,12 +252,12 @@ impl Tumbler {
         {
             encoded = block.align_to_instruction(&encoded)?;
 
-            let new_parts = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
+            let (new_r, new_io, new_l, _new_max_io) = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
 
-            if new_parts.0 != next_r || new_parts.1 != next_io {
-                next_r = new_parts.0;
-                next_io = new_parts.1;
-                next_l = new_parts.2;
+            if new_r != next_r || new_io != next_io {
+                next_r = new_r;
+                next_io = new_io;
+                next_l = new_l;
             }
         }
 
@@ -299,11 +299,11 @@ impl Tumbler {
                         // this one. This involves switching between tumbler
                         // and pointer form multiple times.
                         encoded = encoded.contextualize(block.as_start().as_pointer().clone());
-                        let new_parts = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
+                        let (new_r, new_io, _new_l, _new_max_io) = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
 
-                        if new_parts.1 > 0 {
-                            next_r = new_parts.0;
-                            next_io = new_parts.1 - 1;
+                        if new_io > 0 {
+                            next_r = new_r;
+                            next_io = new_io - 1;
                             next_l = lines(bus, db, &encoded).saturating_sub(1);
                         } else {
                             let (r_minus, r_minus_max_io, r_l) =
@@ -327,11 +327,13 @@ impl Tumbler {
                 }
 
                 let decoded = bus.decode_tumbler(encoded.clone())?;
-                let new_parts = decoded.valid_region(bus)?;
+                let (new_r, new_io, _new_l, _new_max_io) = decoded.valid_region(bus)?;
 
-                next_r = new_parts.0;
-                next_io = new_parts.1;
-                next_l = new_parts.2;
+                if new_r != next_r || new_io != next_io {
+                    next_r = new_r;
+                    next_io = new_io;
+                    next_l = lines(bus, db, &encoded).saturating_sub(1);
+                }
             } else if next_io < amount {
                 //TODO: This used to be able to skip multiple addresses when
                 //scrolling, but now we can't because of the block thing. We
@@ -356,11 +358,11 @@ impl Tumbler {
         {
             encoded = block.align_to_instruction(&encoded)?;
 
-            let new_parts = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
+            let (new_r, new_io, _new_l, _new_max_io) = bus.decode_tumbler(encoded.clone())?.valid_region(bus)?;
 
-            if new_parts.0 != next_r || new_parts.1 != next_io {
-                next_r = new_parts.0;
-                next_io = new_parts.1;
+            if new_r != next_r || new_io != next_io {
+                next_r = new_r;
+                next_io = new_io;
                 next_l = lines(bus, db, &encoded).saturating_sub(1);
             }
         }
