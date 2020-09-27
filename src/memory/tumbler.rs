@@ -164,8 +164,9 @@ impl Tumbler {
         while amount > 0 {
             let remaining_l = lines_at_loc.saturating_sub(next_l);
             if remaining_l > 1 {
-                next_l += min(amount, remaining_l.saturating_sub(1));
-                amount = amount.saturating_sub(min(amount, remaining_l.saturating_sub(1)));
+                let adjust_l = min(amount, remaining_l.saturating_sub(1));
+                next_l += adjust_l;
+                amount = amount.saturating_sub(adjust_l);
             } else if let Some(block) = db
                 .find_block_membership(&encoded)
                 .and_then(|bid| db.block(bid))
@@ -228,9 +229,6 @@ impl Tumbler {
 
                 amount = amount.saturating_sub(1);
             } else {
-                //TODO: This used to be able to skip multiple addresses when
-                //scrolling, but now we can't because of the block thing. We
-                //should at least be able to skip to the next block.
                 let remaining_io = max_io.saturating_sub(next_io + 1);
                 if remaining_io == 0 {
                     let (r_plus, r_plus_max_io, r_plus_l) = self.next_region(bus, next_r).unwrap();
@@ -290,8 +288,10 @@ impl Tumbler {
 
         while amount > 0 {
             if next_l > 0 {
-                next_l = next_l.saturating_sub(min(amount, next_l));
-                amount = amount.saturating_sub(min(amount, next_l));
+                let subtractable_amount = min(amount, next_l);
+
+                next_l = next_l.saturating_sub(subtractable_amount);
+                amount = amount.saturating_sub(subtractable_amount);
             } else if let Some(block) = db
                 .find_block_membership(&encoded)
                 .and_then(|bid| db.block(bid))
@@ -342,10 +342,12 @@ impl Tumbler {
                     next_io = new_io;
                     next_l = lines(bus, db, &encoded).saturating_sub(1);
                 }
-            } else if next_io < amount {
-                //TODO: This used to be able to skip multiple addresses when
-                //scrolling, but now we can't because of the block thing. We
-                //should at least be able to skip to the last block.
+            } else if next_io > 0 {
+                next_io -= 1;
+                encoded = bus.encode_tumbler((next_r, next_io, next_l).into())?;
+                next_l = lines(bus, db, &encoded).saturating_sub(1);
+                amount = amount.saturating_sub(1);
+            } else {
                 let (r_minus, r_minus_max_io, r_l) = self.prev_region(bus, db, next_r, lines)?;
 
                 next_r = r_minus;
@@ -353,12 +355,10 @@ impl Tumbler {
                 next_l = r_l;
                 encoded = bus.encode_tumbler((next_r, next_io, next_l).into())?;
                 amount = amount.saturating_sub(1);
-            } else {
-                next_io -= 1;
-                encoded = bus.encode_tumbler((next_r, next_io, next_l).into())?;
-                amount = amount.saturating_sub(1);
             }
         }
+
+        encoded = bus.encode_tumbler((next_r, next_io, next_l).into())?;
 
         if let Some(block) = db
             .find_block_membership(&encoded)
@@ -372,7 +372,7 @@ impl Tumbler {
             if new_r != next_r || new_io != next_io {
                 next_r = new_r;
                 next_io = new_io;
-                next_l = lines(bus, db, &encoded).saturating_sub(1);
+                next_l = min(next_l, lines(bus, db, &encoded).saturating_sub(1));
             }
         }
 
@@ -396,7 +396,7 @@ mod tests {
         bus.install_ram(0x8000, 0x1000);
 
         assert_eq!(
-            Some((0, 0x4000, 0).into()),
+            Some((0, 0x400, 0).into()),
             bus.decode_tumbler(Pointer::from(0x400))
         );
         assert_eq!(
@@ -577,6 +577,266 @@ mod tests {
         );
         assert_eq!(
             tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 4),
+            Some((1, 0x1FFC, 0).into())
+        );
+    }
+
+    #[test]
+    fn tumbler_scroll_back_multiline() {
+        let mut bus = Memory::<TestArchitecture>::new();
+
+        bus.install_ram(0x0000, 0x2000);
+        bus.install_ram(0x2000, 0x2000);
+        bus.install_ram(0x4000, 0x4000);
+        bus.install_ram(0x8000, 0x1000);
+
+        let mut db = Database::<TestArchitecture>::new();
+
+        let mut block = Block::from_parts(Pointer::from(0x100), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x100));
+        block.mark_instr_at(Pointer::from(0x103));
+        block.mark_instr_at(Pointer::from(0x106));
+        block.mark_instr_at(Pointer::from(0x107));
+        block.mark_instr_at(Pointer::from(0x108));
+        block.mark_instr_at(Pointer::from(0x109));
+        block.mark_instr_at(Pointer::from(0x10C));
+        block.mark_instr_at(Pointer::from(0x10D));
+        block.mark_instr_at(Pointer::from(0x10E));
+        block.mark_instr_at(Pointer::from(0x10F));
+
+        db.insert_block(block);
+
+        let mut block = Block::from_parts(Pointer::from(0x110), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x110));
+        block.mark_instr_at(Pointer::from(0x113));
+        block.mark_instr_at(Pointer::from(0x116));
+        block.mark_instr_at(Pointer::from(0x119));
+        block.mark_instr_at(Pointer::from(0x11C));
+
+        db.insert_block(block);
+
+        let mut block = Block::from_parts(Pointer::from(0x3FF0), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x3FF0));
+        block.mark_instr_at(Pointer::from(0x3FF3));
+        block.mark_instr_at(Pointer::from(0x3FF6));
+        block.mark_instr_at(Pointer::from(0x3FF9));
+        block.mark_instr_at(Pointer::from(0x3FFC));
+        block.mark_instr_at(Pointer::from(0x3FFF));
+
+        db.insert_block(block);
+
+        let mut block = Block::from_parts(Pointer::from(0x4000), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x4000));
+        block.mark_instr_at(Pointer::from(0x4003));
+        block.mark_instr_at(Pointer::from(0x4006));
+        block.mark_instr_at(Pointer::from(0x4009));
+        block.mark_instr_at(Pointer::from(0x400C));
+        block.mark_instr_at(Pointer::from(0x400F));
+
+        db.insert_block(block);
+
+        let mut block = Block::from_parts(Pointer::from(0x7FF0), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x7FF0));
+        block.mark_instr_at(Pointer::from(0x7FF3));
+        block.mark_instr_at(Pointer::from(0x7FF6));
+        block.mark_instr_at(Pointer::from(0x7FF9));
+        block.mark_instr_at(Pointer::from(0x7FFC));
+        block.mark_instr_at(Pointer::from(0x7FFE));
+
+        db.insert_block(block);
+
+        // scroll back within same block
+        let tumbler = bus.decode_tumbler(Pointer::from(0x113)).unwrap();
+
+        assert_eq!(
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            Some((0, 0x110, 2).into())
+        );
+        assert_eq!(
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            Some((0, 0x110, 1).into())
+        );
+        assert_eq!(
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            Some((0, 0x110, 0).into())
+        );
+
+        // scroll back between blocks in same region
+        assert_eq!(
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            Some((0, 0x10F, 2).into())
+        );
+        assert_eq!(
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            Some((0, 0x10F, 1).into())
+        );
+        assert_eq!(
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            Some((0, 0x10F, 0).into())
+        );
+        assert_eq!(
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            Some((0, 0x10D, 2).into())
+        );
+        assert_eq!(
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            Some((0, 0x10D, 1).into())
+        );
+        assert_eq!(
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12),
+            Some((0, 0x10D, 0).into())
+        );
+
+        // scroll back off edge of block within same region
+        let tumbler2 = bus.decode_tumbler(Pointer::from(0x100)).unwrap();
+
+        assert_eq!(
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            Some((0, 0xFF, 2).into())
+        );
+        assert_eq!(
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            Some((0, 0xFF, 1).into())
+        );
+        assert_eq!(
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            Some((0, 0xFF, 0).into())
+        );
+        assert_eq!(
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            Some((0, 0xFE, 2).into())
+        );
+        assert_eq!(
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            Some((0, 0xFE, 1).into())
+        );
+        assert_eq!(
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            Some((0, 0xFE, 0).into())
+        );
+        assert_eq!(
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            Some((0, 0xFD, 2).into())
+        );
+        assert_eq!(
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            Some((0, 0xFD, 1).into())
+        );
+        assert_eq!(
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            Some((0, 0xFD, 0).into())
+        );
+
+        // scroll back wraparound
+        let tumbler3 = bus.decode_tumbler(Pointer::from(0x0)).unwrap();
+
+        assert_eq!(
+            tumbler3.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            Some((3, 0xFFD, 2).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            Some((3, 0xFFD, 1).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            Some((3, 0xFFD, 0).into())
+        );
+
+        // scroll back from no block onto block in another region
+        let tumbler4 = bus.decode_tumbler(Pointer::from(0x8002)).unwrap();
+
+        assert_eq!(
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            Some((3, 0x1, 2).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            Some((3, 0x1, 1).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            Some((3, 0x1, 0).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            Some((3, 0x0, 2).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            Some((3, 0x0, 1).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            Some((3, 0x0, 0).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            Some((2, 0x3FFE, 2).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            Some((2, 0x3FFE, 1).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            Some((2, 0x3FFE, 0).into())
+        );
+
+        // scroll back from block in one region to block in another region
+        let tumbler5 = bus.decode_tumbler(Pointer::from(0x4006)).unwrap();
+
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            Some((2, 3, 2).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            Some((2, 3, 1).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            Some((2, 3, 0).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            Some((2, 0, 2).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            Some((2, 0, 1).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            Some((2, 0, 0).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            Some((1, 0x1FFF, 2).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            Some((1, 0x1FFF, 1).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            Some((1, 0x1FFF, 0).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            Some((1, 0x1FFC, 2).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            Some((1, 0x1FFC, 1).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12),
             Some((1, 0x1FFC, 0).into())
         );
     }
@@ -763,6 +1023,375 @@ mod tests {
         assert_eq!(
             tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3),
             Some((1, 3, 0).into())
+        );
+    }
+
+    #[test]
+    fn tumbler_scroll_forward_multiline() {
+        let mut bus = Memory::<TestArchitecture>::new();
+
+        bus.install_ram(0x0000, 0x2000);
+        bus.install_ram(0x2000, 0x2000);
+        bus.install_ram(0x4000, 0x4000);
+        bus.install_ram(0x8000, 0x1000);
+
+        let mut db = Database::<TestArchitecture>::new();
+
+        let mut block = Block::from_parts(Pointer::from(0x0), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x0));
+        block.mark_instr_at(Pointer::from(0x3));
+        block.mark_instr_at(Pointer::from(0x6));
+        block.mark_instr_at(Pointer::from(0x9));
+        block.mark_instr_at(Pointer::from(0xC));
+        block.mark_instr_at(Pointer::from(0xE));
+
+        db.insert_block(block);
+
+        let mut block = Block::from_parts(Pointer::from(0x100), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x100));
+        block.mark_instr_at(Pointer::from(0x103));
+        block.mark_instr_at(Pointer::from(0x106));
+        block.mark_instr_at(Pointer::from(0x107));
+        block.mark_instr_at(Pointer::from(0x108));
+        block.mark_instr_at(Pointer::from(0x109));
+        block.mark_instr_at(Pointer::from(0x10C));
+        block.mark_instr_at(Pointer::from(0x10D));
+        block.mark_instr_at(Pointer::from(0x10E));
+        block.mark_instr_at(Pointer::from(0x10F));
+
+        db.insert_block(block);
+
+        let mut block = Block::from_parts(Pointer::from(0x110), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x110));
+        block.mark_instr_at(Pointer::from(0x113));
+        block.mark_instr_at(Pointer::from(0x116));
+        block.mark_instr_at(Pointer::from(0x119));
+        block.mark_instr_at(Pointer::from(0x11C));
+
+        db.insert_block(block);
+
+        let mut block = Block::from_parts(Pointer::from(0x2000), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x2000));
+        block.mark_instr_at(Pointer::from(0x2003));
+        block.mark_instr_at(Pointer::from(0x2006));
+        block.mark_instr_at(Pointer::from(0x2009));
+        block.mark_instr_at(Pointer::from(0x200C));
+
+        db.insert_block(block);
+
+        let mut block = Block::from_parts(Pointer::from(0x3FF0), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x3FF0));
+        block.mark_instr_at(Pointer::from(0x3FF3));
+        block.mark_instr_at(Pointer::from(0x3FF6));
+        block.mark_instr_at(Pointer::from(0x3FF9));
+        block.mark_instr_at(Pointer::from(0x3FFC));
+        block.mark_instr_at(Pointer::from(0x3FFF));
+
+        db.insert_block(block);
+
+        let mut block = Block::from_parts(Pointer::from(0x4000), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x4000));
+        block.mark_instr_at(Pointer::from(0x4003));
+        block.mark_instr_at(Pointer::from(0x4006));
+        block.mark_instr_at(Pointer::from(0x4009));
+        block.mark_instr_at(Pointer::from(0x400C));
+        block.mark_instr_at(Pointer::from(0x400F));
+
+        db.insert_block(block);
+
+        let mut block = Block::from_parts(Pointer::from(0x7FF0), 0x10);
+
+        block.mark_instr_at(Pointer::from(0x7FF0));
+        block.mark_instr_at(Pointer::from(0x7FF3));
+        block.mark_instr_at(Pointer::from(0x7FF6));
+        block.mark_instr_at(Pointer::from(0x7FF9));
+        block.mark_instr_at(Pointer::from(0x7FFC));
+        block.mark_instr_at(Pointer::from(0x7FFE));
+
+        db.insert_block(block);
+
+        // scroll forward within block
+        let tumbler = bus.decode_tumbler(Pointer::from(0x116)).unwrap();
+
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            Some((0, 0x116, 1).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            Some((0, 0x116, 2).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            Some((0, 0x119, 0).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            Some((0, 0x119, 1).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            Some((0, 0x119, 2).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            Some((0, 0x11C, 0).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            Some((0, 0x11C, 1).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            Some((0, 0x11C, 2).into())
+        );
+
+        // scroll off of edge of block within region
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            Some((0, 0x120, 0).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            Some((0, 0x120, 1).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            Some((0, 0x120, 2).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12),
+            Some((0, 0x121, 0).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 13),
+            Some((0, 0x121, 1).into())
+        );
+        assert_eq!(
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 14),
+            Some((0, 0x121, 2).into())
+        );
+
+        // scroll wraparound onto block
+        let tumbler3 = bus.decode_tumbler(Pointer::from(0x8FFF)).unwrap();
+
+        assert_eq!(
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            Some((3, 0xFFF, 1).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            Some((3, 0xFFF, 2).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            Some((0, 0x0, 0).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            Some((0, 0x0, 1).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            Some((0, 0x0, 2).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            Some((0, 0x3, 0).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            Some((0, 0x3, 1).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            Some((0, 0x3, 2).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            Some((0, 0x6, 0).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            Some((0, 0x6, 1).into())
+        );
+        assert_eq!(
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            Some((0, 0x6, 2).into())
+        );
+
+        // scroll off of edge of block onto another block across regions
+        let tumbler4 = bus.decode_tumbler(Pointer::from(0x3FF9)).unwrap();
+
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            Some((1, 0x1FF9, 1).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            Some((1, 0x1FF9, 2).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            Some((1, 0x1FFC, 0).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            Some((1, 0x1FFC, 1).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            Some((1, 0x1FFC, 2).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            Some((1, 0x1FFF, 0).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            Some((1, 0x1FFF, 1).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            Some((1, 0x1FFF, 2).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            Some((2, 0x0000, 0).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            Some((2, 0x0000, 1).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            Some((2, 0x0000, 2).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12),
+            Some((2, 0x0003, 0).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 13),
+            Some((2, 0x0003, 1).into())
+        );
+        assert_eq!(
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 14),
+            Some((2, 0x0003, 2).into())
+        );
+
+        // scroll off of edge of block onto no block across regions
+        let tumbler5 = bus.decode_tumbler(Pointer::from(0x7FF9)).unwrap();
+
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            Some((2, 0x3FF9, 1).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            Some((2, 0x3FF9, 2).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            Some((2, 0x3FFC, 0).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            Some((2, 0x3FFC, 1).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            Some((2, 0x3FFC, 2).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            Some((2, 0x3FFE, 0).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            Some((2, 0x3FFE, 1).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            Some((2, 0x3FFE, 2).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            Some((3, 0, 0).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            Some((3, 0, 1).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            Some((3, 0, 2).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12),
+            Some((3, 1, 0).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 13),
+            Some((3, 1, 1).into())
+        );
+        assert_eq!(
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 14),
+            Some((3, 1, 2).into())
+        );
+
+        // scroll off of no block onto region with block
+        let tumbler6 = bus.decode_tumbler(Pointer::from(0x1FFE)).unwrap();
+
+        assert_eq!(
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            Some((0, 0x1FFE, 1).into())
+        );
+        assert_eq!(
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            Some((0, 0x1FFE, 2).into())
+        );
+        assert_eq!(
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            Some((0, 0x1FFF, 0).into())
+        );
+        assert_eq!(
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            Some((0, 0x1FFF, 1).into())
+        );
+        assert_eq!(
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            Some((0, 0x1FFF, 2).into())
+        );
+        assert_eq!(
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            Some((1, 0, 0).into())
+        );
+        assert_eq!(
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            Some((1, 0, 1).into())
+        );
+        assert_eq!(
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            Some((1, 0, 2).into())
+        );
+        assert_eq!(
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            Some((1, 3, 0).into())
+        );
+        assert_eq!(
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            Some((1, 3, 1).into())
+        );
+        assert_eq!(
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            Some((1, 3, 2).into())
         );
     }
 }

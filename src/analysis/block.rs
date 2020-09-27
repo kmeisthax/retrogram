@@ -489,8 +489,18 @@ mod tests {
         );
 
         assert_eq!(
+            block.last_instruction(&Pointer::from(0x107), 4),
+            Some(InstrLocation::OutsideBlock(1))
+        );
+
+        assert_eq!(
             block.last_instruction(&Pointer::from(0x107), 5),
             Some(InstrLocation::OutsideBlock(2))
+        );
+
+        assert_eq!(
+            block.last_instruction(&Pointer::from(0x107), 6),
+            Some(InstrLocation::OutsideBlock(3))
         );
     }
 
@@ -535,8 +545,18 @@ mod tests {
         );
 
         assert_eq!(
+            block.next_instruction(&Pointer::from(0x10C), 4),
+            Some(InstrLocation::OutsideBlock(1))
+        );
+
+        assert_eq!(
             block.next_instruction(&Pointer::from(0x10C), 5),
             Some(InstrLocation::OutsideBlock(2))
+        );
+
+        assert_eq!(
+            block.next_instruction(&Pointer::from(0x10C), 6),
+            Some(InstrLocation::OutsideBlock(3))
         );
     }
 }
