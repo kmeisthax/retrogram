@@ -48,7 +48,7 @@ where
     AR: Architecture,
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
-    <ASM::Literal as Literal>::PtrVal: Clone + Into<AR::PtrVal>,
+    <ASM::Literal as Literal>::PtrVal: Clone + Into<AR::PtrVal> + From<AR::PtrVal>,
 {
     /// Determine how many lines of disassembly exist at a particular memory
     /// location.
@@ -58,7 +58,11 @@ where
         db: &mut Database<AR>,
         loc: &Pointer<AR::PtrVal>,
     ) -> usize {
-        if let Some(_) = db.find_block_membership(loc).and_then(|id| db.block(id)) {
+        if db
+            .find_block_membership(loc)
+            .and_then(|id| db.block(id))
+            .is_some()
+        {
             match self.arch.disassemble(loc, bus) {
                 Ok(disasm) => {
                     let mut instr_directive = Section::new("");
@@ -73,15 +77,32 @@ where
                     let mut disasm = Vec::new();
 
                     for (directive, _size) in instr_directive.iter_directives() {
-                        if directive.is_emit_instr() {
-                            //TODO: Become errors.
-                            self.asm
-                                .emit_instr(&mut disasm, directive.as_emit_instr().unwrap().0)
-                                .unwrap();
+                        let maybe_err = match directive {
+                            Directive::EmitInstr(instr, _size) => {
+                                self.asm.emit_instr(&mut disasm, instr)
+                            }
+                            Directive::EmitData(data) => self.asm.emit_data(&mut disasm, data),
+                            Directive::EmitSpace(s) => self.asm.emit_space(&mut disasm, s),
+                            Directive::DeclareLabel(label) => {
+                                self.asm.emit_label_decl(&mut disasm, label)
+                            }
+                            Directive::DeclareOrg(ptr) => {
+                                let (ptrval, ctxt) = ptr.clone().into_ptrval_and_contexts();
+                                let desired_ptr =
+                                    Pointer::from_ptrval_and_contexts(ptrval.into(), ctxt);
+                                self.asm.emit_org(&mut disasm, "", &desired_ptr)
+                            }
+                            Directive::DeclareComment(com) => {
+                                self.asm.emit_comment(&mut disasm, com)
+                            }
+                        };
+
+                        if maybe_err.is_err() {
+                            return 1;
                         }
                     }
 
-                    std::str::from_utf8(&disasm).unwrap().matches("\n").count()
+                    std::str::from_utf8(&disasm).unwrap().matches('\n').count()
                 }
                 Err(_e) => 1,
             }
@@ -177,7 +198,7 @@ where
     <AR::Offset as TryInto<usize>>::Error: std::fmt::Debug,
     ASM: 'static + Assembler,
     ASM::Literal: CompatibleLiteral<AR> + Clone,
-    <ASM::Literal as Literal>::PtrVal: Clone + Into<AR::PtrVal>,
+    <ASM::Literal as Literal>::PtrVal: Clone + Into<AR::PtrVal> + From<AR::PtrVal>,
 {
     fn draw(&self, printer: &Printer) {
         let mut position = self.position;
