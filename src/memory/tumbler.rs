@@ -352,7 +352,7 @@ impl Tumbler {
                 // This requires, again, multiple jumps between forms to both
                 // properly snap the pointers and make sure we're still on the
                 // last line.
-                // 
+                //
                 // We don't have to worry about snapping tumblers scrolling
                 // forward as it is expected that all blocks start with a valid
                 // instruction.
