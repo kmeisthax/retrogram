@@ -312,6 +312,7 @@ impl Tumbler {
                         if new_io > 0 {
                             next_r = new_r;
                             next_io = new_io - 1;
+                            encoded = bus.encode_tumbler((next_r, next_io, next_l).into())?;
                             next_l = lines(bus, db, &encoded).saturating_sub(1);
                         } else {
                             let (r_minus, r_minus_max_io, r_l) =
@@ -327,6 +328,8 @@ impl Tumbler {
                     }
                 };
 
+                // This bit of code snaps the tumbler back to the nearest
+                // instruction.
                 if let Some(other_block) = db
                     .find_block_membership(&encoded)
                     .and_then(|bid| db.block(bid))
@@ -340,10 +343,34 @@ impl Tumbler {
                 if new_r != next_r || new_io != next_io {
                     next_r = new_r;
                     next_io = new_io;
+                    encoded = bus.encode_tumbler((next_r, next_io, next_l).into())?;
                     next_l = lines(bus, db, &encoded).saturating_sub(1);
                 }
             } else if next_io > 0 {
+                // This is the case where we're scrolling back from a non-block
+                // area onto something that might potentially have a block.
+                // This requires, again, multiple jumps between forms to both
+                // properly snap the pointers and make sure we're still on the
+                // last line.
+                // 
+                // We don't have to worry about snapping tumblers scrolling
+                // forward as it is expected that all blocks start with a valid
+                // instruction.
                 next_io -= 1;
+                encoded = bus.encode_tumbler((next_r, next_io, next_l).into())?;
+
+                if let Some(other_block) = db
+                    .find_block_membership(&encoded)
+                    .and_then(|bid| db.block(bid))
+                {
+                    encoded = other_block.align_to_instruction(&encoded)?;
+                }
+
+                let decoded = bus.decode_tumbler(encoded.clone())?;
+                let (new_r, new_io, _new_l, _new_max_io) = decoded.valid_region(bus)?;
+
+                next_r = new_r;
+                next_io = new_io;
                 encoded = bus.encode_tumbler((next_r, next_io, next_l).into())?;
                 next_l = lines(bus, db, &encoded).saturating_sub(1);
                 amount = amount.saturating_sub(1);
