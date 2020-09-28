@@ -86,6 +86,11 @@ impl AnnotatedText {
         &mut self.text
     }
 
+    /// Yield the unannotated text written to this annotation's writer.
+    pub fn unannotated_text(&self) -> AnyResult<&str, Utf8Error> {
+        from_utf8(&self.text)
+    }
+
     /// Iterate annotations
     pub fn iter_annotations<'a>(
         &'a self,
@@ -202,7 +207,7 @@ impl AnnotatedText {
     }
 
     /// Emit a comment into annotated text.
-    fn emit_comment<ASM>(&mut self, asm: ASM, comment_data: &str) -> Result<()>
+    pub fn emit_comment<ASM>(&mut self, asm: ASM, comment_data: &str) -> Result<()>
     where
         ASM: Assembler,
     {
@@ -211,7 +216,7 @@ impl AnnotatedText {
     }
 
     /// Emit an org statement or other section declaration into annotated text.
-    fn emit_org<ASM>(
+    pub fn emit_org<ASM>(
         &mut self,
         asm: ASM,
         section_name: &str,

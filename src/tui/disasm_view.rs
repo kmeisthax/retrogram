@@ -1,6 +1,6 @@
 //! Disassembly view
 
-use crate::analysis::replace_labels;
+use crate::analysis::{replace_labels, Error};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
 use crate::ast::{Directive, Literal, Section};
@@ -10,6 +10,7 @@ use crate::project::ProjectDatabase;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::theme::{BaseColor, Color, ColorStyle, PaletteColor};
 use cursive::{Printer, View, XY};
+use std::cmp::max;
 use std::convert::{TryFrom, TryInto};
 use std::io::Write;
 use std::sync::{Arc, RwLock};
@@ -50,64 +51,86 @@ where
     ASM::Literal: CompatibleLiteral<AR>,
     <ASM::Literal as Literal>::PtrVal: Clone + Into<AR::PtrVal> + From<AR::PtrVal>,
 {
-    /// Determine how many lines of disassembly exist at a particular memory
-    /// location.
+    /// Produce annotated text for a particular location.
+    pub fn disasm_at_location(
+        &self,
+        bus: &Memory<AR>,
+        db: &mut Database<AR>,
+        loc: &Pointer<AR::PtrVal>,
+    ) -> Result<AnnotatedText, Error<AR>> {
+        let mut at = AnnotatedText::new();
+        at.change_annotation(AnnotationKind::Syntactic);
+        write!(at.as_writer(), "${:X}: ", loc);
+
+        if let Some(sym) = db.pointer_symbol(loc).and_then(|id| db.symbol(id)) {
+            at.emit_label_decl(self.asm.clone(), sym.as_label())?;
+        }
+
+        if db
+            .find_block_membership(loc)
+            .and_then(|id| db.block(id))
+            .is_some()
+        {
+            let disasm = self.arch.disassemble(loc, bus)?;
+            let mut instr_directive = Section::new("");
+
+            instr_directive.append_directive(
+                Directive::EmitInstr(disasm.as_instr().clone(), disasm.next_offset()),
+                loc.clone(),
+            );
+
+            instr_directive = replace_labels(instr_directive, db, bus);
+
+            for (directive, _size) in instr_directive.iter_directives() {
+                match directive {
+                    Directive::EmitInstr(instr, _size) => at.emit_instr(self.asm.clone(), instr)?,
+                    Directive::EmitData(data) => at.emit_data(self.asm.clone(), data)?,
+                    Directive::EmitSpace(s) => at.emit_space(self.asm.clone(), s)?,
+                    Directive::DeclareLabel(label) => {
+                        at.emit_label_decl(self.asm.clone(), label)?
+                    }
+                    Directive::DeclareOrg(ptr) => {
+                        let (ptrval, ctxt) = ptr.clone().into_ptrval_and_contexts();
+                        let desired_ptr = Pointer::from_ptrval_and_contexts(ptrval.into(), ctxt);
+                        at.emit_org(self.asm.clone(), "", &desired_ptr)?
+                    }
+                    Directive::DeclareComment(com) => at.emit_comment(self.asm.clone(), com)?,
+                }
+            }
+        } else if let Some(data) = self.bus.read_unit(loc).into_concrete() {
+            at.emit_data(self.asm.clone(), &[data]).unwrap();
+        } else {
+            at.emit_space(self.asm.clone(), 1).unwrap();
+        }
+
+        Ok(at)
+    }
+
+    /// Determine the number of lines at a particular memory location.
     pub fn disasm_lines_at_location(
         &self,
         bus: &Memory<AR>,
         db: &mut Database<AR>,
         loc: &Pointer<AR::PtrVal>,
     ) -> usize {
-        if db
-            .find_block_membership(loc)
-            .and_then(|id| db.block(id))
-            .is_some()
-        {
-            match self.arch.disassemble(loc, bus) {
-                Ok(disasm) => {
-                    let mut instr_directive = Section::new("");
+        match self.disasm_at_location(bus, db, loc) {
+            Ok(at) => {
+                let mut lines = 0;
 
-                    instr_directive.append_directive(
-                        Directive::EmitInstr(disasm.as_instr().clone(), disasm.next_offset()),
-                        loc.clone(),
-                    );
-
-                    instr_directive = replace_labels(instr_directive, db, bus);
-
-                    let mut disasm = Vec::new();
-
-                    for (directive, _size) in instr_directive.iter_directives() {
-                        let maybe_err = match directive {
-                            Directive::EmitInstr(instr, _size) => {
-                                self.asm.emit_instr(&mut disasm, instr)
+                match at.unannotated_text() {
+                    Ok(text) => {
+                        for (i, _text_line) in text.split('\n').enumerate() {
+                            if i > 0 {
+                                lines += 1;
                             }
-                            Directive::EmitData(data) => self.asm.emit_data(&mut disasm, data),
-                            Directive::EmitSpace(s) => self.asm.emit_space(&mut disasm, s),
-                            Directive::DeclareLabel(label) => {
-                                self.asm.emit_label_decl(&mut disasm, label)
-                            }
-                            Directive::DeclareOrg(ptr) => {
-                                let (ptrval, ctxt) = ptr.clone().into_ptrval_and_contexts();
-                                let desired_ptr =
-                                    Pointer::from_ptrval_and_contexts(ptrval.into(), ctxt);
-                                self.asm.emit_org(&mut disasm, "", &desired_ptr)
-                            }
-                            Directive::DeclareComment(com) => {
-                                self.asm.emit_comment(&mut disasm, com)
-                            }
-                        };
-
-                        if maybe_err.is_err() {
-                            return 1;
                         }
                     }
-
-                    std::str::from_utf8(&disasm).unwrap().matches('\n').count()
+                    Err(_e) => return 1,
                 }
-                Err(_e) => 1,
+
+                lines
             }
-        } else {
-            1
+            Err(_e) => 1,
         }
     }
 
@@ -214,64 +237,37 @@ where
                 break;
             }
 
-            let mut at = AnnotatedText::new();
+            let at = if let Some(enc) = self.bus.encode_tumbler(position) {
+                //printer.print((0, line), &format!("Pos {}, {}, {}: {} lines...", position.region_index(), position.image_index(), position.line_index(), self.disasm_lines_at_location(&self.bus, db, &enc)));
+                //line += 1;
 
-            if let Some(enc) = self.bus.encode_tumbler(position) {
-                at.change_annotation(AnnotationKind::Syntactic);
-                write!(at.as_writer(), "${:X}: ", enc);
+                match self.disasm_at_location(&self.bus, db, &enc) {
+                    Ok(at) => at,
+                    Err(e) => {
+                        let mut at = AnnotatedText::new();
 
-                if let Some(sym) = db.pointer_symbol(&enc).and_then(|id| db.symbol(id)) {
-                    at.emit_label_decl(self.asm.clone(), sym.as_label());
-                }
+                        at.change_annotation(AnnotationKind::Error);
+                        writeln!(at.as_writer(), "Disassembly error! {}", e);
 
-                if let Some(_block) = db.find_block_membership(&enc).and_then(|bid| db.block(bid)) {
-                    let disasm = self.arch.disassemble(&enc, &self.bus);
-
-                    match disasm {
-                        Ok(disasm) => {
-                            let mut instr_directive: Section<
-                                ASM::Literal,
-                                AR::PtrVal,
-                                AR::Byte,
-                                AR::Offset,
-                            > = Section::new("");
-
-                            instr_directive.append_directive(
-                                Directive::EmitInstr(
-                                    disasm.as_instr().clone(),
-                                    disasm.next_offset(),
-                                ),
-                                enc.clone(),
-                            );
-
-                            instr_directive = replace_labels(instr_directive, db, &self.bus);
-
-                            for (directive, _size) in instr_directive.iter_directives() {
-                                if directive.is_emit_instr() {
-                                    at.emit_instr(self.asm.clone(), &disasm.as_instr()).unwrap();
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            at.change_annotation(AnnotationKind::Error);
-                            writeln!(at.as_writer(), "Error ({})", e);
-                        }
+                        at
                     }
-                } else if let Some(data) = self.bus.retrieve_at_tumbler(position, 1) {
-                    at.emit_data(self.asm.clone(), data).unwrap();
-                } else {
-                    at.emit_space(self.asm.clone(), 1).unwrap();
                 }
             } else {
+                let mut at = AnnotatedText::new();
+
                 at.change_annotation(AnnotationKind::Error);
                 writeln!(
                     at.as_writer(),
                     "Invalid offset! ${:X}",
                     position.image_index()
                 );
-            }
+
+                at
+            };
 
             let mut pos = 0;
+            let line_offset = position.line_index();
+            let mut printed_lines = 0;
 
             for res in at.iter_annotations() {
                 let (text, annotation) = res.unwrap();
@@ -296,18 +292,30 @@ where
                     }
                 };
 
+                let mut printed_a_line = false;
+
                 for (i, text_line) in text.split('\n').enumerate() {
                     if i > 0 {
-                        line += 1;
+                        printed_lines += 1;
                         pos = 0;
                     }
 
-                    printer.with_color(color_style, |printer| {
-                        printer.print((pos, line), text_line.trim());
-                    });
+                    if printed_lines >= line_offset {
+                        if printed_a_line {
+                            line += 1;
+                        }
 
-                    if i == 0 {
-                        pos += text.trim().len();
+                        printer.with_color(color_style, |printer| {
+                            printer.print((pos, line), text_line);
+                        });
+
+                        if text_line.trim() != "" {
+                            printed_a_line = true;
+                        }
+                    }
+
+                    if !printed_a_line {
+                        pos += text_line.len();
                     }
                 }
             }
@@ -317,7 +325,7 @@ where
                     &self.bus,
                     db,
                     &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-                    1,
+                    max(printed_lines, 1),
                 )
                 .unwrap();
         }
