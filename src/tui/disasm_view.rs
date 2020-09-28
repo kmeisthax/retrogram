@@ -60,7 +60,7 @@ where
     ) -> Result<AnnotatedText, Error<AR>> {
         let mut at = AnnotatedText::new();
         at.change_annotation(AnnotationKind::Syntactic);
-        write!(at.as_writer(), "${:X}: ", loc);
+        write!(at.as_writer(), "${:X}: ", loc)?;
 
         if let Some(sym) = db.pointer_symbol(loc).and_then(|id| db.symbol(id)) {
             at.emit_label_decl(self.asm.clone(), sym.as_label())?;
@@ -247,7 +247,7 @@ where
                         let mut at = AnnotatedText::new();
 
                         at.change_annotation(AnnotationKind::Error);
-                        writeln!(at.as_writer(), "Disassembly error! {}", e);
+                        writeln!(at.as_writer(), "Disassembly error! {}", e).unwrap();
 
                         at
                     }
@@ -260,7 +260,8 @@ where
                     at.as_writer(),
                     "Invalid offset! ${:X}",
                     position.image_index()
-                );
+                )
+                .unwrap();
 
                 at
             };
