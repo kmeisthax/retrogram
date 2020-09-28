@@ -108,4 +108,13 @@ where
     }
 }
 
+impl<AR> From<io::Error> for Error<AR>
+where
+    AR: Architecture,
+{
+    fn from(err: io::Error) -> Self {
+        Self::IOError(err)
+    }
+}
+
 pub type Result<T, AR> = result::Result<T, Error<AR>>;
