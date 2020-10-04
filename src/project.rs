@@ -316,6 +316,10 @@ impl Project {
 
         None
     }
+
+    pub fn iter_programs(&self) -> impl Iterator<Item = (&str, &Program)> {
+        self.programs.iter().map(|(k, v)| (k.as_str(), v))
+    }
 }
 
 #[derive(Debug)]

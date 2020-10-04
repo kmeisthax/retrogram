@@ -1,16 +1,17 @@
 //! Text UI for interactive use
 
-use crate::project::{Program, ProjectDatabase};
+use crate::project::{Program, Project, ProjectDatabase};
 use crate::tui::disasm_view::DisassemblyView;
 use cursive::event::Key;
 use cursive::menu::MenuTree;
+use cursive::view::Nameable;
 use cursive::views::Dialog;
+use cursive_tabs::TabPanel;
 use std::sync::{Arc, RwLock};
 use std::{fs, io};
 
-/// Start a TUI session.
-pub fn main(program: &Program) -> io::Result<()> {
-    let mut siv = cursive::default();
+/// Construct a new disassembly tab for a given zygote.
+fn tab_zygote(name: &str, program: &Program, panel: &mut TabPanel<String>) -> io::Result<()> {
     let image = program
         .iter_images()
         .next()
@@ -28,18 +29,20 @@ pub fn main(program: &Program) -> io::Result<()> {
                 Err(e) => return Err(e),
             },
         ));
-        let prog_name = program.as_name().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "You did not specify a name for the program to disassemble.",
-            )
-        })?;
         let bus = Arc::new(bus);
 
-        siv.add_fullscreen_layer(DisassemblyView::new(pjdb, prog_name, bus, arch, asm));
+        panel.add_tab(
+            name.to_string(),
+            DisassemblyView::new(pjdb, name, bus, arch, asm),
+        );
 
         Ok(())
-    })?;
+    })
+}
+
+/// Start a TUI session.
+pub fn main(project: Project) -> io::Result<()> {
+    let mut siv = cursive::default();
 
     siv.menubar()
         .add_subtree("File", MenuTree::new().leaf("Exit", |s| s.quit()));
@@ -52,11 +55,19 @@ pub fn main(program: &Program) -> io::Result<()> {
             }),
     );
 
+    let mut panel = TabPanel::new();
+
+    for (name, program) in project.iter_programs() {
+        tab_zygote(name, program, &mut panel)?;
+    }
+
+    siv.add_fullscreen_layer(panel.with_name("tabs"));
+
+    siv.set_autohide_menu(false);
+
     siv.add_global_callback(Key::Esc, |s| {
         s.select_menubar();
     });
-
-    siv.set_autohide_menu(false);
 
     siv.run();
 

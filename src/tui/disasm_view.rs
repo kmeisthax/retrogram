@@ -7,9 +7,11 @@ use crate::ast::{Directive, Literal, Section};
 use crate::database::Database;
 use crate::memory::{Memory, Pointer, Tumbler};
 use crate::project::ProjectDatabase;
+use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::theme::{BaseColor, Color, ColorStyle, PaletteColor};
 use cursive::{Printer, View, XY};
+use cursive_tabs::TabPanel;
 use std::cmp::max;
 use std::convert::{TryFrom, TryInto};
 use std::io::Write;
@@ -367,7 +369,14 @@ where
                     s.refresh();
                 })))
             }
+            Event::Key(Key::Tab) => EventResult::Consumed(Some(Callback::from_fn(|s| {
+                s.find_name::<TabPanel<String>>("tabs").unwrap().next()
+            }))),
             _ => EventResult::Ignored,
         }
+    }
+
+    fn take_focus(&mut self, _source: Direction) -> bool {
+        true
     }
 }

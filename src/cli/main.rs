@@ -40,14 +40,11 @@ pub fn main() -> io::Result<()> {
     let (command, submatches) = matches.subcommand();
     let command = cli::Command::from_str(command);
 
-    match project::Project::read(&project_filename) {
-        Ok(mut project) => {
-            prog = resolve_program(&mut project, version, prog)?;
-        }
-        Err(e) => eprintln!("Cannot open project file, got error {}", e), //TODO: You shouldn't need a project file if you specified everything else correctly.
-    };
+    let mut project = project::Project::read(&project_filename)?;
 
     if let Ok(command) = command {
+        prog = resolve_program(&mut project, version, prog)?;
+
         match command {
             cli::Command::Scan => cli::scan(&prog, submatches.unwrap())?,
             cli::Command::Disassemble => cli::dis(&prog, submatches.unwrap())?,
@@ -57,7 +54,7 @@ pub fn main() -> io::Result<()> {
             cli::Command::Trace => cli::trace(&prog, submatches.unwrap())?,
         };
     } else {
-        tui::main(&prog)?;
+        tui::main(project)?;
     }
 
     Ok(())
