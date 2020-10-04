@@ -274,7 +274,8 @@ where
 
             let mut pos = 0;
             let line_offset = position.line_index();
-            let mut printed_lines = 0;
+            let mut seen_lines = 0;
+            let mut rendered_lines = 0;
 
             for res in at.iter_annotations() {
                 let (text, annotation) = res.unwrap();
@@ -289,7 +290,7 @@ where
                         ColorStyle::new(Color::Dark(BaseColor::Blue), PaletteColor::View)
                     }
                     AnnotationKind::Data => {
-                        ColorStyle::new(Color::Dark(BaseColor::Yellow), PaletteColor::View)
+                        ColorStyle::new(Color::Dark(BaseColor::Magenta), PaletteColor::View)
                     }
                     AnnotationKind::Opcode => {
                         ColorStyle::new(Color::Dark(BaseColor::Cyan), PaletteColor::View)
@@ -299,33 +300,27 @@ where
                     }
                 };
 
-                let mut printed_a_line = false;
-
                 for (i, text_line) in text.split('\n').enumerate() {
-                    if i > 0 {
-                        printed_lines += 1;
-                        pos = 0;
-                    }
-
-                    if printed_lines >= line_offset {
-                        if printed_a_line {
-                            line += 1;
-                        }
-
+                    if seen_lines >= line_offset {
                         printer.with_color(color_style, |printer| {
-                            printer.print((pos, line), text_line);
+                            printer.print((pos, line + rendered_lines), text_line);
                         });
 
-                        if text_line.trim() != "" {
-                            printed_a_line = true;
+                        if i > 0 {
+                            rendered_lines += 1;
+                            pos = 0;
+                        } else {
+                            pos += text_line.len();
                         }
                     }
 
-                    if !printed_a_line {
-                        pos += text_line.len();
+                    if i > 0 {
+                        seen_lines += 1;
                     }
                 }
             }
+
+            line += rendered_lines;
 
             position = position
                 .scroll_forward_by_lines(
