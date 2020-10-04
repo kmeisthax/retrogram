@@ -322,7 +322,7 @@ where
                 }
             }
 
-            line += rendered_lines;
+            line += max(rendered_lines, 1);
 
             position = position
                 .scroll_forward_by_lines(
