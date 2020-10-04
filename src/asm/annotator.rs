@@ -9,7 +9,7 @@ use std::result::Result as AnyResult;
 use std::str::{from_utf8, Utf8Error};
 
 /// Enumeration of all possible annotations that can be applied to text.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum AnnotationKind {
     /// Indicates text that forms the assembler syntax.
     Syntactic,
@@ -64,17 +64,17 @@ impl AnnotatedText {
     }
 
     /// Change the annotation type.
-    pub fn change_annotation(&mut self, kind: AnnotationKind) {
-        if let Some(a) = self.annotations.last_mut() {
-            a.size = self.text.len() - self.last_annotation_start;
-        }
-
-        if !self
+    fn change_annotation(&mut self, kind: AnnotationKind) {
+        if self
             .annotations
             .last()
-            .map(|a| a.kind == kind)
-            .unwrap_or(false)
+            .map(|a| a.kind != kind)
+            .unwrap_or(true)
         {
+            if let Some(a) = self.annotations.last_mut() {
+                a.size = self.text.len() - self.last_annotation_start;
+            }
+
             self.annotations.push(Annotation { size: 0, kind });
 
             self.last_annotation_start = self.text.len()
@@ -82,7 +82,12 @@ impl AnnotatedText {
     }
 
     /// Get an annotated text writer.
-    pub fn as_writer<'a>(&'a mut self) -> impl 'a + Write {
+    ///
+    /// All text written into the writer will be assigned the given annotation
+    /// kind.
+    pub fn as_annotated_writer<'a>(&'a mut self, kind: AnnotationKind) -> impl 'a + Write {
+        self.change_annotation(kind);
+
         &mut self.text
     }
 
@@ -98,7 +103,7 @@ impl AnnotatedText {
         let mut last_annotation_start = 0;
 
         self.annotations.iter().enumerate().map(move |(i, a)| {
-            let last_annotation_end = if i == (self.annotations.len() - 1) {
+            let last_annotation_end = if i < (self.annotations.len() - 1) {
                 last_annotation_start + a.size
             } else {
                 self.text.len()
@@ -395,5 +400,71 @@ impl AnnotatedText {
     {
         self.change_annotation(AnnotationKind::Syntactic);
         asm.emit_instr_end(&mut self.text, instr)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AnnotatedText, AnnotationKind};
+    use std::io::Write;
+
+    #[test]
+    fn empty() {
+        let at = AnnotatedText::new();
+        let mut at_iter = at.iter_annotations();
+
+        assert_eq!(None, at_iter.next());
+    }
+
+    #[test]
+    fn one() {
+        let mut at = AnnotatedText::new();
+
+        write!(
+            at.as_annotated_writer(AnnotationKind::Syntactic),
+            "Hello world!"
+        )
+        .unwrap();
+
+        let mut at_iter = at.iter_annotations();
+
+        assert_eq!(
+            Some(Ok(("Hello world!", AnnotationKind::Syntactic))),
+            at_iter.next()
+        );
+        assert_eq!(None, at_iter.next());
+    }
+
+    #[test]
+    fn multi_same_kind() {
+        let mut at = AnnotatedText::new();
+
+        write!(at.as_annotated_writer(AnnotationKind::Syntactic), "Hello").unwrap();
+        write!(at.as_annotated_writer(AnnotationKind::Syntactic), " world!").unwrap();
+
+        let mut at_iter = at.iter_annotations();
+
+        assert_eq!(
+            Some(Ok(("Hello world!", AnnotationKind::Syntactic))),
+            at_iter.next()
+        );
+        assert_eq!(None, at_iter.next());
+    }
+
+    #[test]
+    fn multi_diff_kind() {
+        let mut at = AnnotatedText::new();
+
+        write!(at.as_annotated_writer(AnnotationKind::Syntactic), "Hello").unwrap();
+        write!(at.as_annotated_writer(AnnotationKind::Error), " world!").unwrap();
+
+        let mut at_iter = at.iter_annotations();
+
+        assert_eq!(
+            Some(Ok(("Hello", AnnotationKind::Syntactic))),
+            at_iter.next()
+        );
+        assert_eq!(Some(Ok((" world!", AnnotationKind::Error))), at_iter.next());
+        assert_eq!(None, at_iter.next());
     }
 }
