@@ -237,19 +237,19 @@ where
                 break;
             }
 
-            let at = if let Some(enc) = self.bus.encode_tumbler(position) {
-                //printer.print((0, line), &format!("Pos {}, {}, {}: {} lines...", position.region_index(), position.image_index(), position.line_index(), self.disasm_lines_at_location(&self.bus, db, &enc)));
-                //line += 1;
+            let (at, lines_to_skip) = if let Some(enc) = self.bus.encode_tumbler(position) {
+                let lines_at_loc = self.disasm_lines_at_location(&self.bus, db, &enc);
+                let lines_to_skip = lines_at_loc.saturating_sub(position.line_index());
 
                 match self.disasm_at_location(&self.bus, db, &enc) {
-                    Ok(at) => at,
+                    Ok(at) => (at, lines_to_skip),
                     Err(e) => {
                         let mut at = AnnotatedText::new();
 
                         at.change_annotation(AnnotationKind::Error);
                         writeln!(at.as_writer(), "Disassembly error! {}", e).unwrap();
 
-                        at
+                        (at, lines_to_skip)
                     }
                 }
             } else {
@@ -263,7 +263,7 @@ where
                 )
                 .unwrap();
 
-                at
+                (at, 1)
             };
 
             let mut pos = 0;
@@ -326,7 +326,7 @@ where
                     &self.bus,
                     db,
                     &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-                    max(printed_lines, 1),
+                    max(lines_to_skip, 1),
                 )
                 .unwrap();
         }
