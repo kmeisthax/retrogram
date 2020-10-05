@@ -47,14 +47,6 @@ pub fn main(project: Project) -> io::Result<()> {
     siv.menubar()
         .add_subtree("File", MenuTree::new().leaf("Exit", |s| s.quit()));
 
-    siv.add_layer(
-        Dialog::text("Press <ESC> to show the menu.")
-            .title("Welcome to Retrogram")
-            .button("OK", |s| {
-                s.pop_layer();
-            }),
-    );
-
     let mut panel = TabPanel::new();
 
     for (name, program) in project.iter_programs() {
@@ -68,6 +60,14 @@ pub fn main(project: Project) -> io::Result<()> {
     siv.add_global_callback(Key::Esc, |s| {
         s.select_menubar();
     });
+
+    siv.add_layer(
+        Dialog::text("Press <ESC> to show the menu.")
+            .title("Welcome to Retrogram")
+            .button("OK", |s| {
+                s.pop_layer();
+            }),
+    );
 
     siv.run();
 
