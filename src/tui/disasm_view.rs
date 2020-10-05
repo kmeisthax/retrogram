@@ -161,22 +161,16 @@ where
         }
     }
 
-    /// Returns the scroll start, wrap point, and scroll end.
-    fn scroll_params(&self, db: &mut Database<AR>) -> Option<(Tumbler, Tumbler, Tumbler)> {
+    /// Returns the scroll start and end.
+    fn scroll_params(&self, db: &mut Database<AR>) -> Option<(Tumbler, Tumbler)> {
         let scroll_end = self.scroll.scroll_forward_by_lines(
             &self.bus,
             db,
             &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
             self.size.y.saturating_sub(1),
         )?;
-        let wrap_point = Tumbler::default().scroll_backward_by_lines(
-            &self.bus,
-            db,
-            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-            1,
-        )?;
 
-        Some((self.scroll, wrap_point, scroll_end))
+        Some((self.scroll, scroll_end))
     }
 
     /// Move the cursor down by one.
@@ -184,7 +178,7 @@ where
         let mut db_lock = self.pjdb.write().unwrap();
         let db = db_lock.get_database_mut(&self.prog_name);
 
-        if let Some((scroll, wrap_point, scroll_end)) = self.scroll_params(db) {
+        if let Some((scroll, scroll_end)) = self.scroll_params(db) {
             if let Some(cursor) = self.cursor.scroll_forward_by_lines(
                 &self.bus,
                 db,
@@ -211,7 +205,7 @@ where
         let mut db_lock = self.pjdb.write().unwrap();
         let db = db_lock.get_database_mut(&self.prog_name);
 
-        if let Some((scroll, wrap_point, scroll_end)) = self.scroll_params(db) {
+        if let Some((scroll, scroll_end)) = self.scroll_params(db) {
             if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
                 self.cursor = scroll_end;
             } else if let Some(scroll) = scroll.scroll_forward_by_lines(
