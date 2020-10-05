@@ -9,7 +9,7 @@ use crate::memory::{Memory, Pointer, Tumbler};
 use crate::project::ProjectDatabase;
 use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
-use cursive::theme::{BaseColor, Color, ColorStyle, PaletteColor};
+use cursive::theme::{BaseColor, Color, ColorStyle, ColorType, PaletteColor};
 use cursive::{Printer, View, XY};
 use cursive_tabs::TabPanel;
 use std::cmp::max;
@@ -33,8 +33,11 @@ where
     /// The memory bus containing all of the images to inspect.
     bus: Arc<Memory<AR>>,
 
-    /// The index of the region at the top of the screen.
-    position: Tumbler,
+    /// The location that we are scrolling to.
+    scroll: Tumbler,
+
+    /// The location of the cursor on the screen.
+    cursor: Tumbler,
 
     /// The current view size.
     size: XY<usize>,
@@ -150,11 +153,30 @@ where
             pjdb,
             prog_name: prog_name.to_string(),
             bus,
-            position: Tumbler::default(),
+            scroll: Tumbler::default(),
+            cursor: Tumbler::default(),
             size: (0, 0).into(),
             arch,
             asm,
         }
+    }
+
+    /// Returns the scroll start, wrap point, and scroll end.
+    fn scroll_params(&self, db: &mut Database<AR>) -> Option<(Tumbler, Tumbler, Tumbler)> {
+        let scroll_end = self.scroll.scroll_forward_by_lines(
+            &self.bus,
+            db,
+            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+            self.size.y.saturating_sub(1),
+        )?;
+        let wrap_point = Tumbler::default().scroll_backward_by_lines(
+            &self.bus,
+            db,
+            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+            1,
+        )?;
+
+        Some((self.scroll, wrap_point, scroll_end))
     }
 
     /// Move the cursor down by one.
@@ -162,13 +184,25 @@ where
         let mut db_lock = self.pjdb.write().unwrap();
         let db = db_lock.get_database_mut(&self.prog_name);
 
-        if let Some(position) = self.position.scroll_forward_by_lines(
-            &self.bus,
-            db,
-            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-            1,
-        ) {
-            self.position = position;
+        if let Some((scroll, wrap_point, scroll_end)) = self.scroll_params(db) {
+            if let Some(cursor) = self.cursor.scroll_forward_by_lines(
+                &self.bus,
+                db,
+                &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                1,
+            ) {
+                if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
+                    self.cursor = cursor;
+                } else if let Some(scroll) = scroll.scroll_forward_by_lines(
+                    &self.bus,
+                    db,
+                    &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                    1,
+                ) {
+                    self.cursor = cursor;
+                    self.scroll = scroll;
+                }
+            }
         }
     }
 
@@ -177,13 +211,25 @@ where
         let mut db_lock = self.pjdb.write().unwrap();
         let db = db_lock.get_database_mut(&self.prog_name);
 
-        if let Some(position) = self.position.scroll_forward_by_lines(
-            &self.bus,
-            db,
-            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-            self.size.y,
-        ) {
-            self.position = position;
+        if let Some((scroll, wrap_point, scroll_end)) = self.scroll_params(db) {
+            if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
+                self.cursor = scroll_end;
+            } else if let Some(scroll) = scroll.scroll_forward_by_lines(
+                &self.bus,
+                db,
+                &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                self.size.y,
+            ) {
+                self.scroll = scroll;
+                self.cursor = scroll
+                    .scroll_forward_by_lines(
+                        &self.bus,
+                        db,
+                        &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                        self.size.y.saturating_sub(1),
+                    )
+                    .unwrap();
+            }
         }
     }
 
@@ -192,28 +238,36 @@ where
         let mut db_lock = self.pjdb.write().unwrap();
         let db = db_lock.get_database_mut(&self.prog_name);
 
-        if let Some(position) = self.position.scroll_backward_by_lines(
+        if let Some(cursor) = self.cursor.scroll_backward_by_lines(
             &self.bus,
             db,
             &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
             1,
         ) {
-            self.position = position;
+            if self.cursor == self.scroll {
+                self.scroll = cursor;
+            }
+            self.cursor = cursor;
         }
     }
 
-    /// Move the cursor down by one page.
+    /// Move the cursor up by one page.
     pub fn page_up(&mut self) {
         let mut db_lock = self.pjdb.write().unwrap();
         let db = db_lock.get_database_mut(&self.prog_name);
 
-        if let Some(position) = self.position.scroll_backward_by_lines(
-            &self.bus,
-            db,
-            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-            self.size.y,
-        ) {
-            self.position = position;
+        if self.cursor == self.scroll {
+            if let Some(cursor) = self.cursor.scroll_backward_by_lines(
+                &self.bus,
+                db,
+                &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                self.size.y,
+            ) {
+                self.cursor = cursor;
+                self.scroll = cursor;
+            }
+        } else {
+            self.cursor = self.scroll;
         }
     }
 }
@@ -229,7 +283,7 @@ where
     <ASM::Literal as Literal>::PtrVal: Clone + Into<AR::PtrVal> + From<AR::PtrVal>,
 {
     fn draw(&self, printer: &Printer) {
-        let mut position = self.position;
+        let mut position = self.scroll;
 
         let mut db_lock = self.pjdb.write().unwrap();
 
@@ -281,30 +335,30 @@ where
 
             for res in at.iter_annotations() {
                 let (text, annotation) = res.unwrap();
-                let color_style = match annotation {
-                    AnnotationKind::Syntactic => {
-                        ColorStyle::new(PaletteColor::Primary, PaletteColor::View)
-                    }
-                    AnnotationKind::Comment => {
-                        ColorStyle::new(Color::Dark(BaseColor::Green), PaletteColor::View)
-                    }
-                    AnnotationKind::Label => {
-                        ColorStyle::new(Color::Dark(BaseColor::Blue), PaletteColor::View)
-                    }
-                    AnnotationKind::Data => {
-                        ColorStyle::new(Color::Dark(BaseColor::Magenta), PaletteColor::View)
-                    }
-                    AnnotationKind::Opcode => {
-                        ColorStyle::new(Color::Dark(BaseColor::Cyan), PaletteColor::View)
-                    }
-                    AnnotationKind::Error => {
-                        ColorStyle::new(Color::Dark(BaseColor::Red), PaletteColor::View)
-                    }
+                let foreground: ColorType = match annotation {
+                    AnnotationKind::Syntactic => PaletteColor::Primary.into(),
+                    AnnotationKind::Comment => Color::Dark(BaseColor::Green).into(),
+                    AnnotationKind::Label => Color::Dark(BaseColor::Blue).into(),
+                    AnnotationKind::Data => Color::Dark(BaseColor::Magenta).into(),
+                    AnnotationKind::Opcode => Color::Dark(BaseColor::Cyan).into(),
+                    AnnotationKind::Error => Color::Dark(BaseColor::Red).into(),
                 };
 
                 for (i, text_line) in text.split('\n').enumerate() {
+                    let (pos_region, pos_io, _) = position.into();
+                    let (cur_region, cur_io, cur_line) = self.cursor.into();
+
+                    let background = if pos_region == cur_region
+                        && pos_io == cur_io
+                        && rendered_lines == cur_line
+                    {
+                        PaletteColor::Shadow
+                    } else {
+                        PaletteColor::View
+                    };
+
                     if seen_lines >= line_offset {
-                        printer.with_color(color_style, |printer| {
+                        printer.with_color(ColorStyle::new(foreground, background), |printer| {
                             printer.print((pos, line + rendered_lines), text_line);
                         });
 

@@ -50,6 +50,12 @@ impl From<(usize, usize, usize)> for Tumbler {
     }
 }
 
+impl Into<(usize, usize, usize)> for Tumbler {
+    fn into(self) -> (usize, usize, usize) {
+        (self.region_index, self.image_index, self.line_index)
+    }
+}
+
 impl Tumbler {
     /// Retrieve the region-index component of this tumbler.
     pub fn region_index(&self) -> usize {
