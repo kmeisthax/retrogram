@@ -348,14 +348,12 @@ where
                     let (pos_region, pos_io, _) = position.into();
                     let (cur_region, cur_io, cur_line) = self.cursor.into();
 
-                    let background = if pos_region == cur_region
-                        && pos_io == cur_io
-                        && rendered_lines == cur_line
-                    {
-                        PaletteColor::Shadow
-                    } else {
-                        PaletteColor::View
-                    };
+                    let background =
+                        if pos_region == cur_region && pos_io == cur_io && seen_lines == cur_line {
+                            PaletteColor::Shadow
+                        } else {
+                            PaletteColor::View
+                        };
 
                     if seen_lines >= line_offset {
                         printer.with_color(ColorStyle::new(foreground, background), |printer| {
