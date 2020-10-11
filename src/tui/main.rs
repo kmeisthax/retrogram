@@ -1,6 +1,7 @@
 //! Text UI for interactive use
 
 use crate::database::ProjectDatabase;
+use crate::platform::Platform;
 use crate::project::{Program, Project};
 use crate::tui::disasm_view::DisassemblyView;
 use cursive::event::Key;
@@ -19,7 +20,9 @@ fn tab_zygote(name: &str, program: &Program, panel: &mut TabPanel<String>) -> io
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(program, file, |bus, arch, asm| {
+    with_architecture!(program, |plat, arch, asm| {
+        let bus = plat.construct_platform(&mut file)?;
+
         let pjdb = Arc::new(RwLock::new(
             match ProjectDatabase::read(program.as_database_path()) {
                 Ok(pjdb) => pjdb,

@@ -4,6 +4,7 @@ use crate::analysis::{Block, ReferenceKind};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
 use crate::database::ProjectDatabase;
+use crate::platform::Platform;
 use crate::{analysis, input, maths, memory, project};
 use clap::ArgMatches;
 use std::cmp::Ordering;
@@ -204,7 +205,9 @@ pub fn dis<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()>
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus, arch, asm| {
+    with_architecture!(prog, |plat, arch, asm| {
+        let bus = plat.construct_platform(&mut file)?;
+
         dis_inner(prog, start_spec, &bus, arch, asm)
     })
 }

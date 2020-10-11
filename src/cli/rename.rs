@@ -2,6 +2,7 @@
 
 use crate::arch::Architecture;
 use crate::database::ProjectDatabase;
+use crate::platform::Platform;
 use crate::{ast, input, maths, memory, project};
 use clap::ArgMatches;
 use num_traits::One;
@@ -63,7 +64,9 @@ pub fn rename<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus, arch, _asm| {
+    with_architecture!(prog, |plat, arch, _asm| {
+        let bus = plat.construct_platform(&mut file)?;
+
         rename_inner(prog, from_spec, to_spec, &bus, arch)
     })
 }

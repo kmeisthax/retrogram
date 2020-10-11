@@ -258,14 +258,14 @@ where
 /// particular architecture. It is responsible for instantiating your code
 /// across each architecture's particular type system.
 macro_rules! with_architecture {
-    ($prog:ident, $image_file:ident, |$bus:ident, $arch:ident, $asm:ident| $callback:block) => {
+    ($prog:ident, |$plat:ident, $arch:ident, $asm:ident| $callback:block) => {
         match crate::cli::resolve_program_config($prog)? {
             (
                 crate::arch::ArchName::SM83,
                 crate::platform::PlatformName::GB,
                 crate::asm::AssemblerName::RGBDS,
             ) => {
-                let $bus = crate::platform::gb::construct_platform(&mut $image_file)?;
+                let $plat = crate::platform::gb::GBPlatform();
                 let $asm = crate::asm::rgbds::RGBDS();
                 let $arch = crate::arch::sm83::SM83();
                 $callback
@@ -275,7 +275,7 @@ macro_rules! with_architecture {
                 crate::platform::PlatformName::AGB,
                 crate::asm::AssemblerName::ARMIPS,
             ) => {
-                let $bus = crate::platform::agb::construct_platform(&mut $image_file)?;
+                let $plat = crate::platform::agb::AGBPlatform();
                 let $asm = crate::asm::armips::ARMIPS();
                 let $arch = crate::arch::aarch32::AArch32();
                 $callback

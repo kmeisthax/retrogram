@@ -8,6 +8,7 @@ use crate::database::ProjectDatabase;
 use crate::input::parse_ptr;
 use crate::maths::FromStrRadix;
 use crate::memory::{Memory, Pointer};
+use crate::platform::Platform;
 use crate::project;
 use crate::reg::{State, Symbolic};
 use clap::ArgMatches;
@@ -462,7 +463,9 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, file, |bus, arch, asm| {
+    with_architecture!(prog, |plat, arch, asm| {
+        let bus = plat.construct_platform(&mut file)?;
+
         trace_for_arch(prog, argv, start_spec, &bus, arch, asm)
     })
 }

@@ -5,7 +5,10 @@
 
 pub mod agb;
 pub mod gb;
+mod traits;
 //pub mod sfc;
+
+pub use traits::*;
 
 use crate::arch;
 use serde::Serialize;
