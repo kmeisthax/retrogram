@@ -3,6 +3,7 @@
 use crate::analysis::{Block, ReferenceKind};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
+use crate::database::ProjectDatabase;
 use crate::{analysis, input, maths, memory, project};
 use clap::ArgMatches;
 use std::cmp::Ordering;
@@ -23,11 +24,11 @@ where
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR, PtrVal = AR::PtrVal>,
 {
-    let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
+    let mut pjdb = match ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
         Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
             eprintln!("Creating new database for project");
-            project::ProjectDatabase::new()
+            ProjectDatabase::new()
         }
         Err(e) => return Err(e),
     };

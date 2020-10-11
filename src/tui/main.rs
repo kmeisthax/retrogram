@@ -1,6 +1,7 @@
 //! Text UI for interactive use
 
-use crate::project::{Program, Project, ProjectDatabase};
+use crate::database::ProjectDatabase;
+use crate::project::{Program, Project};
 use crate::tui::disasm_view::DisassemblyView;
 use cursive::event::Key;
 use cursive::menu::MenuTree;

@@ -4,7 +4,7 @@ use crate::analysis::{analyze_trace_log, trace_until_fork, Fork, Trace};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
 use crate::cli::common::reg_parse;
-use crate::database::Database;
+use crate::database::{Database, ProjectDatabase};
 use crate::maths::FromStrRadix;
 use crate::memory::{Offset, Pointer};
 use crate::reg::{Bitwise, State};
@@ -303,11 +303,11 @@ where
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
 {
-    let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
+    let mut pjdb = match ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
         Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
             eprintln!("Creating new database for project");
-            project::ProjectDatabase::new()
+            ProjectDatabase::new()
         }
         Err(e) => return Err(e),
     };

@@ -2,6 +2,7 @@
 
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
+use crate::database::ProjectDatabase;
 use crate::{analysis, input, maths, memory, project};
 use clap::ArgMatches;
 use num_traits::One;
@@ -20,7 +21,7 @@ where
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
 {
-    let mut pjdb = project::ProjectDatabase::read(prog.as_database_path())?;
+    let mut pjdb = ProjectDatabase::read(prog.as_database_path())?;
     let db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,

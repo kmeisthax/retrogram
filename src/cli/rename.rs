@@ -1,6 +1,7 @@
 //! Symbol rename command for retrogram
 
 use crate::arch::Architecture;
+use crate::database::ProjectDatabase;
 use crate::{ast, input, maths, memory, project};
 use clap::ArgMatches;
 use num_traits::One;
@@ -20,7 +21,7 @@ where
     for<'dw> AR::Offset: serde::Deserialize<'dw> + serde::Serialize + One,
     for<'dw> AR::Byte: serde::Deserialize<'dw>,
 {
-    let mut pjdb = project::ProjectDatabase::read(prog.as_database_path())?;
+    let mut pjdb = ProjectDatabase::read(prog.as_database_path())?;
     let db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,

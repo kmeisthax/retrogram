@@ -2,12 +2,14 @@
 //! passes run on the program.
 
 pub mod db;
+mod projectdb;
 pub mod rgbds;
 
 #[cfg(test)]
 mod tests;
 
 pub use db::Database;
+pub use projectdb::ProjectDatabase;
 
 use serde::Serialize;
 use std::str;

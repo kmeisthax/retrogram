@@ -3,6 +3,7 @@
 
 use crate::arch::Architecture;
 use crate::cli::common::resolve_source;
+use crate::database::ProjectDatabase;
 use crate::{arch, database, platform, project};
 use clap::ArgMatches;
 use std::{fs, io};
@@ -21,11 +22,11 @@ where
         &mut database::Database<AR>,
     ) -> io::Result<()>,
 {
-    let mut pjdb = match project::ProjectDatabase::read(prog.as_database_path()) {
+    let mut pjdb = match ProjectDatabase::read(prog.as_database_path()) {
         Ok(pjdb) => pjdb,
         Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
             eprintln!("Creating new database for project");
-            project::ProjectDatabase::new()
+            ProjectDatabase::new()
         }
         Err(e) => return Err(e),
     };
