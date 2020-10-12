@@ -8,8 +8,9 @@ use crate::database::{Database, ProjectDatabase};
 use crate::maths::FromStrRadix;
 use crate::memory::{Offset, Pointer};
 use crate::platform::Platform;
+use crate::project::{Program, Project};
 use crate::reg::{Bitwise, State};
-use crate::{analysis, ast, database, input, maths, memory, project, reg};
+use crate::{analysis, ast, database, input, maths, memory, reg};
 use clap::ArgMatches;
 use num_traits::{One, Zero};
 use std::collections::{BinaryHeap, HashSet};
@@ -285,7 +286,8 @@ where
 /// TODO: The current set of lifetime bounds preclude the use of zero-copy
 /// deserialization. We should figure out a way around that.
 fn scan_for_arch<'a, AR, ASM>(
-    prog: &project::Program,
+    project: &mut Project,
+    prog: &Program,
     start_spec: &str,
     bus: &memory::Memory<AR>,
     arch: AR,
@@ -293,7 +295,7 @@ fn scan_for_arch<'a, AR, ASM>(
     argv: &ArgMatches<'a>,
 ) -> io::Result<()>
 where
-    AR: Architecture,
+    AR: Architecture + 'static,
     AR::Word: TryInto<u64> + FromStrRadix,
     for<'dw> AR::PtrVal: serde::Deserialize<'dw> + serde::Serialize + maths::FromStrRadix,
     AR::Byte: TryInto<u64>,
@@ -304,7 +306,10 @@ where
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
 {
-    let mut pjdb = match ProjectDatabase::read(prog.as_database_path()) {
+    let pjdb: io::Result<ProjectDatabase> =
+        ProjectDatabase::read(project, &mut fs::File::open(prog.as_database_path())?)
+            .map_err(|e| e.into());
+    let mut pjdb = match pjdb {
         Ok(pjdb) => pjdb,
         Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
             eprintln!("Creating new database for project");
@@ -313,7 +318,17 @@ where
         Err(e) => return Err(e),
     };
 
-    let mut db = pjdb.get_database_mut(prog.as_name().expect("Projects must be named!"));
+    let mut db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "You did not specify a name for the program to disassemble.",
+        )
+    })?).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "The architecture of the current program's database does not match the program's architecture."
+        )
+    })?;
 
     let is_tracing_allowed = argv.is_present("dynamic");
     let mut poweron_state = State::default();
@@ -356,13 +371,15 @@ where
 
     eprintln!("Scan complete, writing database");
 
-    pjdb.write(prog.as_database_path())?;
+    if let Err(e) = pjdb.write(&mut fs::File::create(prog.as_database_path())?) {
+        return Err(e.into());
+    }
 
     Ok(())
 }
 
 /// Scan a given program for control flow, symbols, and so on.
-pub fn scan<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()> {
+pub fn scan<'a>(project: &mut Project, prog: &Program, argv: &ArgMatches<'a>) -> io::Result<()> {
     let start_spec = argv
         .value_of("start_pc")
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC"))?;
@@ -372,9 +389,9 @@ pub fn scan<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, |plat, arch, asm| {
+    with_prog_architecture!(prog, |plat, arch, asm| {
         let bus = plat.construct_platform(&mut file)?;
 
-        scan_for_arch(prog, start_spec, &bus, arch, asm, argv)
+        scan_for_arch(project, prog, start_spec, &bus, arch, asm, argv)
     })
 }

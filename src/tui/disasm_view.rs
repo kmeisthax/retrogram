@@ -24,7 +24,7 @@ where
     ASM::Literal: CompatibleLiteral<AR>,
 {
     /// The database repository to pull information from.
-    pjdb: Arc<RwLock<ProjectDatabase<AR>>>,
+    pjdb: Arc<RwLock<ProjectDatabase>>,
 
     /// The name of the program to show.
     prog_name: String,
@@ -50,7 +50,7 @@ where
 
 impl<AR, ASM> DisassemblyView<AR, ASM>
 where
-    AR: Architecture,
+    AR: Architecture + 'static,
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
     <ASM::Literal as Literal>::PtrVal: Clone + Into<AR::PtrVal> + From<AR::PtrVal>,
@@ -142,7 +142,7 @@ where
     }
 
     pub fn new(
-        pjdb: Arc<RwLock<ProjectDatabase<AR>>>,
+        pjdb: Arc<RwLock<ProjectDatabase>>,
         prog_name: &str,
         bus: Arc<Memory<AR>>,
         arch: AR,
@@ -175,7 +175,7 @@ where
     /// Move the cursor down by one.
     pub fn cursor_down(&mut self) {
         let mut db_lock = self.pjdb.write().unwrap();
-        let db = db_lock.get_database_mut(&self.prog_name);
+        let db = db_lock.get_database_mut(&self.prog_name).unwrap();
 
         if let Some((scroll, scroll_end)) = self.scroll_params(db) {
             if let Some(cursor) = self.cursor.scroll_forward_by_lines(
@@ -202,7 +202,7 @@ where
     /// Move the cursor down by one page.
     pub fn page_down(&mut self) {
         let mut db_lock = self.pjdb.write().unwrap();
-        let db = db_lock.get_database_mut(&self.prog_name);
+        let db = db_lock.get_database_mut(&self.prog_name).unwrap();
 
         if let Some((scroll, scroll_end)) = self.scroll_params(db) {
             if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
@@ -229,7 +229,7 @@ where
     /// Move the cursor up by one.
     pub fn cursor_up(&mut self) {
         let mut db_lock = self.pjdb.write().unwrap();
-        let db = db_lock.get_database_mut(&self.prog_name);
+        let db = db_lock.get_database_mut(&self.prog_name).unwrap();
 
         if let Some(cursor) = self.cursor.scroll_backward_by_lines(
             &self.bus,
@@ -247,7 +247,7 @@ where
     /// Move the cursor up by one page.
     pub fn page_up(&mut self) {
         let mut db_lock = self.pjdb.write().unwrap();
-        let db = db_lock.get_database_mut(&self.prog_name);
+        let db = db_lock.get_database_mut(&self.prog_name).unwrap();
 
         if self.cursor == self.scroll {
             if let Some(cursor) = self.cursor.scroll_backward_by_lines(
@@ -280,7 +280,7 @@ where
 
         let mut db_lock = self.pjdb.write().unwrap();
 
-        let db = db_lock.get_database_mut(&self.prog_name);
+        let db = db_lock.get_database_mut(&self.prog_name).unwrap();
         let mut line = 0;
 
         while line < printer.size.y {

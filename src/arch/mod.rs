@@ -35,6 +35,9 @@ pub mod sm83;
 
 mod traits;
 
+#[macro_use]
+mod macros;
+
 #[cfg(test)]
 pub mod tests;
 

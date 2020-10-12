@@ -46,12 +46,12 @@ pub fn main() -> io::Result<()> {
         prog = resolve_program(&mut project, version, prog)?;
 
         match command {
-            cli::Command::Scan => cli::scan(&prog, submatches.unwrap())?,
-            cli::Command::Disassemble => cli::dis(&prog, submatches.unwrap())?,
-            cli::Command::Import => cli::import(&prog, submatches.unwrap())?,
-            cli::Command::Backreference => cli::backref(&prog, submatches.unwrap())?,
-            cli::Command::Rename => cli::rename(&prog, submatches.unwrap())?,
-            cli::Command::Trace => cli::trace(&prog, submatches.unwrap())?,
+            cli::Command::Scan => cli::scan(&mut project, &prog, submatches.unwrap())?,
+            cli::Command::Disassemble => cli::dis(&mut project, &prog, submatches.unwrap())?,
+            cli::Command::Import => cli::import(&mut project, &prog, submatches.unwrap())?,
+            cli::Command::Backreference => cli::backref(&mut project, &prog, submatches.unwrap())?,
+            cli::Command::Rename => cli::rename(&mut project, &prog, submatches.unwrap())?,
+            cli::Command::Trace => cli::trace(&mut project, &prog, submatches.unwrap())?,
         };
     } else {
         tui::main(project)?;

@@ -2,17 +2,21 @@
 //! passes run on the program.
 
 pub mod db;
+mod error;
 mod projectdb;
 pub mod rgbds;
+mod traits;
 
 #[cfg(test)]
 mod tests;
 
 pub use db::Database;
+pub use error::{Error, Result};
 pub use projectdb::ProjectDatabase;
+pub use traits::*;
 
 use serde::Serialize;
-use std::str;
+use std::{result, str};
 
 /// Enum listing all of the external data formats we can add to a retrogram
 /// database.
@@ -24,7 +28,7 @@ pub enum ExternalFormat {
 impl str::FromStr for ExternalFormat {
     type Err = ();
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> result::Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_ref() {
             "rgbds_symbols" => Ok(ExternalFormat::RGBDSSymbolFile),
             _ => Err(()),

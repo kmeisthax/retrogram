@@ -7,7 +7,7 @@ use clap::{App, Arg, ArgMatches, ArgSettings};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Program {
     platform: Option<PlatformName>,
     arch: Option<ArchName>,

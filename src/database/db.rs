@@ -3,9 +3,11 @@
 use crate::analysis::Mappable;
 use crate::arch::Architecture;
 use crate::cli::Nameable;
+use crate::database::AnyDatabase;
 use crate::{analysis, ast, memory};
 use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
+use std::any::Any;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::marker::PhantomData;
@@ -68,6 +70,19 @@ where
     /// A list of crossreferences sorted by target address.
     #[serde(skip)]
     xref_target_index: BTreeMap<memory::Pointer<AR::PtrVal>, HashSet<usize>>,
+}
+
+impl<AR> AnyDatabase for Database<AR>
+where
+    AR: Architecture + 'static,
+{
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 #[derive(Deserialize)]

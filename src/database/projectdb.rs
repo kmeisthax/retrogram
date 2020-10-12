@@ -1,50 +1,110 @@
 //! Project-wide database
 
 use crate::arch::Architecture;
-use crate::database::Database;
-use serde::de::{MapAccess, Visitor};
-use serde::ser::SerializeMap;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use crate::database::{AnyDatabase, Database, Error, Result};
+use crate::project::Project;
+use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::{fmt, fs, io};
+use std::io;
 
+/// A project's `retrogram.db` file.
 #[derive(Debug)]
-pub struct ProjectDatabase<AR>
-where
-    AR: Architecture,
-{
-    databases: HashMap<String, Database<AR>>,
+pub struct ProjectDatabase {
+    databases: HashMap<String, Box<dyn AnyDatabase>>,
 }
 
-impl<AR> Default for ProjectDatabase<AR>
-where
-    AR: Architecture,
-{
+impl Default for ProjectDatabase {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<AR> ProjectDatabase<AR>
+/// Convert a JSON representation of a program database into the actual
+/// `Database` structure.
+///
+/// At this point, the database's associated architecture must be known.
+///
+/// This function returns a boxed `AnyDatabase` to allow storage alongside
+/// databases of different architectures. You must use the included `Any` trait
+/// and an associated project file to recover access to the concrete database
+/// type and do architecture-specific things with it.
+fn finish_parsing_db<AR>(_arch: AR, value: Value) -> Result<Box<dyn AnyDatabase>>
 where
-    AR: Architecture,
+    AR: Architecture + 'static,
 {
-    pub fn read(filename: &str) -> io::Result<Self> {
-        let db_file = fs::File::open(filename)?;
-        let dbs = serde_json::from_reader(db_file)?;
+    Ok(Box::new(serde_json::from_value::<Database<AR>>(value)?))
+}
+
+impl ProjectDatabase {
+    /// Deserialize a project database from a file.
+    ///
+    /// The given `Project` is necessary as it informs the database which type
+    /// of architecture each program runs in. This allows mixed-architecture
+    /// databases where multiple programs for different architectures can be
+    /// stored in the same project.
+    pub fn read<F>(project: &mut Project, db_file: &mut F) -> Result<Self>
+    where
+        F: io::Read,
+    {
+        let pjdb_json: Value = serde_json::from_reader(db_file)?;
+        let mut dbs = Self::new();
+
+        match pjdb_json {
+            Value::Object(map) => {
+                for (k, v) in map.iter() {
+                    match (k.as_str(), v) {
+                        ("databases", Value::Object(dbs_json)) => {
+                            for (prog_name, data) in dbs_json.iter() {
+                                let program = project
+                                    .program(prog_name)
+                                    .ok_or_else(|| Error::UnknownProgramError(prog_name.clone()))?;
+                                with_prog_architecture!(program, |_plat, arch, _asm| {
+                                    dbs.databases.insert(
+                                        prog_name.clone(),
+                                        finish_parsing_db(arch, data.clone())?,
+                                    );
+
+                                    Ok(())
+                                })?;
+                            }
+                        }
+                        _ => return Err(Error::SemanticError),
+                    }
+                }
+
+                if !map.contains_key("databases") {
+                    return Err(Error::SemanticError);
+                }
+            }
+            _ => return Err(Error::SemanticError),
+        }
 
         Ok(dbs)
     }
 
-    pub fn write(&self, filename: &str) -> io::Result<()> {
-        let db_file = fs::File::create(filename)?;
-        serde_json::to_writer_pretty(db_file, self).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("Encoding database failed with error: {}", e),
-            )
-        })
+    /// Serialize a project database to a file.
+    pub fn write<W>(&mut self, file: &mut W) -> Result<()>
+    where
+        W: io::Write,
+    {
+        let mut db_json = json!({
+            "databases": {}
+        });
+
+        for (name, anydb) in self.databases.iter() {
+            with_db_architecture!(anydb, |db, _arch| {
+                db_json["databases"]
+                    .as_object_mut()
+                    .unwrap()
+                    .insert(name.to_string(), serde_json::to_value(db)?);
+
+                Ok(())
+            })?;
+        }
+
+        serde_json::to_writer_pretty(file, &db_json)?;
+
+        Ok(())
     }
 
     pub fn new() -> Self {
@@ -53,75 +113,38 @@ where
         }
     }
 
-    pub fn get_database(&self, db_name: &str) -> Option<&Database<AR>> {
-        self.databases.get(db_name)
+    /// Attempt to retrieve a concrete database with a given architecture.
+    ///
+    /// This function returns `None` if the database does not exist or it is
+    /// not of the given architecture.
+    pub fn get_database<AR>(&self, db_name: &str) -> Option<&Database<AR>>
+    where
+        AR: Architecture + 'static,
+    {
+        self.databases
+            .get(db_name)?
+            .as_any()
+            .downcast_ref::<Database<AR>>()
     }
 
-    pub fn get_database_mut(&mut self, db_name: &str) -> &mut Database<AR> {
+    /// Attempt to retrieve a mutable reference to a concrete database with a
+    /// given architecture. If it does not exist, an empty database of the
+    /// given type will be created.
+    ///
+    /// This function returns `None` if the database already exists and is not
+    /// of the given architecture.
+    pub fn get_database_mut<AR>(&mut self, db_name: &str) -> Option<&mut Database<AR>>
+    where
+        AR: Architecture + 'static,
+    {
         if !self.databases.contains_key(db_name) {
-            self.databases.insert(db_name.to_string(), Database::new());
+            self.databases
+                .insert(db_name.to_string(), Box::new(Database::<AR>::new()));
         }
 
         self.databases
-            .get_mut(db_name)
-            .expect("I just inserted it, it should be there.")
-    }
-}
-
-impl<AR> Serialize for ProjectDatabase<AR>
-where
-    AR: Architecture,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut map = serializer.serialize_map(Some(1))?;
-
-        map.serialize_entry("databases", &self.databases)?;
-
-        map.end()
-    }
-}
-
-impl<'dw, AR> Deserialize<'dw> for ProjectDatabase<AR>
-where
-    AR: Architecture,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'dw>,
-    {
-        pub struct PDBVisitor<AR>(PhantomData<AR>);
-
-        impl<'dw, AR> Visitor<'dw> for PDBVisitor<AR>
-        where
-            AR: Architecture,
-        {
-            type Value = ProjectDatabase<AR>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(formatter, "a valid project database")
-            }
-
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-                A: MapAccess<'dw>,
-            {
-                let mut pjdb = ProjectDatabase::new();
-
-                while let Some((key, value)) =
-                    map.next_entry::<String, HashMap<String, Database<AR>>>()?
-                {
-                    if key == "databases" {
-                        pjdb.databases = value;
-                    }
-                }
-
-                Ok(pjdb)
-            }
-        }
-
-        Ok(deserializer.deserialize_map(PDBVisitor::<AR>(PhantomData))?)
+            .get_mut(db_name)?
+            .as_mut_any()
+            .downcast_mut::<Database<AR>>()
     }
 }

@@ -9,7 +9,7 @@ use crate::input::parse_ptr;
 use crate::maths::FromStrRadix;
 use crate::memory::{Memory, Pointer};
 use crate::platform::Platform;
-use crate::project;
+use crate::project::{Program, Project};
 use crate::reg::{State, Symbolic};
 use clap::ArgMatches;
 use serde::Deserialize;
@@ -342,7 +342,8 @@ where
 }
 
 fn trace_for_arch<'a, AR, ASM>(
-    prog: &project::Program,
+    project: &mut Project,
+    prog: &Program,
     argv: &ArgMatches<'a>,
     start_spec: &str,
     bus: &Memory<AR>,
@@ -358,7 +359,10 @@ where
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
 {
-    let mut pjdb = match ProjectDatabase::read(prog.as_database_path()) {
+    let pjdb: io::Result<ProjectDatabase> =
+        ProjectDatabase::read(project, &mut fs::File::open(prog.as_database_path())?)
+            .map_err(|e| e.into());
+    let mut pjdb = match pjdb {
         Ok(pjdb) => pjdb,
         Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
             eprintln!("Creating new database for project");
@@ -372,7 +376,12 @@ where
             io::ErrorKind::InvalidInput,
             "You did not specify a name for the program to disassemble.",
         )
-    })?);
+    })?).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "The architecture of the current program's database does not match the program's architecture."
+        )
+    })?;
 
     let mut pc = parse_ptr(start_spec, db, bus, arch).ok_or_else(|| {
         io::Error::new(
@@ -453,7 +462,7 @@ where
 ///
 /// The `start_spec` is provided by the user and is interpreted by the program's
 /// architecture to produce a valid start pointer.
-pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()> {
+pub fn trace<'a>(project: &mut Project, prog: &Program, argv: &ArgMatches<'a>) -> io::Result<()> {
     let start_spec = argv
         .value_of("start_pc")
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC"))?;
@@ -463,9 +472,9 @@ pub fn trace<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<(
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, |plat, arch, asm| {
+    with_prog_architecture!(prog, |plat, arch, asm| {
         let bus = plat.construct_platform(&mut file)?;
 
-        trace_for_arch(prog, argv, start_spec, &bus, arch, asm)
+        trace_for_arch(project, prog, argv, start_spec, &bus, arch, asm)
     })
 }

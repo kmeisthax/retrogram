@@ -4,31 +4,41 @@ use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
 use crate::database::ProjectDatabase;
 use crate::platform::Platform;
-use crate::{analysis, input, maths, memory, project};
+use crate::project::{Program, Project};
+use crate::{analysis, input, maths, memory};
 use clap::ArgMatches;
 use num_traits::One;
 use std::{fs, io};
 
 fn backref_inner<AR, ASM>(
-    prog: &project::Program,
+    project: &mut Project,
+    prog: &Program,
     start_spec: &str,
     bus: &memory::Memory<AR>,
     arch: AR,
     asm: ASM,
 ) -> io::Result<()>
 where
-    AR: Architecture,
+    AR: Architecture + 'static,
     AR::PtrVal: maths::FromStrRadix,
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
 {
-    let mut pjdb = ProjectDatabase::read(prog.as_database_path())?;
+    let pjdb: io::Result<ProjectDatabase> =
+        ProjectDatabase::read(project, &mut fs::File::open(prog.as_database_path())?)
+            .map_err(|e| e.into());
+    let mut pjdb = pjdb?;
     let db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             "You did not specify a name for the program to disassemble.",
         )
-    })?);
+    })?).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "The architecture of the current program's database does not match the program's architecture."
+        )
+    })?;
 
     let start_pc = input::parse_ptr(start_spec, db, bus, arch).ok_or_else(|| {
         io::Error::new(
@@ -78,7 +88,7 @@ where
     Ok(())
 }
 
-pub fn backref<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result<()> {
+pub fn backref<'a>(project: &mut Project, prog: &Program, argv: &ArgMatches<'a>) -> io::Result<()> {
     let start_spec = argv
         .value_of("start_pc")
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Did not provide a start PC"))?;
@@ -88,9 +98,9 @@ pub fn backref<'a>(prog: &project::Program, argv: &ArgMatches<'a>) -> io::Result
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
 
-    with_architecture!(prog, |plat, arch, asm| {
+    with_prog_architecture!(prog, |plat, arch, asm| {
         let bus = plat.construct_platform(&mut file)?;
 
-        backref_inner(prog, start_spec, &bus, arch, asm)
+        backref_inner(project, prog, start_spec, &bus, arch, asm)
     })
 }
