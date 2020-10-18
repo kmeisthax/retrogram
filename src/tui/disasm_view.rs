@@ -6,6 +6,7 @@ use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
 use crate::ast::{Directive, Literal, Section};
 use crate::database::{Database, ProjectDatabase};
 use crate::memory::{Memory, Pointer, Tumbler};
+use crate::tui::label::label_dialog;
 use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::theme::{BaseColor, Color, ColorStyle, ColorType, PaletteColor};
@@ -417,6 +418,15 @@ where
             Event::Key(Key::Tab) => EventResult::Consumed(Some(Callback::from_fn(|s| {
                 s.find_name::<TabPanel<String>>("tabs").unwrap().next()
             }))),
+            Event::Char('l') => {
+                let mem = self.bus.encode_tumbler(self.cursor);
+                let pjdb = self.pjdb.clone();
+                let prog_name = self.prog_name.clone();
+
+                EventResult::Consumed(Some(Callback::from_fn(move |s| {
+                    label_dialog::<AR>(s, mem.clone(), pjdb.clone(), prog_name.clone())
+                })))
+            }
             _ => EventResult::Ignored,
         }
     }
