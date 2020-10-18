@@ -10,6 +10,7 @@ use crate::tui::label::label_dialog;
 use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::theme::{BaseColor, Color, ColorStyle, ColorType, PaletteColor};
+use cursive::view::Selector;
 use cursive::{Printer, View, XY};
 use cursive_tabs::TabPanel;
 use std::cmp::max;
@@ -24,6 +25,9 @@ where
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
 {
+    /// Whether or not focus is locked to this particular view.
+    lock_focus: bool,
+
     /// The database repository to pull information from.
     pjdb: Arc<RwLock<ProjectDatabase>>,
 
@@ -150,6 +154,7 @@ where
         asm: ASM,
     ) -> Self {
         Self {
+            lock_focus: false,
             pjdb,
             prog_name: prog_name.to_string(),
             bus,
@@ -342,8 +347,9 @@ where
                     let (pos_region, pos_io, _) = position.into();
                     let (cur_region, cur_io, cur_line) = self.cursor.into();
 
+                    let selected_line = pos_region == cur_region && pos_io == cur_io && seen_lines == cur_line;
                     let background =
-                        if pos_region == cur_region && pos_io == cur_io && seen_lines == cur_line {
+                        if self.lock_focus && selected_line {
                             PaletteColor::Shadow
                         } else {
                             PaletteColor::View
@@ -391,30 +397,37 @@ where
 
     fn on_event(&mut self, evt: Event) -> EventResult {
         match evt {
-            Event::Key(Key::Up) => {
+            Event::Key(Key::Up) if self.lock_focus => {
                 self.cursor_up();
                 EventResult::Consumed(Some(Callback::from_fn(|s| {
                     s.refresh();
                 })))
             }
-            Event::Key(Key::PageUp) => {
+            Event::Key(Key::PageUp) if self.lock_focus => {
                 self.page_up();
                 EventResult::Consumed(Some(Callback::from_fn(|s| {
                     s.refresh();
                 })))
             }
-            Event::Key(Key::Down) => {
+            Event::Key(Key::Down) if self.lock_focus => {
                 self.cursor_down();
                 EventResult::Consumed(Some(Callback::from_fn(|s| {
                     s.refresh();
                 })))
             }
-            Event::Key(Key::PageDown) => {
+            Event::Key(Key::PageDown) if self.lock_focus => {
                 self.page_down();
                 EventResult::Consumed(Some(Callback::from_fn(|s| {
                     s.refresh();
                 })))
             }
+            Event::Key(Key::Esc) if self.lock_focus => {
+                self.lock_focus = false;
+                EventResult::Ignored
+            }
+            Event::Key(Key::Esc) => EventResult::Consumed(Some(Callback::from_fn(|s| {
+                s.select_menubar();
+            }))),
             Event::Key(Key::Tab) => EventResult::Consumed(Some(Callback::from_fn(|s| {
                 s.find_name::<TabPanel<String>>("tabs").unwrap().next()
             }))),
@@ -432,6 +445,8 @@ where
     }
 
     fn take_focus(&mut self, _source: Direction) -> bool {
+        self.lock_focus = true;
+
         true
     }
 }

@@ -71,10 +71,6 @@ pub fn main(mut project: Project) -> io::Result<()> {
 
     siv.set_autohide_menu(false);
 
-    siv.add_global_callback(Key::Esc, |s| {
-        s.select_menubar();
-    });
-
     siv.add_layer(
         Dialog::text("Press <ESC> to show the menu.")
             .title("Welcome to Retrogram")
