@@ -10,7 +10,6 @@ use crate::tui::label::label_dialog;
 use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::theme::{BaseColor, Color, ColorStyle, ColorType, PaletteColor};
-use cursive::view::Selector;
 use cursive::{Printer, View, XY};
 use cursive_tabs::TabPanel;
 use std::cmp::max;
@@ -347,13 +346,13 @@ where
                     let (pos_region, pos_io, _) = position.into();
                     let (cur_region, cur_io, cur_line) = self.cursor.into();
 
-                    let selected_line = pos_region == cur_region && pos_io == cur_io && seen_lines == cur_line;
-                    let background =
-                        if self.lock_focus && selected_line {
-                            PaletteColor::Shadow
-                        } else {
-                            PaletteColor::View
-                        };
+                    let selected_line =
+                        pos_region == cur_region && pos_io == cur_io && seen_lines == cur_line;
+                    let background = if self.lock_focus && selected_line {
+                        PaletteColor::Shadow
+                    } else {
+                        PaletteColor::View
+                    };
 
                     if seen_lines >= line_offset {
                         printer.with_color(ColorStyle::new(foreground, background), |printer| {
