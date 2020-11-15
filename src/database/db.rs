@@ -4,6 +4,7 @@ use crate::analysis::Mappable;
 use crate::arch::Architecture;
 use crate::cli::Nameable;
 use crate::database::AnyDatabase;
+use crate::memory::Pointer;
 use crate::{analysis, ast, memory};
 use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
@@ -55,6 +56,11 @@ where
     /// A list of all cross-references in the program.
     xrefs: Vec<analysis::Reference<AR::PtrVal>>,
 
+    /// A list of all locations which have resulted in a failed static analysis
+    /// as well as the string form of the error(s) that resulted from the
+    /// analysis
+    failed_analysis: HashMap<Pointer<AR::PtrVal>, String>,
+
     /// A list of all labels in the program.
     #[serde(skip)]
     label_symbols: HashMap<ast::Label, usize>,
@@ -91,6 +97,7 @@ enum DatabaseField {
     Symbols,
     Blocks,
     Xrefs,
+    FailedAnalysis,
 }
 
 struct DatabaseVisitor<AR>(PhantomData<AR>)
@@ -157,6 +164,13 @@ where
 
                     db.xrefs = map.next_value()?;
                 }
+                DatabaseField::FailedAnalysis => {
+                    if !db.failed_analysis.is_empty() {
+                        return Err(de::Error::duplicate_field("failed_analysis"));
+                    }
+
+                    db.failed_analysis = map.next_value()?;
+                }
             }
         }
 
@@ -174,7 +188,7 @@ where
     {
         let mut mine = deserializer.deserialize_struct(
             "Database",
-            &["symbols", "blocks", "xrefs"],
+            &["symbols", "blocks", "xrefs", "failed_analysis"],
             DatabaseVisitor::<AR>(PhantomData),
         )?;
 
@@ -203,6 +217,7 @@ where
             was_deserialized: false,
             blocks: Vec::new(),
             xrefs: Vec::new(),
+            failed_analysis: HashMap::new(),
             label_symbols: HashMap::new(),
             pointer_symbols: HashMap::new(),
             xref_source_index: BTreeMap::new(),
@@ -515,5 +530,15 @@ where
         }
 
         blocks
+    }
+
+    /// Check if a proposed scan has failed analysis in the past.
+    pub fn has_target_failed_analysis(&self, target_pc: &Pointer<AR::PtrVal>) -> bool {
+        self.failed_analysis.contains_key(target_pc)
+    }
+
+    /// Mark a target as having failed analysis.
+    pub fn set_target_failed_analysis(&mut self, target_pc: Pointer<AR::PtrVal>, reason: String) {
+        self.failed_analysis.insert(target_pc, reason);
     }
 }
