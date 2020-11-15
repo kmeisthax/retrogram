@@ -44,6 +44,17 @@ where
     /// given architecture.
     BlockSizeOverflow,
 
+    /// Tracing terminated as the number of forks exceeded the analysis limit
+    /// on tracing.
+    TraceTooDeep {
+        /// The current fork's branch score.
+        branches: f64,
+
+        /// How many additional forks would have to be created in order to
+        /// continue exploring the state space of the program.
+        extra_branches: f64,
+    },
+
     /// Instruction decoding failed due to an internal issue.
     ///
     /// In general, a `Misinterpretation` indicates a programming error in
@@ -71,6 +82,9 @@ where
             InvalidInstruction => write!(f, "Invalid instruction"),
             NotYetImplemented => write!(f, "Disassembly not yet implemented"),
             BlockSizeOverflow => write!(f, "Block size is too large"),
+            TraceTooDeep {
+                branches, extra_branches
+            } => write!(f, "Trace too deep: would add {} on top of {} existing", extra_branches, branches),
             Error::Misinterpretation(_, _) => {
                 write!(f, "Ostensibly valid instruction failed to disassemble")
             }
