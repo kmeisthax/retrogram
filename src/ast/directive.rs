@@ -44,10 +44,7 @@ where
     L: Literal,
 {
     pub fn is_emit_instr(&self) -> bool {
-        match self {
-            Self::EmitInstr(_, _) => true,
-            _ => false,
-        }
+        matches!(self, Self::EmitInstr(_, _))
     }
 }
 

@@ -101,10 +101,7 @@ where
     }
 
     pub fn is_dynamic(&self) -> bool {
-        match self {
-            Reference::Dynamic { .. } => true,
-            _ => false,
-        }
+        matches!(self, Reference::Dynamic { .. })
     }
 
     /// Convert a static reference to a dynamic one, discarding information

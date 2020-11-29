@@ -83,8 +83,13 @@ where
             NotYetImplemented => write!(f, "Disassembly not yet implemented"),
             BlockSizeOverflow => write!(f, "Block size is too large"),
             TraceTooDeep {
-                branches, extra_branches
-            } => write!(f, "Trace too deep: would add {} on top of {} existing", extra_branches, branches),
+                branches,
+                extra_branches,
+            } => write!(
+                f,
+                "Trace too deep: would add {} on top of {} existing",
+                extra_branches, branches
+            ),
             Error::Misinterpretation(_, _) => {
                 write!(f, "Ostensibly valid instruction failed to disassemble")
             }

@@ -82,6 +82,7 @@ macro_rules! binary_op_masked_impl {
         impl $trait_name<$rhs_type> for $type {
             type Output = $type;
 
+            #[allow(clippy::suspicious_arithmetic_impl)]
             fn $method_name(self, rhs: $rhs_type) -> Self {
                 $type {
                     v: (self.v.$method_name(rhs)) & $mask,

@@ -221,7 +221,7 @@ where
                 let rv = state.get_register(register);
                 let needs = rv.not_cares() & mask.clone();
 
-                needs.pop_count().try_into().unwrap_or_else(|_| 0)
+                needs.pop_count().try_into().unwrap_or(0)
             }
             Prerequisite::Memory { ptr, length, mask } => {
                 let mut needs = 0;
@@ -234,7 +234,7 @@ where
                             .cloned()
                             .unwrap_or_else(|| !AR::Byte::zero());
 
-                    needs += this_needs.pop_count().try_into().unwrap_or_else(|_| 0);
+                    needs += this_needs.pop_count().try_into().unwrap_or(0);
                 }
 
                 needs
@@ -286,7 +286,7 @@ where
                 let mut state_list = state_list.clone();
 
                 while count < length.clone() {
-                    let ucount = count.clone().try_into().unwrap_or_else(|_| 0);
+                    let ucount = count.clone().try_into().unwrap_or(0);
                     let mask_part = mask
                         .get(ucount as usize)
                         .cloned()

@@ -20,10 +20,7 @@ impl ast::Literal for Literal {
     type PtrVal = u16;
 
     fn is_pointer(&self) -> bool {
-        match self {
-            Literal::Pointer(_) => true,
-            _ => false,
-        }
+        matches!(self, Literal::Pointer(_))
     }
 
     fn into_pointer(self) -> Option<Pointer<Self::PtrVal>> {
