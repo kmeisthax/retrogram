@@ -11,7 +11,7 @@ use crate::reg::{State, Symbolic};
 /// memory dump. The source is not important; but the data retrieved from an
 /// image must match what the actual program under analysis would see if it had
 /// read or executed from this memory.
-pub trait Image<AR>
+pub trait Image<AR>: Send + Sync
 where
     AR: Architecture,
 {

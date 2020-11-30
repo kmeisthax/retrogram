@@ -11,7 +11,7 @@ use std::io;
 
 /// Any type which decodes the banked memory region (0x4000) of a Game Boy ROM
 /// image.
-trait Mapper {
+trait Mapper: Send + Sync {
     fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize>;
 
     fn encode_banked_addr(&self, ioffset: usize) -> Option<memory::Pointer<sm83::PtrVal>>;

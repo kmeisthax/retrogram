@@ -13,7 +13,8 @@ use std::ops::Sub;
 /// in a memory layout. It must be possible to subtract two pointers to obtain
 /// the offset type, and whatever you get by adding a pointer and an offset must
 /// yield another pointer.
-pub trait PtrNum<S>: Clone + PartialOrd + CheckedAdd<S, Output = Self> + Sub + CheckedSub
+pub trait PtrNum<S>:
+    Clone + PartialOrd + CheckedAdd<S, Output = Self> + Sub + CheckedSub + Send + Sync
 where
     S: Offset<Self>,
 {
@@ -21,7 +22,7 @@ where
 
 impl<T, S> PtrNum<S> for T
 where
-    T: Clone + PartialOrd + CheckedAdd<S, Output = Self> + Sub + CheckedSub,
+    T: Clone + PartialOrd + CheckedAdd<S, Output = Self> + Sub + CheckedSub + Send + Sync,
     S: Offset<Self>,
 {
 }
@@ -54,6 +55,8 @@ pub trait Offset<P>:
     + TryFrom<usize>
     + TryFrom<<P as Sub>::Output>
     + TryInto<usize>
+    + Send
+    + Sync
 where
     P: Sub,
 {
@@ -69,7 +72,9 @@ where
         + One
         + TryFrom<<P as Sub>::Output>
         + TryFrom<usize>
-        + TryInto<usize>,
+        + TryInto<usize>
+        + Send
+        + Sync,
     P: Sub,
 {
 }

@@ -1,30 +1,30 @@
 //! CLI command: scan
 
-use crate::analysis::{analyze_trace_log, trace_until_fork, Fork, Trace};
+use crate::analysis::{start_analysis_queue, Command, Response};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
 use crate::cli::common::reg_parse;
-use crate::database::{Database, ProjectDatabase};
+use crate::database::ProjectDatabase;
 use crate::maths::FromStrRadix;
-use crate::memory::{Offset, Pointer};
+use crate::memory::{Memory, Offset};
 use crate::platform::Platform;
 use crate::project::{Program, Project};
 use crate::reg::{Bitwise, State};
-use crate::{analysis, ast, database, input, maths, memory, reg};
+use crate::{analysis, ast, input, maths, memory, reg};
 use clap::ArgMatches;
 use num_traits::{One, Zero};
-use std::collections::{BinaryHeap, HashSet};
-use std::convert::{TryFrom, TryInto};
-use std::{fmt, fs, io};
+use std::convert::TryInto;
+use std::sync::{Arc, RwLock};
+use std::{fs, io};
 
 /// Scan a specific starting PC and add the results of the analysis to the
 /// database.
-fn scan_pc_for_arch<L, AR>(
-    db: &mut database::Database<AR>,
-    start_pc: &memory::Pointer<AR::PtrVal>,
+fn describe_scan_error<L, AR>(
     bus: &memory::Memory<AR>,
-    arch: AR,
-) -> io::Result<()>
+    start_pc: &memory::Pointer<AR::PtrVal>,
+    pc_offset: Option<AR::Offset>,
+    err: analysis::Error<AR>,
+) -> String
 where
     L: CompatibleLiteral<AR>,
     AR: Architecture,
@@ -32,248 +32,68 @@ where
     reg::Symbolic<AR::Byte>: Default,
     ast::Instruction<L>: Clone,
 {
-    let (orig_asm, xrefs, pc_offset, blocks, terminating_error) =
-        analysis::disassemble_block::<L, AR>(start_pc.clone(), bus, arch);
+    match (pc_offset, err) {
+        (Some(pc_offset), analysis::Error::Misinterpretation(size, true)) => {
+            let mut values = String::new();
+            let bad_pc = start_pc.clone() + pc_offset.clone();
+            let mut iv_offset = start_pc.clone() + pc_offset;
+            let end_offset = iv_offset.clone() + size;
 
-    if let Some(err) = terminating_error {
-        match (pc_offset, err) {
-            (Some(pc_offset), analysis::Error::Misinterpretation(size, true)) => {
-                let mut values = String::new();
-                let bad_pc = start_pc.clone() + pc_offset.clone();
-                let mut iv_offset = start_pc.clone() + pc_offset;
-                let end_offset = iv_offset.clone() + size;
-
-                while iv_offset < end_offset {
-                    //TODO: This generates incorrect results if MV::bound_width is not divisible by four
-                    if let Some(nval) = bus.read_unit(&iv_offset).into_concrete() {
-                        values = format!("{}{:X}", &values, nval);
-                    } else {
-                        //TODO: This assumes MV is always u8.
-                        values = format!("{}??", &values);
-                    }
-
-                    iv_offset = iv_offset + AR::Offset::one();
+            while iv_offset < end_offset {
+                //TODO: This generates incorrect results if MV::bound_width is not divisible by four
+                if let Some(nval) = bus.read_unit(&iv_offset).into_concrete() {
+                    values = format!("{}{:X}", &values, nval);
+                } else {
+                    //TODO: This assumes MV is always u8.
+                    values = format!("{}??", &values);
                 }
 
-                return Err(io::Error::new(io::ErrorKind::Other, format!("Decoding error at {:X} (from {:X}) on value {}", bad_pc, start_pc, values)));
-            },
-            (Some(pc_offset), analysis::Error::Misinterpretation(size, false)) => { //Little-endian
-                let mut values = String::new();
-                let bad_pc = start_pc.clone() + pc_offset.clone();
-                let mut iv_offset = start_pc.clone() + pc_offset;
-                let end_offset = iv_offset.clone() + size;
-
-                while iv_offset < end_offset {
-                    //TODO: This generates incorrect results if MV::bound_width is not divisible by four
-                    if let Some(nval) = bus.read_unit(&iv_offset).into_concrete() {
-                        values = format!("{:X}{}", nval, &values);
-                    } else {
-                        //TODO: This assumes MV is always u8.
-                        values = format!("??{}", &values);
-                    }
-
-                    iv_offset = iv_offset + AR::Offset::one();
-                }
-
-                return Err(io::Error::new(io::ErrorKind::Other, format!("Decoding error at {:X} (from {:X}) on value {}", bad_pc, start_pc, values)));
-            },
-            (Some(ref s), ref e) if *s == AR::Offset::zero() => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("There is no valid code at {:X} due to {}", start_pc, e))),
-            (None, _) => return Err(io::Error::new(io::ErrorKind::Other, format!("Disassembly size cannot be expressed in current type system, caused by analysis of {:X}", start_pc))),
-            _ => eprintln!("Improperly terminated block discovered in {:X}", start_pc)
-        };
-    }
-
-    for block in blocks {
-        if let Some(bnum) = db.find_block_membership(block.as_start()) {
-            eprintln!(
-                "Block at ${:X} already exists, skipping in favor of {}.",
-                block.as_start(),
-                bnum
-            );
-            continue;
-        }
-
-        db.insert_block(block);
-    }
-
-    for xref in xrefs {
-        if let Some(target) = xref.as_target() {
-            if db.pointer_symbol(&target).is_none() {
-                db.insert_placeholder_label(target.clone(), xref.kind());
+                iv_offset = iv_offset + AR::Offset::one();
             }
 
-            if let Some(id) = db.find_block_membership(target) {
-                let mut xref_offset = AR::Offset::zero();
+            format!("Decoding error at {:X} (from {:X}) on value {}", bad_pc, start_pc, values)
+        },
+        (Some(pc_offset), analysis::Error::Misinterpretation(size, false)) => { //Little-endian
+            let mut values = String::new();
+            let bad_pc = start_pc.clone() + pc_offset.clone();
+            let mut iv_offset = start_pc.clone() + pc_offset;
+            let end_offset = iv_offset.clone() + size;
 
-                if let Some(block) = db.block(id) {
-                    xref_offset = AR::Offset::try_from(
-                        target.as_pointer().clone() - block.as_start().as_pointer().clone(),
-                    )
-                    .unwrap_or_else(|_| AR::Offset::zero());
+            while iv_offset < end_offset {
+                //TODO: This generates incorrect results if MV::bound_width is not divisible by four
+                if let Some(nval) = bus.read_unit(&iv_offset).into_concrete() {
+                    values = format!("{:X}{}", nval, &values);
+                } else {
+                    //TODO: This assumes MV is always u8.
+                    values = format!("??{}", &values);
                 }
 
-                if xref_offset > AR::Offset::zero() {
-                    db.split_block(id, xref_offset);
-                }
+                iv_offset = iv_offset + AR::Offset::one();
             }
-        }
 
-        db.insert_crossreference(xref);
+            format!("Decoding error at {:X} (from {:X}) on value {}", bad_pc, start_pc, values)
+        },
+        (Some(ref s), ref e) if *s == AR::Offset::zero() => format!("There is no valid code at {:X} due to {}", start_pc, e),
+        (None, _) => format!("Disassembly size cannot be expressed in current type system, caused by analysis of {:X}", start_pc),
+        _ => format!("Improperly terminated block discovered in {:X}", start_pc)
     }
-
-    //TODO: This seems to be polluting the symbol table for no reason.
-    if let Some((_dir, loc)) = orig_asm.iter_directives().next() {
-        db.insert_placeholder_label(loc.clone(), analysis::ReferenceKind::Unknown);
-    }
-
-    Ok(())
 }
 
-/// Scan all unanalyzed static crossreferences present within a given database,
-/// recursively, until the control graph is maximally extended.
-///
-/// This function yields false if it's execution yielded no additional code. It
-/// will also yield the addresses of any code that threw errors when analyzed.
-fn exhaust_all_static_scans<L, AR>(
-    db: &mut Database<AR>,
-    bus: &memory::Memory<AR>,
-    arch: AR,
-) -> (bool, HashSet<Pointer<AR::PtrVal>>)
-where
-    L: CompatibleLiteral<AR>,
-    AR: Architecture,
-    AR::Byte: reg::Bitwise + fmt::UpperHex,
-    ast::Instruction<L>: Clone,
-{
-    let mut failed_analysis = HashSet::new();
-    let mut any_analysis_done = false;
-
-    loop {
-        let unanalyzed = db.unanalyzed_static_xrefs();
-        let mut more_analysis_done = false;
-
-        for xref_id in unanalyzed {
-            let mut target_pc = None;
-            let xref = db.xref(xref_id);
-
-            if let Some(xref) = xref {
-                target_pc = xref.as_target().cloned();
-            }
-
-            if let Some(target_pc) = target_pc {
-                if !failed_analysis.contains(&target_pc) {
-                    match scan_pc_for_arch(db, &target_pc, bus, arch) {
-                        Ok(_) => {
-                            eprintln!("Found additional code at {:X}", target_pc);
-                            more_analysis_done = true;
-                        }
-                        Err(e) => {
-                            eprintln!("{}", e);
-
-                            failed_analysis.insert(target_pc);
-                        }
-                    }
-                }
-            }
+fn read_shareable_db(
+    project: &mut Project,
+    prog: &Program,
+) -> io::Result<Arc<RwLock<ProjectDatabase>>> {
+    let mut maybe_file = fs::File::open(prog.as_database_path());
+    let pjdb: io::Result<ProjectDatabase> = match maybe_file {
+        Ok(ref mut file) => ProjectDatabase::read(project, file).map_err(|e| e.into()),
+        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+            eprintln!("Creating new database for project");
+            Ok(ProjectDatabase::new())
         }
+        Err(e) => Err(e),
+    };
 
-        any_analysis_done |= more_analysis_done;
-
-        if !more_analysis_done {
-            break;
-        }
-    }
-
-    (any_analysis_done, failed_analysis)
-}
-
-/// Given a program database, analyze all blocks in need of dynamic tracing.
-///
-/// This function yields true if any dynamic analysis was done. You will need
-/// to check for any new unanalyzed static references after the tracing has
-/// completed.
-fn exhaust_all_dynamic_scans<L, AR>(
-    db: &mut Database<AR>,
-    bus: &memory::Memory<AR>,
-    arch: AR,
-    poweron_state: State<AR>,
-) -> analysis::Result<bool, AR>
-where
-    L: CompatibleLiteral<AR>,
-    AR: Architecture,
-    AR::Word: TryInto<u64>,
-    AR::Byte: TryInto<u64>,
-    AR::Offset: TryInto<usize>,
-{
-    let mut did_trace = false;
-
-    for block_id in db.undertraced_blocks().iter() {
-        let block = db.block(*block_id).unwrap();
-
-        let mut forks = BinaryHeap::new();
-        let mut first_state = poweron_state.clone();
-
-        first_state.contextualize_self(block.as_start());
-
-        forks.push(Fork::initial_fork(
-            block.as_start().as_pointer().clone(),
-            first_state,
-        ));
-
-        while let Some(fork) = forks.pop() {
-            let (branches, pc, state, trace) = fork.into_parts();
-
-            eprintln!("Tracing from ${:X} ({} forks remain)", pc, forks.len());
-
-            let (new_pc, trace, post_state, prerequisites) =
-                trace_until_fork(&pc, trace, bus, &state, arch)?;
-
-            did_trace = true;
-
-            let traced_blocks = analyze_trace_log::<L, AR>(&trace, bus, db, arch)?;
-
-            db.insert_trace_counts(traced_blocks, 1);
-
-            let context_new_pc = post_state.contextualize_pointer(new_pc.clone());
-
-            eprintln!(
-                "At ${:X}, we need to know: {:?}",
-                context_new_pc, prerequisites
-            );
-
-            let mut extra_branch_bits = 0.0;
-            for pr in prerequisites.iter() {
-                extra_branch_bits += pr.necessary_forks(&post_state, bus) as f64;
-            }
-
-            let extra_branches = (2.0 as f64).powf(extra_branch_bits);
-
-            if (branches + extra_branches) > (2.0 as f64).powf(5.0) {
-                //TODO: better heuristic please
-                //TODO: this should retrieve the block's total fork score
-                //TODO: what happens if we overtrace a block (say a utility fn)
-                //      while it's still in the undertraced list?
-                eprintln!(
-                    "Trace at ${:X} is too deep (adds {} forks on top of {} existing)",
-                    new_pc, extra_branches, branches
-                );
-                continue;
-            }
-
-            for result_fork in Fork::make_forks(
-                branches,
-                new_pc.clone(),
-                post_state,
-                bus,
-                Trace::begin_at(context_new_pc),
-                prerequisites.into_iter(),
-            ) {
-                forks.push(result_fork);
-            }
-        }
-    }
-
-    Ok(did_trace)
+    Ok(Arc::new(RwLock::new(pjdb?)))
 }
 
 /// Given a program, analyze a given routine with the given memory model and
@@ -289,7 +109,7 @@ fn scan_for_arch<'a, AR, ASM>(
     project: &mut Project,
     prog: &Program,
     start_spec: &str,
-    bus: &memory::Memory<AR>,
+    bus: Arc<Memory<AR>>,
     arch: AR,
     _asm: ASM,
     argv: &ArgMatches<'a>,
@@ -305,25 +125,25 @@ where
     analysis::Error<AR>: Into<io::Error>,
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
+    Memory<AR>: Send + Sync,
 {
-    let pjdb: io::Result<ProjectDatabase> =
-        ProjectDatabase::read(project, &mut fs::File::open(prog.as_database_path())?)
-            .map_err(|e| e.into());
-    let mut pjdb = match pjdb {
-        Ok(pjdb) => pjdb,
-        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-            eprintln!("Creating new database for project");
-            ProjectDatabase::new()
-        }
-        Err(e) => return Err(e),
-    };
-
-    let mut db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
+    let pjdb = read_shareable_db(project, prog)?;
+    let program_name = prog.as_name().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             "You did not specify a name for the program to disassemble.",
         )
-    })?).ok_or_else(|| {
+    })?;
+
+    let (cmd_send, resp_recv) = start_analysis_queue::<ASM::Literal, AR>(
+        arch,
+        pjdb.clone(),
+        program_name.to_string(),
+        bus.clone(),
+    );
+
+    let mut db_lock = pjdb.write().unwrap();
+    let db = db_lock.get_database_mut::<AR>(program_name).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             "The architecture of the current program's database does not match the program's architecture."
@@ -331,47 +151,98 @@ where
     })?;
 
     let is_tracing_allowed = argv.is_present("dynamic");
-    let mut poweron_state = State::default();
+    let mut poweron_state = State::<AR>::default();
 
     if let Some(regs) = argv.values_of("register") {
         reg_parse(&mut poweron_state, regs)?;
     }
 
-    let start_pc = input::parse_ptr(start_spec, db, bus, arch)
+    let start_pc = input::parse_ptr(start_spec, db, &bus, arch)
         .expect("Must specify a valid address to analyze");
-    eprintln!("Starting scan from {:X}", start_pc);
-    match scan_pc_for_arch::<ASM::Literal, AR>(&mut db, &start_pc, bus, arch) {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!("Initial scan failed due to {}", e);
+    let mut last_num_scans = None;
 
-            return Err(e);
-        }
-    };
+    cmd_send
+        .send(Command::SetPowerOnState(poweron_state))
+        .unwrap();
+    cmd_send.send(Command::StaticScanCode(start_pc)).unwrap();
+    cmd_send.send(Command::Fence).unwrap();
+    cmd_send
+        .send(Command::ExtractAllScans(is_tracing_allowed))
+        .unwrap();
+    cmd_send.send(Command::Fence).unwrap();
+
+    drop(db_lock);
 
     loop {
-        let (did_find_code, _) = exhaust_all_static_scans::<ASM::Literal, AR>(&mut db, bus, arch);
-        if !did_find_code {
-            break;
-        }
+        match resp_recv.recv().unwrap() {
+            Response::StaticScanCode {
+                scan_start,
+                scan_end_offset,
+                error,
+            } => {
+                if let Some(error) = error {
+                    eprintln!(
+                        "{}",
+                        describe_scan_error::<ASM::Literal, AR>(
+                            &bus,
+                            &scan_start,
+                            scan_end_offset,
+                            error
+                        )
+                    );
+                } else if let Some(scan_end_offset) = scan_end_offset {
+                    eprintln!(
+                        "Static scan at ${:X} got ${:X} bytes",
+                        scan_start, scan_end_offset
+                    );
+                } else {
+                    eprintln!("Static scan at ${:X}", scan_start);
+                }
+            }
+            Response::PowerOnStateSet => {}
+            Response::DynamicScanCode {
+                scan_start,
+                scan_end,
+                error,
+            } => {
+                if let Some(error) = error {
+                    eprintln!(
+                        "Dynamic scan at ${:X} failed at ${:X} due to {}",
+                        scan_start, scan_end, error
+                    );
+                } else {
+                    eprintln!(
+                        "Dynamic scan at ${:X} forked at ${:X}",
+                        scan_start, scan_end
+                    );
+                }
+            }
+            Response::ExtractScanCount(_with_dynamic, how_much) => {
+                eprintln!("Found {} more scans to complete...", how_much);
+                last_num_scans = Some(how_much)
+            }
+            Response::Fence => {
+                if last_num_scans == Some(0) {
+                    eprintln!("Finishing scan.");
+                    break;
+                }
 
-        if is_tracing_allowed {
-            let did_trace_branches = exhaust_all_dynamic_scans::<ASM::Literal, AR>(
-                &mut db,
-                bus,
-                arch,
-                poweron_state.clone(),
-            )
-            .map_err(Into::<io::Error>::into)?;
-            if !did_trace_branches {
-                break;
+                eprintln!("Looking for more scans to run...");
+                cmd_send
+                    .send(Command::ExtractAllScans(is_tracing_allowed))
+                    .unwrap();
+                cmd_send.send(Command::Fence).unwrap();
             }
         }
     }
 
     eprintln!("Scan complete, writing database");
 
-    if let Err(e) = pjdb.write(&mut fs::File::create(prog.as_database_path())?) {
+    if let Err(e) = pjdb
+        .write()
+        .unwrap()
+        .write(&mut fs::File::create(prog.as_database_path())?)
+    {
         return Err(e.into());
     }
 
@@ -390,8 +261,8 @@ pub fn scan<'a>(project: &mut Project, prog: &Program, argv: &ArgMatches<'a>) ->
     let mut file = fs::File::open(image)?;
 
     with_prog_architecture!(prog, |plat, arch, asm| {
-        let bus = plat.construct_platform(&mut file)?;
+        let bus = Arc::new(plat.construct_platform(&mut file)?);
 
-        scan_for_arch(project, prog, start_spec, &bus, arch, asm, argv)
+        scan_for_arch(project, prog, start_spec, bus, arch, asm, argv)
     })
 }

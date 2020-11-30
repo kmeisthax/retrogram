@@ -244,6 +244,8 @@ pub trait Numerical:
     + CheckedSub<Self, Output = Self>
     + PartialOrd
     + PartialEq
+    + Send
+    + Sync
 {
 }
 
@@ -254,5 +256,7 @@ impl<T> Numerical for T where
         + CheckedAdd<Self, Output = Self>
         + CheckedSub<Self, Output = Self>
         + PartialOrd
+        + Send
+        + Sync
 {
 }

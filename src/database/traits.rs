@@ -11,7 +11,7 @@ use std::fmt::Debug;
 ///
 /// It is not intended for this trait to be implemented by anything but
 /// `Database<AR>`.
-pub trait AnyDatabase: Any + Debug {
+pub trait AnyDatabase: Any + Debug + Send + Sync {
     /// Upcast the database to `Any` so it can be downcasted into a concrete
     /// type.
     fn as_any(&self) -> &dyn Any;

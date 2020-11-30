@@ -43,8 +43,8 @@ where
 /// must provide in order to be supported.
 pub trait Architecture
 where
-    Self: Copy + Debug + PartialEq + Eq + PartialOrd + Ord + Serialize,
-    Self::Register: Mappable + Debug + Display + FromStr,
+    Self: 'static + Copy + Debug + PartialEq + Eq + PartialOrd + Ord + Serialize + Send + Sync,
+    Self::Register: Mappable + Debug + Display + FromStr + Send + Sync,
     Self::Word: Bitwise
         + Numerical
         + Popcount<Output = Self::Word>
