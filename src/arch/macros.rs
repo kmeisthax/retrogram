@@ -48,11 +48,15 @@ macro_rules! with_prog_architecture {
 /// This yields an IO error if the database type could not be determined.
 macro_rules! with_db_architecture {
     ($db:ident, |$concrete_db: ident, $arch:ident| $callback:block) => {
-        if let Some($concrete_db) = $db.as_any().downcast_ref::<crate::arch::sm83::SM83>() {
+        if let Some($concrete_db) = $db
+            .as_any()
+            .downcast_ref::<crate::database::Database<crate::arch::sm83::SM83>>()
+        {
             let $arch = crate::arch::sm83::SM83();
             $callback
-        } else if let Some($concrete_db) =
-            $db.as_any().downcast_ref::<crate::arch::aarch32::AArch32>()
+        } else if let Some($concrete_db) = $db
+            .as_any()
+            .downcast_ref::<crate::database::Database<crate::arch::aarch32::AArch32>>()
         {
             let $arch = crate::arch::aarch32::AArch32();
             $callback
