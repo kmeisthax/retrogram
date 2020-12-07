@@ -1,55 +1,67 @@
 //! Text UI for interactive use
 
+use crate::analysis::Response;
 use crate::database::ProjectDatabase;
 use crate::platform::Platform;
 use crate::project::{Program, Project};
+use crate::tui::context::{AnyProgramContext, ProgramContext};
 use crate::tui::disasm_view::DisassemblyView;
 use cursive::menu::MenuTree;
 use cursive::view::Nameable;
 use cursive::views::Dialog;
+use cursive::Cursive;
 use cursive_tabs::TabPanel;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::thread::spawn;
 use std::{fs, io};
 
-/// Construct a new disassembly tab for a given zygote.
-fn tab_zygote(
-    project: &mut Project,
-    name: &str,
-    panel: &mut TabPanel<String>,
-    databases: &HashMap<String, Arc<RwLock<ProjectDatabase>>>,
-) -> io::Result<()> {
-    let program = project.program(name).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("Program {} does not exist", name),
-        )
-    })?;
+/// Open a program and construct a context that holds it's mutable state for
+/// later use.
+///
+/// The `siv` is used to trigger refreshes whenever the analysis queue for this
+/// context has mutated the database.
+fn context_zygote(
+    program: Program,
+    database: Arc<RwLock<ProjectDatabase>>,
+    siv: &Cursive,
+) -> io::Result<Box<dyn AnyProgramContext>> {
     let image = program
         .iter_images()
         .next()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
     let mut file = fs::File::open(image)?;
-    let pjdb = databases
-        .get(program.as_database_path())
-        .cloned()
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                format!(
-                    "Unexpected database file {} encountered",
-                    program.as_database_path()
-                ),
-            )
-        })?;
+    let prog_borrow = &program;
 
-    with_prog_architecture!(program, |plat, arch, asm| {
+    with_prog_architecture!(prog_borrow, |plat, arch, asm| {
         let bus = plat.construct_platform(&mut file)?;
         let bus = Arc::new(bus);
 
+        let (ctxt, recv) =
+            ProgramContext::from_program_and_database(arch, asm, program, database, bus);
+        let sink = siv.cb_sink().clone();
+
+        spawn(move || loop {
+            if matches!(recv.recv().unwrap(), Response::Fence) {
+                sink.send(Box::new(|siv| {
+                    siv.refresh();
+                }))
+                .unwrap();
+            }
+        });
+
+        Ok(Box::new(ctxt))
+    })
+}
+
+/// Construct a new disassembly tab for a given program and add it to the TUI
+fn tab_zygote(context: &mut dyn AnyProgramContext, panel: &mut TabPanel<String>) -> io::Result<()> {
+    with_context_architecture!(context, |context, arch, asm| {
+        let name = context.program_name();
+
         panel.add_tab(
             name.to_string(),
-            DisassemblyView::new(pjdb, name, bus, arch, asm),
+            DisassemblyView::new(context.clone(), arch, asm),
         );
 
         Ok(())
@@ -92,8 +104,22 @@ pub fn main(mut project: Project) -> io::Result<()> {
 
     let mut panel = TabPanel::new();
 
-    for (name, _program) in programs.iter() {
-        tab_zygote(&mut project, &name, &mut panel, &databases)?;
+    for (_name, program) in programs {
+        let program_db = databases
+            .get(program.as_database_path())
+            .cloned()
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!(
+                        "Unexpected database file {} encountered",
+                        program.as_database_path()
+                    ),
+                )
+            })?;
+        let mut context = context_zygote(program, program_db, &siv)?;
+
+        tab_zygote(&mut *context, &mut panel)?;
     }
 
     siv.add_fullscreen_layer(panel.with_name("tabs"));

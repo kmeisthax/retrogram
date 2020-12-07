@@ -4,9 +4,10 @@ use crate::analysis::{replace_labels, Error};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
 use crate::ast::{Directive, Literal, Section};
-use crate::database::{Database, ProjectDatabase};
+use crate::database::Database;
 use crate::memory::{Memory, Pointer, Tumbler};
 use crate::tui::label::label_dialog;
+use crate::tui::ProgramContext;
 use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::theme::{BaseColor, Color, ColorStyle, ColorType, PaletteColor};
@@ -15,7 +16,6 @@ use cursive_tabs::TabPanel;
 use std::cmp::max;
 use std::convert::{TryFrom, TryInto};
 use std::io::Write;
-use std::sync::{Arc, RwLock};
 
 /// Renders a disassembly in a TUI context.
 pub struct DisassemblyView<AR, ASM>
@@ -24,17 +24,11 @@ where
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
 {
+    /// The program context this disassembly view gets it's data from.
+    context: ProgramContext<AR>,
+
     /// Whether or not focus is locked to this particular view.
     lock_focus: bool,
-
-    /// The database repository to pull information from.
-    pjdb: Arc<RwLock<ProjectDatabase>>,
-
-    /// The name of the program to show.
-    prog_name: String,
-
-    /// The memory bus containing all of the images to inspect.
-    bus: Arc<Memory<AR>>,
 
     /// The location that we are scrolling to.
     scroll: Tumbler,
@@ -108,7 +102,7 @@ where
                     Directive::DeclareComment(com) => at.emit_comment(self.asm.clone(), com)?,
                 }
             }
-        } else if let Some(data) = self.bus.read_unit(loc).into_concrete() {
+        } else if let Some(data) = self.context.bus().read_unit(loc).into_concrete() {
             at.emit_data(self.asm.clone(), &[data]).unwrap();
         } else {
             at.emit_space(self.asm.clone(), 1).unwrap();
@@ -145,18 +139,10 @@ where
         }
     }
 
-    pub fn new(
-        pjdb: Arc<RwLock<ProjectDatabase>>,
-        prog_name: &str,
-        bus: Arc<Memory<AR>>,
-        arch: AR,
-        asm: ASM,
-    ) -> Self {
+    pub fn new(context: ProgramContext<AR>, arch: AR, asm: ASM) -> Self {
         Self {
             lock_focus: false,
-            pjdb,
-            prog_name: prog_name.to_string(),
-            bus,
+            context,
             scroll: Tumbler::default(),
             cursor: Tumbler::default(),
             size: (0, 0).into(),
@@ -168,7 +154,7 @@ where
     /// Returns the scroll start and end.
     fn scroll_params(&self, db: &mut Database<AR>) -> Option<(Tumbler, Tumbler)> {
         let scroll_end = self.scroll.scroll_forward_by_lines(
-            &self.bus,
+            self.context.bus(),
             db,
             &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
             self.size.y.saturating_sub(1),
@@ -179,12 +165,15 @@ where
 
     /// Move the cursor down by one.
     pub fn cursor_down(&mut self) {
-        let mut db_lock = self.pjdb.write().unwrap();
-        let db = db_lock.get_database_mut(&self.prog_name).unwrap();
+        let pjdb = self.context.project_database();
+        let mut db_lock = pjdb.write().unwrap();
+        let db = db_lock
+            .get_database_mut(self.context.program_name())
+            .unwrap();
 
         if let Some((scroll, scroll_end)) = self.scroll_params(db) {
             if let Some(cursor) = self.cursor.scroll_forward_by_lines(
-                &self.bus,
+                self.context.bus(),
                 db,
                 &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                 1,
@@ -192,7 +181,7 @@ where
                 if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
                     self.cursor = cursor;
                 } else if let Some(scroll) = scroll.scroll_forward_by_lines(
-                    &self.bus,
+                    self.context.bus(),
                     db,
                     &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                     1,
@@ -206,14 +195,17 @@ where
 
     /// Move the cursor down by one page.
     pub fn page_down(&mut self) {
-        let mut db_lock = self.pjdb.write().unwrap();
-        let db = db_lock.get_database_mut(&self.prog_name).unwrap();
+        let pjdb = self.context.project_database();
+        let mut db_lock = pjdb.write().unwrap();
+        let db = db_lock
+            .get_database_mut(self.context.program_name())
+            .unwrap();
 
         if let Some((scroll, scroll_end)) = self.scroll_params(db) {
             if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
                 self.cursor = scroll_end;
             } else if let Some(scroll) = scroll.scroll_forward_by_lines(
-                &self.bus,
+                self.context.bus(),
                 db,
                 &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                 self.size.y,
@@ -221,7 +213,7 @@ where
                 self.scroll = scroll;
                 self.cursor = scroll
                     .scroll_forward_by_lines(
-                        &self.bus,
+                        self.context.bus(),
                         db,
                         &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                         self.size.y.saturating_sub(1),
@@ -233,11 +225,14 @@ where
 
     /// Move the cursor up by one.
     pub fn cursor_up(&mut self) {
-        let mut db_lock = self.pjdb.write().unwrap();
-        let db = db_lock.get_database_mut(&self.prog_name).unwrap();
+        let pjdb = self.context.project_database();
+        let mut db_lock = pjdb.write().unwrap();
+        let db = db_lock
+            .get_database_mut(self.context.program_name())
+            .unwrap();
 
         if let Some(cursor) = self.cursor.scroll_backward_by_lines(
-            &self.bus,
+            self.context.bus(),
             db,
             &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
             1,
@@ -251,12 +246,15 @@ where
 
     /// Move the cursor up by one page.
     pub fn page_up(&mut self) {
-        let mut db_lock = self.pjdb.write().unwrap();
-        let db = db_lock.get_database_mut(&self.prog_name).unwrap();
+        let pjdb = self.context.project_database();
+        let mut db_lock = pjdb.write().unwrap();
+        let db = db_lock
+            .get_database_mut(self.context.program_name())
+            .unwrap();
 
         if self.cursor == self.scroll {
             if let Some(cursor) = self.cursor.scroll_backward_by_lines(
-                &self.bus,
+                self.context.bus(),
                 db,
                 &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                 self.size.y,
@@ -283,22 +281,26 @@ where
     fn draw(&self, printer: &Printer) {
         let mut position = self.scroll;
 
-        let mut db_lock = self.pjdb.write().unwrap();
+        let pjdb = self.context.project_database();
+        let mut db_lock = pjdb.write().unwrap();
+        let db = db_lock
+            .get_database_mut(self.context.program_name())
+            .unwrap();
 
-        let db = db_lock.get_database_mut(&self.prog_name).unwrap();
         let mut line = 0;
 
         while line < printer.size.y {
-            if self.bus.region_count() == 0 {
+            if self.context.bus().region_count() == 0 {
                 printer.print((0, line), "Bus is empty!");
                 break;
             }
 
-            let (at, lines_to_skip) = if let Some(enc) = self.bus.encode_tumbler(position) {
-                let lines_at_loc = self.disasm_lines_at_location(&self.bus, db, &enc);
+            let (at, lines_to_skip) = if let Some(enc) = self.context.bus().encode_tumbler(position)
+            {
+                let lines_at_loc = self.disasm_lines_at_location(self.context.bus(), db, &enc);
                 let lines_to_skip = lines_at_loc.saturating_sub(position.line_index());
 
-                match self.disasm_at_location(&self.bus, db, &enc) {
+                match self.disasm_at_location(self.context.bus(), db, &enc) {
                     Ok(at) => (at, lines_to_skip),
                     Err(e) => {
                         let mut at = AnnotatedText::new();
@@ -377,7 +379,7 @@ where
 
             position = position
                 .scroll_forward_by_lines(
-                    &self.bus,
+                    self.context.bus(),
                     db,
                     &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                     max(lines_to_skip, 1),
@@ -431,9 +433,9 @@ where
                 s.find_name::<TabPanel<String>>("tabs").unwrap().next()
             }))),
             Event::Char('l') => {
-                let mem = self.bus.encode_tumbler(self.cursor);
-                let pjdb = self.pjdb.clone();
-                let prog_name = self.prog_name.clone();
+                let mem = self.context.bus().encode_tumbler(self.cursor);
+                let pjdb = self.context.project_database();
+                let prog_name = self.context.program_name().to_string();
 
                 EventResult::Consumed(Some(Callback::from_fn(move |s| {
                     label_dialog::<AR>(s, mem.clone(), pjdb.clone(), prog_name.clone())
