@@ -22,7 +22,13 @@ pub struct Project {
 impl Project {
     pub fn read(filename: &str) -> io::Result<Self> {
         let project_file = fs::File::open(filename)?;
-        let project = serde_json::from_reader(project_file)?;
+        let mut project : Self = serde_json::from_reader(project_file)?;
+
+        for (name, prog) in project.programs.iter_mut() {
+            if prog.as_name().is_none() {
+                prog.set_name(name);
+            }
+        }
 
         Ok(project)
     }
