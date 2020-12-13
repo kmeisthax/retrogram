@@ -1,6 +1,6 @@
 //! Disassembly view
 
-use crate::analysis::{replace_labels, Error};
+use crate::analysis::{replace_labels, Command, Error};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
 use crate::ast::{Directive, Literal, Section};
@@ -266,6 +266,19 @@ where
             self.cursor = self.scroll;
         }
     }
+
+    /// Attempt to look for code at the currently selected address.
+    pub fn declare_code(&mut self) {
+        let ptr = self.context.bus().encode_tumbler(self.cursor);
+
+        if let Some(ptr) = ptr {
+            self.context
+                .command_sender()
+                .send(Command::StaticScanCode(ptr))
+                .unwrap();
+            self.context.command_sender().send(Command::Fence).unwrap()
+        }
+    }
 }
 
 impl<AR, ASM> View for DisassemblyView<AR, ASM>
@@ -432,6 +445,10 @@ where
             Event::Key(Key::Tab) => EventResult::Consumed(Some(Callback::from_fn(|s| {
                 s.find_name::<TabPanel<String>>("tabs").unwrap().next()
             }))),
+            Event::Char('c') => {
+                self.declare_code();
+                EventResult::Consumed(None)
+            }
             Event::Char('l') => {
                 let mem = self.context.bus().encode_tumbler(self.cursor);
                 let pjdb = self.context.project_database();

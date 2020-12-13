@@ -87,6 +87,11 @@ where
     pub fn project_database(&self) -> Arc<RwLock<ProjectDatabase>> {
         self.database.clone()
     }
+
+    /// Get the command sender.
+    pub fn command_sender(&mut self) -> &mut Sender<Command<AR>> {
+        &mut self.command_sender
+    }
 }
 
 /// This trait represents a type-erased program context.
