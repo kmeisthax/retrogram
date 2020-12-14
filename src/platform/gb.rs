@@ -351,9 +351,9 @@ where
     fn decode_addr(
         &self,
         ptr: &memory::Pointer<sm83::PtrVal>,
-        base: sm83::PtrVal,
+        _base: sm83::PtrVal,
     ) -> Option<usize> {
-        if base == 0x0000 && *ptr.as_pointer() < 0x4000 {
+        if *ptr.as_pointer() < 0x4000 {
             Some(*ptr.as_pointer() as usize)
         } else {
             self.mapper.decode_banked_addr(ptr)
@@ -371,20 +371,16 @@ where
         )]
     }
 
-    fn encode_addr(&self, ioffset: usize, base: sm83::PtrVal) -> Option<Pointer<sm83::PtrVal>> {
+    fn encode_addr(&self, ioffset: usize, _base: sm83::PtrVal) -> Option<Pointer<sm83::PtrVal>> {
         if ioffset >= self.data.len() {
             return None;
         }
 
-        if base == 0x0000 {
-            if ioffset < 0x4000 {
-                Some(Pointer::from_ptrval_and_contexts(
-                    ioffset as sm83::PtrVal,
-                    HashMap::new(),
-                ))
-            } else {
-                None
-            }
+        if ioffset < 0x4000 {
+            Some(Pointer::from_ptrval_and_contexts(
+                ioffset as sm83::PtrVal,
+                HashMap::new(),
+            ))
         } else {
             self.mapper.encode_banked_addr(ioffset)
         }
