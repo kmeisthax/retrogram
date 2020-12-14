@@ -488,3 +488,14 @@ where
         true
     }
 }
+
+impl<AR, ASM> AnyArch for DisassemblyView<AR, ASM>
+where
+    AR: Architecture,
+    ASM: Assembler,
+    ASM::Literal: CompatibleLiteral<AR>,
+{
+    fn arch(&self) -> ArchName {
+        self.context.arch()
+    }
+}
