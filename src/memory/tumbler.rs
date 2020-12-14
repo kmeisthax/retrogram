@@ -78,7 +78,11 @@ impl Tumbler {
     /// The image offset of the returned parameter is the *end* of the region,
     /// not the start - if constructing a new tumbler, use 0 instead of the
     /// middle parameter.
-    fn next_region<AR>(&self, bus: &Memory<AR>, region: usize) -> Result<(usize, usize, usize), TumblerError>
+    fn next_region<AR>(
+        &self,
+        bus: &Memory<AR>,
+        region: usize,
+    ) -> Result<(usize, usize, usize), TumblerError>
     where
         AR: Architecture,
     {
@@ -99,7 +103,10 @@ impl Tumbler {
     /// offset.
     ///
     /// If `None`, then the bus is empty.
-    fn valid_region<AR>(&self, bus: &Memory<AR>) -> Result<(usize, usize, usize, usize), TumblerError>
+    fn valid_region<AR>(
+        &self,
+        bus: &Memory<AR>,
+    ) -> Result<(usize, usize, usize, usize), TumblerError>
     where
         AR: Architecture,
     {
@@ -140,7 +147,9 @@ impl Tumbler {
         }
         let prev_io = max_io?;
         let tumbl = (prev_r, prev_io, 0).into();
-        let enc = bus.encode_tumbler(tumbl).ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
+        let enc = bus
+            .encode_tumbler(tumbl)
+            .ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
         let prev_l = lines(bus, db, &enc).saturating_sub(1);
 
         Ok((prev_r, prev_io, prev_l))
@@ -159,7 +168,9 @@ impl Tumbler {
         LinesAtLocation: FnMut(&Memory<AR>, &mut Database<AR>, &Pointer<AR::PtrVal>) -> usize,
     {
         let (mut next_r, mut next_io, mut next_l, mut max_io) = self.valid_region(bus)?;
-        let mut encoded = bus.encode_tumbler(self).ok_or(TumblerError::CouldNotEncodeSelf)?;
+        let mut encoded = bus
+            .encode_tumbler(self)
+            .ok_or(TumblerError::CouldNotEncodeSelf)?;
         let mut lines_at_loc = lines(bus, db, &encoded);
 
         while amount > 0 {
@@ -172,7 +183,10 @@ impl Tumbler {
                 .find_block_membership(&encoded)
                 .and_then(|bid| db.block(bid))
             {
-                match block.next_instruction(&encoded, 1).ok_or(TumblerError::TumblerOutsideBlockAlready)? {
+                match block
+                    .next_instruction(&encoded, 1)
+                    .ok_or(TumblerError::TumblerOutsideBlockAlready)?
+                {
                     InstrLocation::InsideBlock(s) => {
                         encoded = encoded.contextualize(block.as_start().as_pointer().clone() + s);
                         lines_at_loc = lines(bus, db, &encoded);
@@ -190,8 +204,10 @@ impl Tumbler {
                                     .unwrap_or_else(AR::Offset::zero),
                         );
 
-                        let (new_r, new_io, _new_l, new_max_io) =
-                            bus.decode_tumbler(encoded.clone()).ok_or(TumblerError::CouldNotDecodeAdjAddress)?.valid_region(bus)?;
+                        let (new_r, new_io, _new_l, new_max_io) = bus
+                            .decode_tumbler(encoded.clone())
+                            .ok_or(TumblerError::CouldNotDecodeAdjAddress)?
+                            .valid_region(bus)?;
 
                         if new_io < (new_max_io - 1) {
                             next_r = new_r;
@@ -206,7 +222,9 @@ impl Tumbler {
                             next_l = 0;
                         }
 
-                        encoded = bus.encode_tumbler((next_r, next_io, 0).into()).ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
+                        encoded = bus
+                            .encode_tumbler((next_r, next_io, 0).into())
+                            .ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
                         lines_at_loc = lines(bus, db, &encoded);
                     }
                 };
@@ -215,11 +233,15 @@ impl Tumbler {
                     .find_block_membership(&encoded)
                     .and_then(|bid| db.block(bid))
                 {
-                    encoded = other_block.align_to_instruction(&encoded).ok_or(TumblerError::TumblerOutsideBlockAlready)?;
+                    encoded = other_block
+                        .align_to_instruction(&encoded)
+                        .ok_or(TumblerError::TumblerOutsideBlockAlready)?;
                     lines_at_loc = lines(bus, db, &encoded);
                 }
 
-                let decoded = bus.decode_tumbler(encoded.clone()).ok_or(TumblerError::CouldNotDecodeAdjAddress)?;
+                let decoded = bus
+                    .decode_tumbler(encoded.clone())
+                    .ok_or(TumblerError::CouldNotDecodeAdjAddress)?;
                 let (new_r, new_io, new_l, _new_max_io) = decoded.valid_region(bus)?;
 
                 if new_r != next_r || new_io != next_io {
@@ -238,13 +260,17 @@ impl Tumbler {
                     next_r = r_plus;
                     next_io = 0;
                     next_l = r_plus_l;
-                    encoded = bus.encode_tumbler((next_r, next_io, next_l).into()).ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
+                    encoded = bus
+                        .encode_tumbler((next_r, next_io, next_l).into())
+                        .ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
                     lines_at_loc = lines(bus, db, &encoded);
                     amount = amount.saturating_sub(1);
                 } else {
                     next_io += 1;
                     next_l = 0;
-                    encoded = bus.encode_tumbler((next_r, next_io, next_l).into()).ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
+                    encoded = bus
+                        .encode_tumbler((next_r, next_io, next_l).into())
+                        .ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
                     lines_at_loc = lines(bus, db, &encoded);
                     amount = amount.saturating_sub(1);
                 }
@@ -255,10 +281,14 @@ impl Tumbler {
             .find_block_membership(&encoded)
             .and_then(|bid| db.block(bid))
         {
-            encoded = block.align_to_instruction(&encoded).ok_or(TumblerError::TumblerOutsideBlockAlready)?;
+            encoded = block
+                .align_to_instruction(&encoded)
+                .ok_or(TumblerError::TumblerOutsideBlockAlready)?;
 
-            let (new_r, new_io, new_l, _new_max_io) =
-                bus.decode_tumbler(encoded.clone()).ok_or(TumblerError::CouldNotDecodeAdjAddress)?.valid_region(bus)?;
+            let (new_r, new_io, new_l, _new_max_io) = bus
+                .decode_tumbler(encoded.clone())
+                .ok_or(TumblerError::CouldNotDecodeAdjAddress)?
+                .valid_region(bus)?;
 
             if new_r != next_r || new_io != next_io {
                 next_r = new_r;
@@ -285,7 +315,9 @@ impl Tumbler {
         LinesAtLocation: FnMut(&Memory<AR>, &mut Database<AR>, &Pointer<AR::PtrVal>) -> usize,
     {
         let (mut next_r, mut next_io, mut next_l, mut _max_io) = self.valid_region(bus)?;
-        let mut encoded = bus.encode_tumbler(self).ok_or(TumblerError::CouldNotEncodeSelf)?;
+        let mut encoded = bus
+            .encode_tumbler(self)
+            .ok_or(TumblerError::CouldNotEncodeSelf)?;
 
         while amount > 0 {
             if next_l > 0 {
@@ -297,7 +329,10 @@ impl Tumbler {
                 .find_block_membership(&encoded)
                 .and_then(|bid| db.block(bid))
             {
-                match block.last_instruction(&encoded, 1).ok_or(TumblerError::TumblerOutsideBlockAlready)? {
+                match block
+                    .last_instruction(&encoded, 1)
+                    .ok_or(TumblerError::TumblerOutsideBlockAlready)?
+                {
                     InstrLocation::InsideBlock(s) => {
                         encoded = encoded.contextualize(block.as_start().as_pointer().clone() + s);
                         amount = amount.saturating_sub(1);
@@ -307,13 +342,17 @@ impl Tumbler {
                         // this one. This involves switching between tumbler
                         // and pointer form multiple times.
                         encoded = encoded.contextualize(block.as_start().as_pointer().clone());
-                        let (new_r, new_io, _new_l, _new_max_io) =
-                            bus.decode_tumbler(encoded.clone()).ok_or(TumblerError::CouldNotDecodeAdjAddress)?.valid_region(bus)?;
+                        let (new_r, new_io, _new_l, _new_max_io) = bus
+                            .decode_tumbler(encoded.clone())
+                            .ok_or(TumblerError::CouldNotDecodeAdjAddress)?
+                            .valid_region(bus)?;
 
                         if new_io > 0 {
                             next_r = new_r;
                             next_io = new_io - 1;
-                            encoded = bus.encode_tumbler((next_r, next_io, next_l).into()).ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
+                            encoded = bus
+                                .encode_tumbler((next_r, next_io, next_l).into())
+                                .ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
                             next_l = lines(bus, db, &encoded).saturating_sub(1);
                         } else {
                             let (r_minus, r_minus_max_io, r_l) =
@@ -324,7 +363,9 @@ impl Tumbler {
                             next_l = r_l;
                         }
 
-                        encoded = bus.encode_tumbler((next_r, next_io, next_l).into()).ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
+                        encoded = bus
+                            .encode_tumbler((next_r, next_io, next_l).into())
+                            .ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
                         amount = amount.saturating_sub(1);
                     }
                 };
@@ -335,16 +376,22 @@ impl Tumbler {
                     .find_block_membership(&encoded)
                     .and_then(|bid| db.block(bid))
                 {
-                    encoded = other_block.align_to_instruction(&encoded).ok_or(TumblerError::TumblerOutsideBlockAlready)?;
+                    encoded = other_block
+                        .align_to_instruction(&encoded)
+                        .ok_or(TumblerError::TumblerOutsideBlockAlready)?;
                 }
 
-                let decoded = bus.decode_tumbler(encoded.clone()).ok_or(TumblerError::CouldNotDecodeAdjAddress)?;
+                let decoded = bus
+                    .decode_tumbler(encoded.clone())
+                    .ok_or(TumblerError::CouldNotDecodeAdjAddress)?;
                 let (new_r, new_io, _new_l, _new_max_io) = decoded.valid_region(bus)?;
 
                 if new_r != next_r || new_io != next_io {
                     next_r = new_r;
                     next_io = new_io;
-                    encoded = bus.encode_tumbler((next_r, next_io, next_l).into()).ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
+                    encoded = bus
+                        .encode_tumbler((next_r, next_io, next_l).into())
+                        .ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
                     next_l = lines(bus, db, &encoded).saturating_sub(1);
                 }
             } else if next_io > 0 {
@@ -358,21 +405,29 @@ impl Tumbler {
                 // forward as it is expected that all blocks start with a valid
                 // instruction.
                 next_io -= 1;
-                encoded = bus.encode_tumbler((next_r, next_io, next_l).into()).ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
+                encoded = bus
+                    .encode_tumbler((next_r, next_io, next_l).into())
+                    .ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
 
                 if let Some(other_block) = db
                     .find_block_membership(&encoded)
                     .and_then(|bid| db.block(bid))
                 {
-                    encoded = other_block.align_to_instruction(&encoded).ok_or(TumblerError::TumblerOutsideBlockAlready)?;
+                    encoded = other_block
+                        .align_to_instruction(&encoded)
+                        .ok_or(TumblerError::TumblerOutsideBlockAlready)?;
                 }
 
-                let decoded = bus.decode_tumbler(encoded.clone()).ok_or(TumblerError::CouldNotDecodeAdjAddress)?;
+                let decoded = bus
+                    .decode_tumbler(encoded.clone())
+                    .ok_or(TumblerError::CouldNotDecodeAdjAddress)?;
                 let (new_r, new_io, _new_l, _new_max_io) = decoded.valid_region(bus)?;
 
                 next_r = new_r;
                 next_io = new_io;
-                encoded = bus.encode_tumbler((next_r, next_io, next_l).into()).ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
+                encoded = bus
+                    .encode_tumbler((next_r, next_io, next_l).into())
+                    .ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
                 next_l = lines(bus, db, &encoded).saturating_sub(1);
                 amount = amount.saturating_sub(1);
             } else {
@@ -381,21 +436,29 @@ impl Tumbler {
                 next_r = r_minus;
                 next_io = r_minus_max_io.saturating_sub(1);
                 next_l = r_l;
-                encoded = bus.encode_tumbler((next_r, next_io, next_l).into()).ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
+                encoded = bus
+                    .encode_tumbler((next_r, next_io, next_l).into())
+                    .ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
                 amount = amount.saturating_sub(1);
             }
         }
 
-        encoded = bus.encode_tumbler((next_r, next_io, next_l).into()).ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
+        encoded = bus
+            .encode_tumbler((next_r, next_io, next_l).into())
+            .ok_or(TumblerError::CouldNotEncodeAdjAddress)?;
 
         if let Some(block) = db
             .find_block_membership(&encoded)
             .and_then(|bid| db.block(bid))
         {
-            encoded = block.align_to_instruction(&encoded).ok_or(TumblerError::TumblerOutsideBlockAlready)?;
+            encoded = block
+                .align_to_instruction(&encoded)
+                .ok_or(TumblerError::TumblerOutsideBlockAlready)?;
 
-            let (new_r, new_io, _new_l, _new_max_io) =
-                bus.decode_tumbler(encoded.clone()).ok_or(TumblerError::CouldNotDecodeAdjAddress)?.valid_region(bus)?;
+            let (new_r, new_io, _new_l, _new_max_io) = bus
+                .decode_tumbler(encoded.clone())
+                .ok_or(TumblerError::CouldNotDecodeAdjAddress)?
+                .valid_region(bus)?;
 
             if new_r != next_r || new_io != next_io {
                 next_r = new_r;
@@ -424,7 +487,7 @@ pub enum TumblerError {
     CouldNotDecodeAdjAddress,
 
     /// The tumbler points to a block that's somehow outside of itself.
-    /// 
+    ///
     /// This is usually a programming error.
     TumblerOutsideBlockAlready,
 }
@@ -435,10 +498,22 @@ impl fmt::Display for TumblerError {
 
         match self {
             EmptyBus => write!(f, "The bus given to the tumbler has no valid regions"),
-            CouldNotEncodeSelf => write!(f, "The tumbler could not encode itself into a valid address"),
-            CouldNotEncodeAdjAddress => write!(f, "The adjacent tumbler could not be encoded into a valid address."),
-            CouldNotDecodeAdjAddress => write!(f, "The adjacent address could not be decoded into a valid tumbler."),
-            TumblerOutsideBlockAlready => write!(f, "The tumbler points to a block that's somehow outside of itself"),
+            CouldNotEncodeSelf => write!(
+                f,
+                "The tumbler could not encode itself into a valid address"
+            ),
+            CouldNotEncodeAdjAddress => write!(
+                f,
+                "The adjacent tumbler could not be encoded into a valid address."
+            ),
+            CouldNotDecodeAdjAddress => write!(
+                f,
+                "The adjacent address could not be decoded into a valid tumbler."
+            ),
+            TumblerOutsideBlockAlready => write!(
+                f,
+                "The tumbler points to a block that's somehow outside of itself"
+            ),
         }
     }
 }

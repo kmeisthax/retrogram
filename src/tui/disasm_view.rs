@@ -153,12 +153,15 @@ where
 
     /// Returns the scroll start and end.
     fn scroll_params(&self, db: &mut Database<AR>) -> Option<(Tumbler, Tumbler)> {
-        let scroll_end = self.scroll.scroll_forward_by_lines(
-            self.context.bus(),
-            db,
-            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-            self.size.y.saturating_sub(1),
-        ).ok()?;
+        let scroll_end = self
+            .scroll
+            .scroll_forward_by_lines(
+                self.context.bus(),
+                db,
+                &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                self.size.y.saturating_sub(1),
+            )
+            .ok()?;
 
         Some((self.scroll, scroll_end))
     }
@@ -172,22 +175,27 @@ where
             .unwrap();
 
         if let Some((scroll, scroll_end)) = self.scroll_params(db) {
-            let cursor = self.cursor.scroll_forward_by_lines(
-                self.context.bus(),
-                db,
-                &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-                1,
-            ).expect("Scrolling error when cursoring down");
-
-            if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
-                self.cursor = cursor;
-            } else {
-                let scroll = scroll.scroll_forward_by_lines(
+            let cursor = self
+                .cursor
+                .scroll_forward_by_lines(
                     self.context.bus(),
                     db,
                     &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                     1,
-                ).expect("Scrolling error when cursoring down");
+                )
+                .expect("Scrolling error when cursoring down");
+
+            if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
+                self.cursor = cursor;
+            } else {
+                let scroll = scroll
+                    .scroll_forward_by_lines(
+                        self.context.bus(),
+                        db,
+                        &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                        1,
+                    )
+                    .expect("Scrolling error when cursoring down");
 
                 self.cursor = cursor;
                 self.scroll = scroll;
@@ -207,12 +215,14 @@ where
             if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
                 self.cursor = scroll_end;
             } else {
-                let scroll = scroll.scroll_forward_by_lines(
-                    self.context.bus(),
-                    db,
-                    &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-                    self.size.y,
-                ).expect("Scrolling error when paging down");
+                let scroll = scroll
+                    .scroll_forward_by_lines(
+                        self.context.bus(),
+                        db,
+                        &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                        self.size.y,
+                    )
+                    .expect("Scrolling error when paging down");
 
                 self.scroll = scroll;
                 self.cursor = scroll
@@ -235,12 +245,15 @@ where
             .get_database_mut(self.context.program_name())
             .unwrap();
 
-        let cursor = self.cursor.scroll_backward_by_lines(
-            self.context.bus(),
-            db,
-            &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-            1,
-        ).expect("Scrolling error when cursoring up");
+        let cursor = self
+            .cursor
+            .scroll_backward_by_lines(
+                self.context.bus(),
+                db,
+                &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                1,
+            )
+            .expect("Scrolling error when cursoring up");
 
         if self.cursor == self.scroll {
             self.scroll = cursor;
@@ -257,12 +270,15 @@ where
             .unwrap();
 
         if self.cursor == self.scroll {
-            let cursor = self.cursor.scroll_backward_by_lines(
-                self.context.bus(),
-                db,
-                &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-                self.size.y,
-            ).expect("Scrolling error when paging up");
+            let cursor = self
+                .cursor
+                .scroll_backward_by_lines(
+                    self.context.bus(),
+                    db,
+                    &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                    self.size.y,
+                )
+                .expect("Scrolling error when paging up");
 
             self.cursor = cursor;
             self.scroll = cursor;

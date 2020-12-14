@@ -6,16 +6,16 @@ use crate::platform::Platform;
 use crate::project::{Program, Project};
 use crate::tui::context::{AnyProgramContext, ProgramContext};
 use crate::tui::disasm_view::DisassemblyView;
+use backtrace::Backtrace;
 use cursive::menu::MenuTree;
 use cursive::view::Nameable;
-use cursive::views::{Dialog, TextView, ScrollView};
+use cursive::views::{Dialog, ScrollView, TextView};
 use cursive::Cursive;
 use cursive_tabs::TabPanel;
-use backtrace::Backtrace;
 use std::collections::HashMap;
+use std::panic::set_hook;
 use std::sync::{Arc, RwLock};
 use std::thread::spawn;
-use std::panic::set_hook;
 use std::{fs, io};
 
 /// Open a program and construct a context that holds it's mutable state for
@@ -140,7 +140,10 @@ pub fn main(mut project: Project) -> io::Result<()> {
         let backtrace = format!("{:?}", Backtrace::new());
         let mut emergency_siv = cursive::default();
         let error = if let Some(reason) = panic_info.payload().downcast_ref::<String>() {
-            format!("Retrogram died due to an error: {}\n\n{}", reason, backtrace)
+            format!(
+                "Retrogram died due to an error: {}\n\n{}",
+                reason, backtrace
+            )
         } else {
             format!("Retrogram died due to an unknown error.\n\n{}", backtrace)
         };
@@ -150,7 +153,7 @@ pub fn main(mut project: Project) -> io::Result<()> {
                 .title("Flagrant System Error")
                 .button("Exit", |s| {
                     s.quit();
-                })
+                }),
         );
 
         emergency_siv.run();
