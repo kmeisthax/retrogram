@@ -14,6 +14,7 @@ serde_json = "1.0"
 serde_plain = "0.3.0"
 cursive-tabs = "0.5.0"
 rayon = "1.5.0"
+backtrace = "0.3.55"
 
 [dependencies.cursive]
 version = "0.15.0"
