@@ -1,5 +1,31 @@
 //! Architecture-related macros
 
+/// Determine the architecture of an object and yield the architecture's type
+/// for use in generic contexts.
+///
+/// This macro is intended to be invoked with something that implements
+/// `AnyArch`.
+macro_rules! with_architecture {
+    ($erased:ident, |$arch:ident| $callback:block) => {
+        match $erased.arch() {
+            crate::arch::ArchName::SM83 => {
+                let $arch = crate::arch::sm83::SM83();
+                $callback
+            }
+            crate::arch::ArchName::AARCH32 => {
+                let $arch = crate::arch::aarch32::AArch32();
+                $callback
+            }
+
+            #[cfg(test)]
+            crate::arch::ArchName::TEST => {
+                let $arch = crate::arch::tests::TestArchitecture;
+                $callback
+            }
+        }
+    };
+}
+
 /// Execute a callback with a given set of architectural, platform, and
 /// assembler related functions.
 ///
@@ -33,90 +59,6 @@ macro_rules! with_prog_architecture {
                 ::std::io::ErrorKind::Other,
                 "Unsupported combination of architecture, platform, or assembler syntax.",
             )),
-        }
-    };
-}
-
-/// Execute a callback with the architecture for a given database.
-///
-/// It is expected that `$db` is a boxed `AnyDatabase`. You must also expand
-/// this macro in a context that is currently using the `Any` trait.
-///
-/// Your callback will be given a mutable reference to a "concrete",
-/// type-bearing version of the database.
-///
-/// This yields an IO error if the database type could not be determined.
-macro_rules! with_db_architecture {
-    ($db:ident, |$concrete_db: ident, $arch:ident| $callback:block) => {
-        if let Some($concrete_db) = $db
-            .as_any()
-            .downcast_ref::<crate::database::Database<crate::arch::sm83::SM83>>()
-        {
-            let $arch = crate::arch::sm83::SM83();
-            $callback
-        } else if let Some($concrete_db) = $db
-            .as_any()
-            .downcast_ref::<crate::database::Database<crate::arch::aarch32::AArch32>>()
-        {
-            let $arch = crate::arch::aarch32::AArch32();
-            $callback
-        } else {
-            Err(::std::io::Error::new(
-                ::std::io::ErrorKind::Other,
-                "Unsupported architecture for database.",
-            ))
-        }
-    };
-}
-
-/// Execute a callback with the architecture for a given program context.
-///
-/// It is expected that `$db` is a boxed `AnyProgramContext`. You must also
-/// expand this macro in a context that is currently using the `Any` trait.
-///
-/// Your callback will be given a mutable reference to a "concrete",
-/// type-bearing version of the context.
-///
-/// This yields an IO error if the context type could not be determined.
-macro_rules! with_context_architecture {
-    ($ctxt:ident, |$concrete_ctxt: ident, $arch:ident, $asm:ident| $callback:block) => {
-        if let Some($concrete_ctxt) = $ctxt
-            .as_any()
-            .downcast_ref::<crate::tui::ProgramContext<crate::arch::sm83::SM83>>()
-        {
-            let $arch = crate::arch::sm83::SM83();
-
-            match crate::cli::resolve_program_config($concrete_ctxt.program())? {
-                (_, _, crate::asm::AssemblerName::RGBDS) => {
-                    let $asm = crate::asm::rgbds::RGBDS();
-                    $callback
-                }
-                _ => Err(::std::io::Error::new(
-                    ::std::io::ErrorKind::Other,
-                    "Unsupported assembler for architecture.",
-                )),
-            }
-        } else if let Some($concrete_ctxt) = $ctxt
-            .as_any()
-            .downcast_ref::<crate::tui::ProgramContext<crate::arch::aarch32::AArch32>>()
-        {
-            let $arch = crate::arch::aarch32::AArch32();
-
-            match crate::cli::resolve_program_config($concrete_ctxt.program())? {
-                (_, _, crate::asm::AssemblerName::ARMIPS) => {
-                    let $asm = crate::asm::armips::ARMIPS();
-                    $callback
-                }
-                _ => Err(::std::io::Error::new(
-                    ::std::io::ErrorKind::Other,
-                    "Unsupported assembler for architecture.",
-                )),
-            }
-        } else {
-            Err(::std::io::Error::new(
-                ::std::io::ErrorKind::Other,
-                "Unsupported architecture for program context.",
-            ))
         }
     };
 }

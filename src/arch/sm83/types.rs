@@ -1,7 +1,7 @@
 //! Types used in modeling the SM83
 
 use crate::arch::sm83::{disassemble, prereq, trace};
-use crate::arch::Architecture;
+use crate::arch::{ArchName, Architecture};
 use crate::memory::{Memory, Pointer};
 use crate::{analysis, ast, memory, reg};
 use serde::{Deserialize, Serialize};
@@ -151,7 +151,7 @@ pub type Disasm<L> = analysis::Disasm<L, PtrVal, Offset>;
 pub type Result<T> = analysis::Result<T, SM83>;
 
 /// Architectural type for SM83
-#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct SM83();
 
 impl Architecture for SM83 {
@@ -160,6 +160,10 @@ impl Architecture for SM83 {
     type Byte = Data;
     type PtrVal = PtrVal;
     type Offset = Offset;
+
+    fn name(&self) -> ArchName {
+        ArchName::SM83
+    }
 
     fn parse_architectural_contexts(
         _contexts: &mut &[&str],

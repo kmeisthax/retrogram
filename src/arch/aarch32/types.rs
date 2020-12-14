@@ -1,7 +1,7 @@
 //! Types used by aarch32
 
 use crate::arch::aarch32::{architectural_ctxt_parse, disassemble, prereq, trace};
-use crate::arch::Architecture;
+use crate::arch::{ArchName, Architecture};
 use crate::memory::Pointer;
 use crate::{analysis, ast, memory, reg};
 use serde::{Deserialize, Serialize};
@@ -182,7 +182,7 @@ pub type Disasm<L> = analysis::Disasm<L, PtrVal, Offset>;
 pub type Result<T> = analysis::Result<T, AArch32>;
 
 /// Architectural type for AArch32
-#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct AArch32();
 
 impl Architecture for AArch32 {
@@ -191,6 +191,10 @@ impl Architecture for AArch32 {
     type Byte = Data;
     type PtrVal = PtrVal;
     type Offset = Offset;
+
+    fn name(&self) -> ArchName {
+        ArchName::AARCH32
+    }
 
     fn parse_architectural_contexts(
         contexts: &mut &[&str],

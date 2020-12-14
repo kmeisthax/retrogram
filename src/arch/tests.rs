@@ -1,7 +1,7 @@
 //! Architectural tests
 
 use crate::analysis::{Disasm, Error, Prerequisite, Result, Trace};
-use crate::arch::Architecture;
+use crate::arch::{ArchName, Architecture};
 use crate::ast::Literal;
 use crate::memory::{Memory, Pointer};
 use crate::reg::State;
@@ -10,7 +10,7 @@ use std::collections::HashSet;
 
 /// Test architecture for use when testing things that are generic over an
 /// entire architecture.
-#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TestArchitecture;
 
 impl Architecture for TestArchitecture {
@@ -19,6 +19,10 @@ impl Architecture for TestArchitecture {
     type Byte = u8;
     type PtrVal = u32;
     type Offset = u32;
+
+    fn name(&self) -> ArchName {
+        ArchName::SM83
+    }
 
     fn parse_architectural_contexts(
         _contexts: &mut &[&str],

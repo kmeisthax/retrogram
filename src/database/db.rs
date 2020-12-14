@@ -1,7 +1,7 @@
 //! Implementation of core database type
 
 use crate::analysis::Mappable;
-use crate::arch::Architecture;
+use crate::arch::{AnyArch, ArchName, Architecture};
 use crate::cli::Nameable;
 use crate::database::AnyDatabase;
 use crate::memory::Pointer;
@@ -76,6 +76,15 @@ where
     /// A list of crossreferences sorted by target address.
     #[serde(skip)]
     xref_target_index: BTreeMap<memory::Pointer<AR::PtrVal>, HashSet<usize>>,
+}
+
+impl<AR> AnyArch for Database<AR>
+where
+    AR: Architecture,
+{
+    fn arch(&self) -> ArchName {
+        AR::default().name()
+    }
 }
 
 impl<AR> AnyDatabase for Database<AR>

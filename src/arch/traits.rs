@@ -1,6 +1,7 @@
 //! Architecture trait
 
 use crate::analysis::{Disasm, Mappable, Prerequisite, Result, Trace};
+use crate::arch::ArchName;
 use crate::ast::Literal;
 use crate::cli::Nameable;
 use crate::maths::{Numerical, Popcount};
@@ -43,7 +44,17 @@ where
 /// must provide in order to be supported.
 pub trait Architecture
 where
-    Self: 'static + Copy + Debug + PartialEq + Eq + PartialOrd + Ord + Serialize + Send + Sync,
+    Self: 'static
+        + Copy
+        + Debug
+        + PartialEq
+        + Eq
+        + PartialOrd
+        + Ord
+        + Serialize
+        + Send
+        + Sync
+        + Default,
     Self::Register: Mappable + Debug + Display + FromStr + Send + Sync,
     Self::Word: Bitwise
         + Numerical
@@ -135,6 +146,9 @@ where
     ///
     /// This type is customarily referred to as `S` in other trait bounds.
     type Offset;
+
+    /// Obtain this architecture's name.
+    fn name(&self) -> ArchName;
 
     /// Inject architectural contexts from user-provided input intended to form
     /// a valid contextual pointer.
@@ -229,4 +243,11 @@ where
         state: State<Self>,
         trace: &mut Trace<Self>,
     ) -> Result<(State<Self>, Self::PtrVal), Self>;
+}
+
+/// Trait for type-erased structures that accept an architecture parameter and
+/// are intended to be accessed with the `with_architecture!` macro.
+pub trait AnyArch {
+    /// Name the architecture of this erased type.
+    fn arch(&self) -> ArchName;
 }

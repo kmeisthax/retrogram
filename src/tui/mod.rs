@@ -1,5 +1,6 @@
 //! Text User Interface
 
+#[macro_use]
 mod context;
 mod disasm_view;
 mod label;

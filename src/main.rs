@@ -16,6 +16,8 @@ pub mod arch;
 pub mod asm;
 pub mod ast;
 pub mod cli;
+
+#[macro_use]
 pub mod database;
 pub mod input;
 mod maths;

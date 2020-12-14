@@ -1,7 +1,7 @@
 //! Text UI for interactive use
 
 use crate::analysis::{start_analysis_queue, Command, Response};
-use crate::arch::{Architecture, CompatibleLiteral};
+use crate::arch::{AnyArch, ArchName, Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
 use crate::database::ProjectDatabase;
 use crate::memory::Memory;
@@ -69,11 +69,6 @@ where
         )
     }
 
-    /// Get the program configuration in this context.
-    pub fn program(&self) -> &Program {
-        &self.program
-    }
-
     pub fn program_name(&self) -> &str {
         self.program.as_name().unwrap_or("")
     }
@@ -94,6 +89,15 @@ where
     }
 }
 
+impl<AR> AnyArch for ProgramContext<AR>
+where
+    AR: Architecture,
+{
+    fn arch(&self) -> ArchName {
+        self.arch.name()
+    }
+}
+
 /// This trait represents a type-erased program context.
 ///
 /// The intended use of this type is to use the included `Any` trait to check
@@ -102,7 +106,7 @@ where
 ///
 /// It is not intended for this trait to be implemented by anything but
 /// `ProgramContext<AR>`.
-pub trait AnyProgramContext: Any {
+pub trait AnyProgramContext: Any + AnyArch {
     /// Upcast the database to `Any` so it can be downcasted into a concrete
     /// type.
     fn as_any(&self) -> &dyn Any;
@@ -110,6 +114,9 @@ pub trait AnyProgramContext: Any {
     /// Upcast the database to `Any` so it can by downcasted into a mutable
     /// reference to a concrete type.
     fn as_mut_any(&mut self) -> &mut dyn Any;
+
+    /// Grab the program config for this context.
+    fn as_program(&self) -> &Program;
 }
 
 impl<AR> AnyProgramContext for ProgramContext<AR>
@@ -123,4 +130,43 @@ where
     fn as_mut_any(&mut self) -> &mut dyn Any {
         self
     }
+
+    fn as_program(&self) -> &Program {
+        &self.program
+    }
+}
+
+/// Convert an `AnyProgramContext` into a given `ProgramContext<AR>`.
+pub fn downcast_context<AR>(_arch: AR, db: &dyn AnyProgramContext) -> Option<&ProgramContext<AR>>
+where
+    AR: Architecture,
+{
+    db.as_any().downcast_ref::<ProgramContext<AR>>()
+}
+
+/// Execute a callback with the architecture for a given program context.
+///
+/// It is expected that `$ctxt` is a boxed `AnyProgramContext`. You must also
+/// expand this macro in a context that is currently using the `Any` trait.
+///
+/// Your callback will be given a mutable reference to a "concrete",
+/// type-bearing version of the context.
+///
+/// This yields an IO error if the context type could not be determined.
+macro_rules! with_context_architecture {
+    ($ctxt:ident, |$concrete_ctxt: ident, $arch:ident, $asm:ident| $callback:block) => {{
+        let program = $ctxt.as_program();
+        with_prog_architecture!(program, |_plat, arch, asm| {
+            if let Some($concrete_ctxt) = crate::tui::context::downcast_context(arch, $ctxt) {
+                let $arch = arch;
+                let $asm = asm;
+                $callback
+            } else {
+                Err(::std::io::Error::new(
+                    ::std::io::ErrorKind::Other,
+                    "Unsupported architecture for program context.",
+                ))
+            }
+        })
+    }};
 }

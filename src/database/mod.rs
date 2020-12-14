@@ -1,11 +1,13 @@
 //! Analysis database - Allows accumulation of program facts as disassembly
 //! passes run on the program.
 
+#[macro_use]
+mod type_erasure;
+
 pub mod db;
 mod error;
 mod projectdb;
 pub mod rgbds;
-mod traits;
 
 #[cfg(test)]
 mod tests;
@@ -13,7 +15,7 @@ mod tests;
 pub use db::Database;
 pub use error::{Error, Result};
 pub use projectdb::ProjectDatabase;
-pub use traits::*;
+pub use type_erasure::{downcast_database, AnyDatabase};
 
 use serde::Serialize;
 use std::{result, str};

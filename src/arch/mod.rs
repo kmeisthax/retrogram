@@ -41,6 +41,7 @@ mod macros;
 #[cfg(test)]
 pub mod tests;
 
+pub use traits::AnyArch;
 pub use traits::Architecture;
 pub use traits::CompatibleLiteral;
 
@@ -53,7 +54,10 @@ use std::str;
 pub enum ArchName {
     SM83,
     AARCH32,
-    W65C816,
+
+    /// Test
+    #[cfg(test)]
+    TEST,
 }
 
 impl ArchName {
@@ -65,7 +69,9 @@ impl ArchName {
         match self {
             ArchName::SM83 => Some(asm::AssemblerName::RGBDS),
             ArchName::AARCH32 => None,
-            ArchName::W65C816 => None,
+
+            #[cfg(test)]
+            ArchName::TEST => None,
         }
     }
 }
@@ -81,8 +87,6 @@ impl str::FromStr for ArchName {
             "arm" => Ok(ArchName::AARCH32),
             "arm32" => Ok(ArchName::AARCH32),
             "aarch32" => Ok(ArchName::AARCH32),
-            "65c816" => Ok(ArchName::W65C816),
-            "w65c816" => Ok(ArchName::W65C816),
             _ => Err(()),
         }
     }
