@@ -1,7 +1,7 @@
 //! Disassembly view
 
 use crate::analysis::{replace_labels, Command, Error};
-use crate::arch::{Architecture, CompatibleLiteral};
+use crate::arch::{AnyArch, ArchName, Architecture, CompatibleLiteral};
 use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
 use crate::ast::{Directive, Literal, Section};
 use crate::database::Database;
@@ -158,7 +158,7 @@ where
             db,
             &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
             self.size.y.saturating_sub(1),
-        )?;
+        ).ok()?;
 
         Some((self.scroll, scroll_end))
     }
@@ -172,23 +172,25 @@ where
             .unwrap();
 
         if let Some((scroll, scroll_end)) = self.scroll_params(db) {
-            if let Some(cursor) = self.cursor.scroll_forward_by_lines(
+            let cursor = self.cursor.scroll_forward_by_lines(
                 self.context.bus(),
                 db,
                 &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                 1,
-            ) {
-                if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
-                    self.cursor = cursor;
-                } else if let Some(scroll) = scroll.scroll_forward_by_lines(
+            ).expect("Scrolling error when cursoring down");
+
+            if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
+                self.cursor = cursor;
+            } else {
+                let scroll = scroll.scroll_forward_by_lines(
                     self.context.bus(),
                     db,
                     &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                     1,
-                ) {
-                    self.cursor = cursor;
-                    self.scroll = scroll;
-                }
+                ).expect("Scrolling error when cursoring down");
+
+                self.cursor = cursor;
+                self.scroll = scroll;
             }
         }
     }
@@ -204,12 +206,14 @@ where
         if let Some((scroll, scroll_end)) = self.scroll_params(db) {
             if self.cursor < scroll_end || (scroll_end < scroll && self.cursor >= scroll) {
                 self.cursor = scroll_end;
-            } else if let Some(scroll) = scroll.scroll_forward_by_lines(
-                self.context.bus(),
-                db,
-                &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
-                self.size.y,
-            ) {
+            } else {
+                let scroll = scroll.scroll_forward_by_lines(
+                    self.context.bus(),
+                    db,
+                    &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                    self.size.y,
+                ).expect("Scrolling error when paging down");
+
                 self.scroll = scroll;
                 self.cursor = scroll
                     .scroll_forward_by_lines(
@@ -218,7 +222,7 @@ where
                         &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                         self.size.y.saturating_sub(1),
                     )
-                    .unwrap();
+                    .expect("Scrolling error when paging down");
             }
         }
     }
@@ -231,17 +235,17 @@ where
             .get_database_mut(self.context.program_name())
             .unwrap();
 
-        if let Some(cursor) = self.cursor.scroll_backward_by_lines(
+        let cursor = self.cursor.scroll_backward_by_lines(
             self.context.bus(),
             db,
             &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
             1,
-        ) {
-            if self.cursor == self.scroll {
-                self.scroll = cursor;
-            }
-            self.cursor = cursor;
+        ).expect("Scrolling error when cursoring up");
+
+        if self.cursor == self.scroll {
+            self.scroll = cursor;
         }
+        self.cursor = cursor;
     }
 
     /// Move the cursor up by one page.
@@ -253,15 +257,15 @@ where
             .unwrap();
 
         if self.cursor == self.scroll {
-            if let Some(cursor) = self.cursor.scroll_backward_by_lines(
+            let cursor = self.cursor.scroll_backward_by_lines(
                 self.context.bus(),
                 db,
                 &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                 self.size.y,
-            ) {
-                self.cursor = cursor;
-                self.scroll = cursor;
-            }
+            ).expect("Scrolling error when paging up");
+
+            self.cursor = cursor;
+            self.scroll = cursor;
         } else {
             self.cursor = self.scroll;
         }
@@ -397,7 +401,7 @@ where
                     &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
                     max(lines_to_skip, 1),
                 )
-                .unwrap();
+                .expect("Scrolling error when drawing");
         }
     }
 
