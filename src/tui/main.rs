@@ -63,7 +63,7 @@ fn tab_zygote(context: &mut dyn AnyProgramContext, panel: &mut TabPanel<String>)
 
         panel.add_tab(
             name.to_string(),
-            DisassemblyView::new(context.clone(), arch, asm),
+            DisassemblyView::new(context.clone(), name, arch, asm).with_name(name),
         );
 
         Ok(())

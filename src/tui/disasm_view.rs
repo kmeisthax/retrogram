@@ -27,6 +27,9 @@ where
     /// The program context this disassembly view gets it's data from.
     context: ProgramContext<AR>,
 
+    /// The self-name of this view.
+    name: String,
+
     /// Whether or not focus is locked to this particular view.
     lock_focus: bool,
 
@@ -139,10 +142,11 @@ where
         }
     }
 
-    pub fn new(context: ProgramContext<AR>, arch: AR, asm: ASM) -> Self {
+    pub fn new(context: ProgramContext<AR>, name: &str, arch: AR, asm: ASM) -> Self {
         Self {
             lock_focus: false,
             context,
+            name: name.to_string(),
             scroll: Tumbler::default(),
             cursor: Tumbler::default(),
             size: (0, 0).into(),
