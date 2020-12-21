@@ -397,7 +397,7 @@ where
         let my_ctxt = ptr.get_platform_context("R");
         let mut stripped_ptr = memory::Pointer::from(*ptr.as_pointer());
 
-        if *stripped_ptr.as_pointer() > 0x4000 {
+        if *stripped_ptr.as_pointer() >= 0x4000 {
             stripped_ptr.set_platform_context("R", my_ctxt);
         }
 
@@ -409,7 +409,7 @@ where
         mut ptr: memory::Pointer<sm83::PtrVal>,
         ctxts: &[&str],
     ) -> memory::Pointer<sm83::PtrVal> {
-        if *ptr.as_pointer() > 0x4000 {
+        if *ptr.as_pointer() >= 0x4000 {
             if let Some(ctxt) = ctxts.get(0) {
                 if let Ok(cval) = u64::from_str_radix(ctxt, 16) {
                     ptr.set_platform_context("R", reg::Symbolic::from(cval));
