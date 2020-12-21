@@ -4,7 +4,8 @@ use crate::analysis::{start_analysis_queue, Command, Response};
 use crate::arch::{AnyArch, ArchName, Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
 use crate::database::ProjectDatabase;
-use crate::memory::Memory;
+use crate::input::parse_ptr;
+use crate::memory::{Memory, Pointer};
 use crate::project::Program;
 use std::any::Any;
 use std::sync::mpsc::{Receiver, Sender};
@@ -86,6 +87,16 @@ where
     /// Get the command sender.
     pub fn command_sender(&mut self) -> &mut Sender<Command<AR>> {
         &mut self.command_sender
+    }
+
+    /// Convert a text string into a pointer.
+    ///
+    /// This is a convenience method for `input::parse_ptr`.
+    pub fn parse_ptr(&self, text_str: &str) -> Option<Pointer<AR::PtrVal>> {
+        let db_lock = self.database.read().unwrap();
+        let db = db_lock.get_database(self.program_name()).unwrap();
+
+        parse_ptr(text_str, db, &self.bus, self.arch)
     }
 }
 

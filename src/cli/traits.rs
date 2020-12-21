@@ -1,5 +1,6 @@
 //! Utility traits for CLI module
 
+use crate::maths::FromStrRadix;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, LowerHex, UpperHex};
 use std::str::FromStr;
@@ -12,7 +13,7 @@ use std::str::FromStr;
 ///
 /// The trait bounds, in plain english, require that we can:
 ///
-///  * Parse the value from a string
+///  * Parse the value from a string, in arbitrary radicies
 ///  * Display the value, in a handful of different Rust-supported formatting
 ///    modes.
 ///  * Attempt to convert the value to and from a u8. This is to facilitate
@@ -21,11 +22,19 @@ use std::str::FromStr;
 ///    representation. Note that this will only be expected to be able to
 ///    convert values up to 16, as it will always be first masked off with 0xF.
 pub trait Nameable:
-    Clone + Debug + FromStr + Display + LowerHex + UpperHex + TryFrom<u8> + TryInto<u8>
+    Clone + Debug + FromStr + FromStrRadix + Display + LowerHex + UpperHex + TryFrom<u8> + TryInto<u8>
 {
 }
 
 impl<T> Nameable for T where
-    T: Clone + Debug + FromStr + Display + LowerHex + UpperHex + TryFrom<u8> + TryInto<u8>
+    T: Clone
+        + Debug
+        + FromStr
+        + FromStrRadix
+        + Display
+        + LowerHex
+        + UpperHex
+        + TryFrom<u8>
+        + TryInto<u8>
 {
 }
