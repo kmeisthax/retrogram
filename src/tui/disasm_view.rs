@@ -6,11 +6,13 @@ use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
 use crate::ast::{Directive, Literal, Section};
 use crate::database::Database;
 use crate::memory::{Memory, Pointer, Tumbler};
+use crate::tui::jump::jump_to;
 use crate::tui::label::label_dialog;
 use crate::tui::ProgramContext;
 use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::theme::{BaseColor, Color, ColorStyle, ColorType, PaletteColor};
+use cursive::views::Dialog;
 use cursive::{Printer, View, XY};
 use cursive_tabs::TabPanel;
 use std::cmp::max;
@@ -291,6 +293,42 @@ where
         }
     }
 
+    /// Move the cursor to a specific position.
+    pub fn scroll_to(&mut self, new_cursor: Tumbler) {
+        let pjdb = self.context.project_database();
+        let mut db_lock = pjdb.write().unwrap();
+        let db = db_lock
+            .get_database_mut(self.context.program_name())
+            .unwrap();
+
+        if let Some((from, to)) = self.scroll_params(db) {
+            if from <= new_cursor && new_cursor < to {
+                self.cursor = new_cursor;
+            } else if new_cursor < from {
+                self.scroll = new_cursor;
+                self.cursor = new_cursor;
+            } else {
+                //new_cursor >= to
+                let new_scroll = new_cursor
+                    .scroll_backward_by_lines(
+                        self.context.bus(),
+                        db,
+                        &mut |bus, db, pos| self.disasm_lines_at_location(bus, db, pos),
+                        self.size.y.saturating_sub(1),
+                    )
+                    .ok();
+
+                if let Some(new_scroll) = new_scroll {
+                    self.scroll = new_scroll;
+                    self.cursor = new_cursor;
+                } else {
+                    self.scroll = new_cursor;
+                    self.cursor = new_cursor;
+                }
+            }
+        }
+    }
+
     /// Attempt to look for code at the currently selected address.
     pub fn declare_code(&mut self) {
         let ptr = self.context.bus().encode_tumbler(self.cursor);
@@ -472,6 +510,37 @@ where
             Event::Char('c') => {
                 self.declare_code();
                 EventResult::Consumed(None)
+            }
+            Event::Char('j') => {
+                let form_context = self.context.clone();
+                let return_name = self.name.clone();
+
+                EventResult::Consumed(Some(Callback::from_fn(move |s| {
+                    let return_name = return_name.clone();
+
+                    jump_to(s, &form_context, move |s, scroll| {
+                        let ret = s
+                            .call_on_name(&return_name, move |v: &mut Self| {
+                                v.scroll_to(scroll);
+                            })
+                            .is_some();
+
+                        if !ret {
+                            s.add_layer(
+                                Dialog::text(format!(
+                                    "Could not find target view named '{}'",
+                                    return_name
+                                ))
+                                .title("Internal Retrogram Error")
+                                .button("OK", |s| {
+                                    s.pop_layer();
+                                }),
+                            );
+                        }
+
+                        ret
+                    });
+                })))
             }
             Event::Char('l') => {
                 let mem = self.context.bus().encode_tumbler(self.cursor);
