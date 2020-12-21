@@ -34,27 +34,28 @@ macro_rules! with_architecture {
 /// across each architecture's particular type system.
 macro_rules! with_prog_architecture {
     ($prog:ident, |$plat:ident, $arch:ident, $asm:ident| $callback:block) => {
-        match crate::cli::resolve_program_config($prog)? {
-            (
+        match crate::cli::resolve_program_config($prog) {
+            Ok((
                 crate::arch::ArchName::SM83,
                 crate::platform::PlatformName::GB,
                 crate::asm::AssemblerName::RGBDS,
-            ) => {
+            )) => {
                 let $plat = crate::platform::gb::GBPlatform();
                 let $asm = crate::asm::rgbds::RGBDS();
                 let $arch = crate::arch::sm83::SM83();
                 $callback
             }
-            (
+            Ok((
                 crate::arch::ArchName::AARCH32,
                 crate::platform::PlatformName::AGB,
                 crate::asm::AssemblerName::ARMIPS,
-            ) => {
+            )) => {
                 let $plat = crate::platform::agb::AGBPlatform();
                 let $asm = crate::asm::armips::ARMIPS();
                 let $arch = crate::arch::aarch32::AArch32();
                 $callback
             }
+            Err(e) => Err(e),
             _ => Err(::std::io::Error::new(
                 ::std::io::ErrorKind::Other,
                 "Unsupported combination of architecture, platform, or assembler syntax.",

@@ -6,13 +6,12 @@ use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
 use crate::ast::{Directive, Literal, Section};
 use crate::database::Database;
 use crate::memory::{Memory, Pointer, Tumbler};
-use crate::tui::jump::jump_to;
+use crate::tui::jump::jump_dialog;
 use crate::tui::label::label_dialog;
 use crate::tui::ProgramContext;
 use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::theme::{BaseColor, Color, ColorStyle, ColorType, PaletteColor};
-use cursive::views::Dialog;
 use cursive::{Printer, View, XY};
 use cursive_tabs::TabPanel;
 use std::cmp::max;
@@ -341,6 +340,15 @@ where
             self.context.command_sender().send(Command::Fence).unwrap()
         }
     }
+
+    /// Open a label dialog for the currently selected memory location.
+    pub fn memory_location(&self) -> Option<Pointer<AR::PtrVal>> {
+        self.context.bus().encode_tumbler(self.cursor)
+    }
+
+    pub fn context(&self) -> &ProgramContext<AR> {
+        &self.context
+    }
 }
 
 impl<AR, ASM> View for DisassemblyView<AR, ASM>
@@ -514,41 +522,29 @@ where
             Event::Char('j') => {
                 let form_context = self.context.clone();
                 let return_name = self.name.clone();
+                let arch = self.arch;
 
                 EventResult::Consumed(Some(Callback::from_fn(move |s| {
                     let return_name = return_name.clone();
 
-                    jump_to(s, &form_context, move |s, scroll| {
-                        let ret = s
-                            .call_on_name(&return_name, move |v: &mut Self| {
-                                v.scroll_to(scroll);
-                            })
-                            .is_some();
+                    jump_dialog(arch, s, &form_context, move |s, scroll| {
+                        s.call_on_name(&return_name, move |v: &mut Self| {
+                            v.scroll_to(scroll);
+                        })
+                        .unwrap();
 
-                        if !ret {
-                            s.add_layer(
-                                Dialog::text(format!(
-                                    "Could not find target view named '{}'",
-                                    return_name
-                                ))
-                                .title("Internal Retrogram Error")
-                                .button("OK", |s| {
-                                    s.pop_layer();
-                                }),
-                            );
-                        }
-
-                        ret
+                        true
                     });
                 })))
             }
             Event::Char('l') => {
+                let arch = self.arch;
                 let mem = self.context.bus().encode_tumbler(self.cursor);
                 let pjdb = self.context.project_database();
                 let prog_name = self.context.program_name().to_string();
 
                 EventResult::Consumed(Some(Callback::from_fn(move |s| {
-                    label_dialog::<AR>(s, mem.clone(), pjdb.clone(), prog_name.clone())
+                    label_dialog(arch, s, mem.clone(), pjdb.clone(), prog_name.clone())
                 })))
             }
             _ => EventResult::Ignored,

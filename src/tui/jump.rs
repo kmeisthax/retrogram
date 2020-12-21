@@ -14,8 +14,12 @@ use cursive::Cursive;
 /// to scroll to, and should return `true` if it was able to scroll. Otherwise,
 /// it should tell the user why it couldn't scroll by adding another dialog box
 /// and returning `false` to keep the jump box on screen.
-pub fn jump_to<AR, CBK>(siv: &mut Cursive, context: &ProgramContext<AR>, on_jump: CBK)
-where
+pub fn jump_dialog<AR, CBK>(
+    _arch: AR,
+    siv: &mut Cursive,
+    context: &ProgramContext<AR>,
+    on_jump: CBK,
+) where
     AR: Architecture,
     CBK: 'static + Clone + Fn(&mut Cursive, Tumbler) -> bool,
 {

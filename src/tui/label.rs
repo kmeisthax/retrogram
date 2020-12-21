@@ -11,6 +11,7 @@ use std::sync::{Arc, RwLock};
 
 /// Create a label dialog.
 pub fn label_dialog<AR>(
+    _arch: AR,
     siv: &mut Cursive,
     address: Option<Pointer<AR::PtrVal>>,
     pjdb: Arc<RwLock<ProjectDatabase>>,

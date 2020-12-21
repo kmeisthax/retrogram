@@ -70,6 +70,10 @@ where
         )
     }
 
+    pub fn program(&self) -> &Program {
+        &self.program
+    }
+
     pub fn program_name(&self) -> &str {
         self.program.as_name().unwrap_or("")
     }

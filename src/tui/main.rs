@@ -1,22 +1,28 @@
 //! Text UI for interactive use
 
 use crate::analysis::Response;
+use crate::arch::{Architecture, CompatibleLiteral};
+use crate::asm::Assembler;
 use crate::database::ProjectDatabase;
 use crate::platform::Platform;
 use crate::project::{Program, Project};
 use crate::tui::context::{AnyProgramContext, ProgramContext};
 use crate::tui::disasm_view::DisassemblyView;
+use crate::tui::jump::jump_dialog;
+use crate::tui::label::label_dialog;
 use backtrace::Backtrace;
 use cursive::menu::MenuTree;
-use cursive::view::Nameable;
+use cursive::view::{Nameable, View};
 use cursive::views::{Dialog, ScrollView, TextView};
 use cursive::Cursive;
 use cursive_tabs::TabPanel;
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::hash::{Hash, Hasher};
 use std::panic::set_hook;
 use std::sync::{Arc, RwLock};
 use std::thread::spawn;
-use std::{fs, io};
+use std::{fmt, fs, io};
 
 /// Open a program and construct a context that holds it's mutable state for
 /// later use.
@@ -56,18 +62,98 @@ fn context_zygote(
     })
 }
 
+/// Information about a particular open tab.
+#[derive(Clone)]
+struct TabHandle {
+    /// The program this tab is associated with.
+    program: Program,
+
+    /// A nonce to separate multiple tabs open and viewing the same program.
+    nonce: u64,
+}
+
+impl PartialEq for TabHandle {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.program.as_name() == rhs.program.as_name() && self.nonce == rhs.nonce
+    }
+}
+
+impl Eq for TabHandle {}
+
+impl Hash for TabHandle {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.program.as_name().hash(state);
+        self.nonce.hash(state);
+    }
+}
+
+impl Display for TabHandle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.program.as_name().unwrap_or("?"))
+    }
+}
+
+impl TabHandle {
+    fn from_program(program: Program, nonce: u64) -> Self {
+        Self { program, nonce }
+    }
+
+    /// Calculate a string form of this handle to use as the view name of any
+    /// tab referenced by this handle.
+    ///
+    /// This is separate from the `Display` impl so that we can just have the
+    /// program title in the tab.
+    fn to_view_name(&self) -> String {
+        format!(
+            "tab_{}_{}",
+            self.program.as_name().unwrap_or(""),
+            self.nonce
+        )
+    }
+
+    fn program(&self) -> &Program {
+        &self.program
+    }
+}
+
 /// Construct a new disassembly tab for a given program and add it to the TUI
-fn tab_zygote(context: &mut dyn AnyProgramContext, panel: &mut TabPanel<String>) -> io::Result<()> {
+fn tab_zygote(
+    context: &mut dyn AnyProgramContext,
+    panel: &mut TabPanel<TabHandle>,
+    nonce: &mut u64,
+) -> io::Result<()> {
     with_context_architecture!(context, |context, arch, asm| {
-        let name = context.program_name();
+        let handle = TabHandle::from_program(context.program().clone(), *nonce);
+        let name = handle.to_view_name();
+
+        *nonce += 1;
 
         panel.add_tab(
-            name.to_string(),
-            DisassemblyView::new(context.clone(), name, arch, asm).with_name(name),
+            handle,
+            DisassemblyView::new(context.clone(), &name, arch, asm).with_name(name),
         );
 
         Ok(())
     })
+}
+
+fn call_on_tab<AR, ASM, CBK, R>(
+    _arch: AR,
+    _asm: ASM,
+    siv: &mut Cursive,
+    handle: &TabHandle,
+    cbk: CBK,
+) -> Option<R>
+where
+    AR: Architecture,
+    ASM: Assembler,
+    ASM::Literal: CompatibleLiteral<AR> + Clone,
+    DisassemblyView<AR, ASM>: View,
+    CBK: FnOnce(&mut DisassemblyView<AR, ASM>) -> R,
+{
+    let name = handle.to_view_name();
+
+    siv.call_on_name(&name, cbk)
 }
 
 /// Start a TUI session.
@@ -102,9 +188,90 @@ pub fn main(mut project: Project) -> io::Result<()> {
     let mut siv = cursive::default();
 
     siv.menubar()
-        .add_subtree("File", MenuTree::new().leaf("Exit", |s| s.quit()));
+        .add_subtree("File", MenuTree::new().leaf("Exit", |s| s.quit()))
+        .add_subtree(
+            "Edit",
+            MenuTree::new()
+                .leaf("Declare code...", |s| {
+                    let handle = s
+                        .call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
+                            v.active_tab().cloned()
+                        })
+                        .flatten();
+
+                    if let Some(handle) = handle {
+                        let program = handle.program();
+
+                        with_prog_architecture!(program, |_plat, arch, asm| {
+                            call_on_tab(arch, asm, s, &handle, |v| {
+                                v.declare_code();
+                            })
+                            .unwrap();
+
+                            Ok(())
+                        })
+                        .unwrap();
+                    }
+                })
+                .leaf("Declare label...", |s| {
+                    let handle = s
+                        .call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
+                            v.active_tab().cloned()
+                        })
+                        .flatten();
+
+                    if let Some(handle) = handle {
+                        let program = handle.program();
+
+                        with_prog_architecture!(program, |_plat, arch, asm| {
+                            let (mem, pjdb, prog_name) = call_on_tab(arch, asm, s, &handle, |v| {
+                                let mem = v.memory_location();
+                                let pjdb = v.context().project_database();
+                                let prog_name = v.context().program_name().to_string();
+
+                                (mem, pjdb, prog_name)
+                            })
+                            .unwrap();
+
+                            label_dialog(arch, s, mem, pjdb, prog_name);
+
+                            Ok(())
+                        })
+                        .unwrap();
+                    }
+                }),
+        )
+        .add_subtree(
+            "View",
+            MenuTree::new().leaf("Jump to...", |s| {
+                let handle = s
+                    .call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
+                        v.active_tab().cloned()
+                    })
+                    .flatten();
+
+                if let Some(handle) = handle {
+                    let program = handle.program();
+
+                    with_prog_architecture!(program, |_plat, arch, asm| {
+                        let context =
+                            call_on_tab(arch, asm, s, &handle, |v| v.context().clone()).unwrap();
+
+                        jump_dialog(arch, s, &context, move |s, scroll| {
+                            call_on_tab(arch, asm, s, &handle, |v| v.scroll_to(scroll)).unwrap();
+
+                            true
+                        });
+
+                        Ok(())
+                    })
+                    .unwrap();
+                }
+            }),
+        );
 
     let mut panel = TabPanel::new();
+    let mut tab_nonce = 0;
 
     for (_name, program) in programs {
         let program_db = databases
@@ -121,7 +288,7 @@ pub fn main(mut project: Project) -> io::Result<()> {
             })?;
         let mut context = context_zygote(program, program_db, &siv)?;
 
-        tab_zygote(&mut *context, &mut panel)?;
+        tab_zygote(&mut *context, &mut panel, &mut tab_nonce)?;
     }
 
     siv.add_fullscreen_layer(panel.with_name("tabs"));
