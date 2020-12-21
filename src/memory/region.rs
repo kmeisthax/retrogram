@@ -79,7 +79,7 @@ where
             .checked_sub(self.start.clone())
             .and_then(|vo| AR::Offset::try_from(vo).ok())
         {
-            if let Some(_ms_offset) = self.image.decode_addr(&ptr, self.start.clone()) {
+            if self.image.contains(&ptr, self.start.clone()) {
                 return self.start <= ptr.as_pointer().clone() && offset < self.length;
             }
         }

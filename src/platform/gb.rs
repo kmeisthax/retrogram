@@ -348,6 +348,10 @@ where
         Some(&self.data[offset as usize..(offset + count) as usize])
     }
 
+    fn contains(&self, ptr: &memory::Pointer<sm83::PtrVal>, _base: sm83::PtrVal) -> bool {
+        *ptr.as_pointer() < 0x8000
+    }
+
     fn decode_addr(
         &self,
         ptr: &memory::Pointer<sm83::PtrVal>,

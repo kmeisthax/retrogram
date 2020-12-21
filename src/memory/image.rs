@@ -21,6 +21,19 @@ where
     /// image, not counting any state which may have altered the image.
     fn retrieve(&self, offset: usize, count: usize) -> Option<&[AR::Byte]>;
 
+    /// Determine if this image contains a given address.
+    ///
+    /// By default, this attempts to decode the address, and yields `true` if
+    /// the address was successfully decoded. Ergo, the given pointer's value
+    /// must be a positive offset from the base pointer.
+    ///
+    /// If an image supports banking, it must override this default impl to
+    /// claim the uncontextualized pointers, otherwise it won't be able to
+    /// contextualize user input.
+    fn contains(&self, ptr: &Pointer<AR::PtrVal>, base: AR::PtrVal) -> bool {
+        self.decode_addr(ptr, base).is_some()
+    }
+
     /// Decode an architectural pointer to an image offset.
     ///
     /// The given pointer must have a positive offset from the base pointer.
