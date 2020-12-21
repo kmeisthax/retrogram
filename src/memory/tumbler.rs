@@ -652,17 +652,17 @@ mod tests {
         let tumbler = bus.decode_tumbler(Pointer::from(0x113)).unwrap();
 
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1).ok(),
             Some((0, 0x110, 0).into())
         );
 
         // scroll back between blocks in same region
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2).ok(),
             Some((0, 0x10F, 0).into())
         );
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 4),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 4).ok(),
             Some((0, 0x10D, 0).into())
         );
 
@@ -670,7 +670,7 @@ mod tests {
         let tumbler2 = bus.decode_tumbler(Pointer::from(0x100)).unwrap();
 
         assert_eq!(
-            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3),
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3).ok(),
             Some((0, 0xFD, 0).into())
         );
 
@@ -678,7 +678,7 @@ mod tests {
         let tumbler3 = bus.decode_tumbler(Pointer::from(0x0)).unwrap();
 
         assert_eq!(
-            tumbler3.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3),
+            tumbler3.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3).ok(),
             Some((3, 0xFFD, 0).into())
         );
 
@@ -686,15 +686,15 @@ mod tests {
         let tumbler4 = bus.decode_tumbler(Pointer::from(0x8002)).unwrap();
 
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1).ok(),
             Some((3, 0x1, 0).into())
         );
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2).ok(),
             Some((3, 0x0, 0).into())
         );
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3).ok(),
             Some((2, 0x3FFE, 0).into())
         );
 
@@ -702,19 +702,19 @@ mod tests {
         let tumbler5 = bus.decode_tumbler(Pointer::from(0x4006)).unwrap();
 
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1).ok(),
             Some((2, 3, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2).ok(),
             Some((2, 0, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3).ok(),
             Some((1, 0x1FFF, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 4),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 4).ok(),
             Some((1, 0x1FFC, 0).into())
         );
     }
@@ -792,41 +792,41 @@ mod tests {
         let tumbler = bus.decode_tumbler(Pointer::from(0x113)).unwrap();
 
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1).ok(),
             Some((0, 0x110, 2).into())
         );
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2).ok(),
             Some((0, 0x110, 1).into())
         );
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3).ok(),
             Some((0, 0x110, 0).into())
         );
 
         // scroll back between blocks in same region
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4).ok(),
             Some((0, 0x10F, 2).into())
         );
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5).ok(),
             Some((0, 0x10F, 1).into())
         );
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6).ok(),
             Some((0, 0x10F, 0).into())
         );
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10).ok(),
             Some((0, 0x10D, 2).into())
         );
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11).ok(),
             Some((0, 0x10D, 1).into())
         );
         assert_eq!(
-            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12),
+            tumbler.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12).ok(),
             Some((0, 0x10D, 0).into())
         );
 
@@ -834,39 +834,39 @@ mod tests {
         let tumbler2 = bus.decode_tumbler(Pointer::from(0x100)).unwrap();
 
         assert_eq!(
-            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1).ok(),
             Some((0, 0xFF, 2).into())
         );
         assert_eq!(
-            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2).ok(),
             Some((0, 0xFF, 1).into())
         );
         assert_eq!(
-            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3).ok(),
             Some((0, 0xFF, 0).into())
         );
         assert_eq!(
-            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4).ok(),
             Some((0, 0xFE, 2).into())
         );
         assert_eq!(
-            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5).ok(),
             Some((0, 0xFE, 1).into())
         );
         assert_eq!(
-            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6).ok(),
             Some((0, 0xFE, 0).into())
         );
         assert_eq!(
-            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7).ok(),
             Some((0, 0xFD, 2).into())
         );
         assert_eq!(
-            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8).ok(),
             Some((0, 0xFD, 1).into())
         );
         assert_eq!(
-            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            tumbler2.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9).ok(),
             Some((0, 0xFD, 0).into())
         );
 
@@ -874,15 +874,15 @@ mod tests {
         let tumbler3 = bus.decode_tumbler(Pointer::from(0x0)).unwrap();
 
         assert_eq!(
-            tumbler3.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            tumbler3.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7).ok(),
             Some((3, 0xFFD, 2).into())
         );
         assert_eq!(
-            tumbler3.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            tumbler3.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8).ok(),
             Some((3, 0xFFD, 1).into())
         );
         assert_eq!(
-            tumbler3.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            tumbler3.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9).ok(),
             Some((3, 0xFFD, 0).into())
         );
 
@@ -890,39 +890,39 @@ mod tests {
         let tumbler4 = bus.decode_tumbler(Pointer::from(0x8002)).unwrap();
 
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1).ok(),
             Some((3, 0x1, 2).into())
         );
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2).ok(),
             Some((3, 0x1, 1).into())
         );
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3).ok(),
             Some((3, 0x1, 0).into())
         );
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4).ok(),
             Some((3, 0x0, 2).into())
         );
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5).ok(),
             Some((3, 0x0, 1).into())
         );
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6).ok(),
             Some((3, 0x0, 0).into())
         );
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7).ok(),
             Some((2, 0x3FFE, 2).into())
         );
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8).ok(),
             Some((2, 0x3FFE, 1).into())
         );
         assert_eq!(
-            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            tumbler4.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9).ok(),
             Some((2, 0x3FFE, 0).into())
         );
 
@@ -930,51 +930,51 @@ mod tests {
         let tumbler5 = bus.decode_tumbler(Pointer::from(0x4006)).unwrap();
 
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1).ok(),
             Some((2, 3, 2).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2).ok(),
             Some((2, 3, 1).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3).ok(),
             Some((2, 3, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4).ok(),
             Some((2, 0, 2).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5).ok(),
             Some((2, 0, 1).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6).ok(),
             Some((2, 0, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7).ok(),
             Some((1, 0x1FFF, 2).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8).ok(),
             Some((1, 0x1FFF, 1).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9).ok(),
             Some((1, 0x1FFF, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10).ok(),
             Some((1, 0x1FFC, 2).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11).ok(),
             Some((1, 0x1FFC, 1).into())
         );
         assert_eq!(
-            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12),
+            tumbler5.scroll_backward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12).ok(),
             Some((1, 0x1FFC, 0).into())
         );
     }
@@ -1073,21 +1073,21 @@ mod tests {
         let tumbler = bus.decode_tumbler(Pointer::from(0x116)).unwrap();
 
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1).ok(),
             Some((0, 0x119, 0).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2).ok(),
             Some((0, 0x11C, 0).into())
         );
 
         // scroll off of edge of block within region
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3).ok(),
             Some((0, 0x120, 0).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 4),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 4).ok(),
             Some((0, 0x121, 0).into())
         );
 
@@ -1095,15 +1095,15 @@ mod tests {
         let tumbler3 = bus.decode_tumbler(Pointer::from(0x8FFF)).unwrap();
 
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1).ok(),
             Some((0, 0x0, 0).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2).ok(),
             Some((0, 0x3, 0).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3).ok(),
             Some((0, 0x6, 0).into())
         );
 
@@ -1111,19 +1111,19 @@ mod tests {
         let tumbler4 = bus.decode_tumbler(Pointer::from(0x3FF9)).unwrap();
 
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1).ok(),
             Some((1, 0x1FFC, 0).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2).ok(),
             Some((1, 0x1FFF, 0).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3).ok(),
             Some((2, 0x0000, 0).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 4),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 4).ok(),
             Some((2, 0x0003, 0).into())
         );
 
@@ -1131,19 +1131,19 @@ mod tests {
         let tumbler5 = bus.decode_tumbler(Pointer::from(0x7FF9)).unwrap();
 
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1).ok(),
             Some((2, 0x3FFC, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2).ok(),
             Some((2, 0x3FFE, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3).ok(),
             Some((3, 0, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 4),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 4).ok(),
             Some((3, 1, 0).into())
         );
 
@@ -1151,15 +1151,15 @@ mod tests {
         let tumbler6 = bus.decode_tumbler(Pointer::from(0x1FFE)).unwrap();
 
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 1).ok(),
             Some((0, 0x1FFF, 0).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 2).ok(),
             Some((1, 0, 0).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 1, 3).ok(),
             Some((1, 3, 0).into())
         );
     }
@@ -1258,61 +1258,61 @@ mod tests {
         let tumbler = bus.decode_tumbler(Pointer::from(0x116)).unwrap();
 
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1).ok(),
             Some((0, 0x116, 1).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2).ok(),
             Some((0, 0x116, 2).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3).ok(),
             Some((0, 0x119, 0).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4).ok(),
             Some((0, 0x119, 1).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5).ok(),
             Some((0, 0x119, 2).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6).ok(),
             Some((0, 0x11C, 0).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7).ok(),
             Some((0, 0x11C, 1).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8).ok(),
             Some((0, 0x11C, 2).into())
         );
 
         // scroll off of edge of block within region
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9).ok(),
             Some((0, 0x120, 0).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10).ok(),
             Some((0, 0x120, 1).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11).ok(),
             Some((0, 0x120, 2).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12).ok(),
             Some((0, 0x121, 0).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 13),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 13).ok(),
             Some((0, 0x121, 1).into())
         );
         assert_eq!(
-            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 14),
+            tumbler.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 14).ok(),
             Some((0, 0x121, 2).into())
         );
 
@@ -1320,47 +1320,47 @@ mod tests {
         let tumbler3 = bus.decode_tumbler(Pointer::from(0x8FFF)).unwrap();
 
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1).ok(),
             Some((3, 0xFFF, 1).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2).ok(),
             Some((3, 0xFFF, 2).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3).ok(),
             Some((0, 0x0, 0).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4).ok(),
             Some((0, 0x0, 1).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5).ok(),
             Some((0, 0x0, 2).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6).ok(),
             Some((0, 0x3, 0).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7).ok(),
             Some((0, 0x3, 1).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8).ok(),
             Some((0, 0x3, 2).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9).ok(),
             Some((0, 0x6, 0).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10).ok(),
             Some((0, 0x6, 1).into())
         );
         assert_eq!(
-            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            tumbler3.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11).ok(),
             Some((0, 0x6, 2).into())
         );
 
@@ -1368,59 +1368,59 @@ mod tests {
         let tumbler4 = bus.decode_tumbler(Pointer::from(0x3FF9)).unwrap();
 
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1).ok(),
             Some((1, 0x1FF9, 1).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2).ok(),
             Some((1, 0x1FF9, 2).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3).ok(),
             Some((1, 0x1FFC, 0).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4).ok(),
             Some((1, 0x1FFC, 1).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5).ok(),
             Some((1, 0x1FFC, 2).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6).ok(),
             Some((1, 0x1FFF, 0).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7).ok(),
             Some((1, 0x1FFF, 1).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8).ok(),
             Some((1, 0x1FFF, 2).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9).ok(),
             Some((2, 0x0000, 0).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10).ok(),
             Some((2, 0x0000, 1).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11).ok(),
             Some((2, 0x0000, 2).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12).ok(),
             Some((2, 0x0003, 0).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 13),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 13).ok(),
             Some((2, 0x0003, 1).into())
         );
         assert_eq!(
-            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 14),
+            tumbler4.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 14).ok(),
             Some((2, 0x0003, 2).into())
         );
 
@@ -1428,59 +1428,59 @@ mod tests {
         let tumbler5 = bus.decode_tumbler(Pointer::from(0x7FF9)).unwrap();
 
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1).ok(),
             Some((2, 0x3FF9, 1).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2).ok(),
             Some((2, 0x3FF9, 2).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3).ok(),
             Some((2, 0x3FFC, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4).ok(),
             Some((2, 0x3FFC, 1).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5).ok(),
             Some((2, 0x3FFC, 2).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6).ok(),
             Some((2, 0x3FFE, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7).ok(),
             Some((2, 0x3FFE, 1).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8).ok(),
             Some((2, 0x3FFE, 2).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9).ok(),
             Some((3, 0, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10).ok(),
             Some((3, 0, 1).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11).ok(),
             Some((3, 0, 2).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 12).ok(),
             Some((3, 1, 0).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 13),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 13).ok(),
             Some((3, 1, 1).into())
         );
         assert_eq!(
-            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 14),
+            tumbler5.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 14).ok(),
             Some((3, 1, 2).into())
         );
 
@@ -1488,47 +1488,47 @@ mod tests {
         let tumbler6 = bus.decode_tumbler(Pointer::from(0x1FFE)).unwrap();
 
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 1).ok(),
             Some((0, 0x1FFE, 1).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 2).ok(),
             Some((0, 0x1FFE, 2).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 3).ok(),
             Some((0, 0x1FFF, 0).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 4).ok(),
             Some((0, 0x1FFF, 1).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 5).ok(),
             Some((0, 0x1FFF, 2).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 6).ok(),
             Some((1, 0, 0).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 7).ok(),
             Some((1, 0, 1).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 8).ok(),
             Some((1, 0, 2).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 9).ok(),
             Some((1, 3, 0).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 10).ok(),
             Some((1, 3, 1).into())
         );
         assert_eq!(
-            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11),
+            tumbler6.scroll_forward_by_lines(&bus, &mut db, &mut |_, _, _| 3, 11).ok(),
             Some((1, 3, 2).into())
         );
     }
