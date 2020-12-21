@@ -36,7 +36,14 @@ impl<P, CV> Pointer<P, CV> {
         (self.pointer, self.context)
     }
 
-    /// Construct a contextual pointer from
+    /// Construct a contextual pointer from it's parts.
+    ///
+    /// *DO NOT* use this function to construct a pointer and set contexts on
+    /// it in one go. Contexts you create here will not be properly marked as
+    /// the correct type.
+    ///
+    /// TODO: The internal representation of `Contexts` should change to use a
+    /// type other than `String` to fix this problem.
     pub fn from_ptrval_and_contexts(ptrval: P, context: Contexts<String, CV>) -> Self {
         Self {
             pointer: ptrval,

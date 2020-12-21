@@ -92,14 +92,13 @@ impl Mapper for MBC1Mapper {
 
     fn encode_banked_addr(&self, ioffset: usize) -> Option<Pointer<sm83::PtrVal>> {
         let pval = 0x4000 + (ioffset & 0x3FFF) as sm83::PtrVal;
-        let bank = ioffset >> 18;
+        let bank = ioffset >> 14;
 
         if bank < 0x80 {
-            let mut contexts = HashMap::new();
+            let mut pointer = Pointer::from(pval);
+            pointer.set_platform_context("R", Symbolic::from(bank as u64));
 
-            contexts.insert("R".to_string(), Symbolic::from(bank as u64));
-
-            Some(Pointer::from_ptrval_and_contexts(pval, contexts))
+            Some(pointer)
         } else {
             None
         }
@@ -155,14 +154,13 @@ impl Mapper for MBC2Mapper {
 
     fn encode_banked_addr(&self, ioffset: usize) -> Option<Pointer<sm83::PtrVal>> {
         let pval = 0x4000 + (ioffset & 0x3FFF) as sm83::PtrVal;
-        let bank = ioffset >> 18;
+        let bank = ioffset >> 14;
 
         if bank < 0x10 {
-            let mut contexts = HashMap::new();
+            let mut pointer = Pointer::from(pval);
+            pointer.set_platform_context("R", Symbolic::from(bank as u64));
 
-            contexts.insert("R".to_string(), Symbolic::from(bank as u64));
-
-            Some(Pointer::from_ptrval_and_contexts(pval, contexts))
+            Some(pointer)
         } else {
             None
         }
@@ -208,14 +206,13 @@ impl Mapper for MBC3Mapper {
 
     fn encode_banked_addr(&self, ioffset: usize) -> Option<Pointer<sm83::PtrVal>> {
         let pval = 0x4000 + (ioffset & 0x3FFF) as sm83::PtrVal;
-        let bank = ioffset >> 18;
+        let bank = ioffset >> 14;
 
         if bank < 0x80 {
-            let mut contexts = HashMap::new();
+            let mut pointer = Pointer::from(pval);
+            pointer.set_platform_context("R", Symbolic::from(bank as u64));
 
-            contexts.insert("R".to_string(), Symbolic::from(bank as u64));
-
-            Some(Pointer::from_ptrval_and_contexts(pval, contexts))
+            Some(pointer)
         } else {
             None
         }
@@ -266,14 +263,13 @@ impl Mapper for MBC5Mapper {
 
     fn encode_banked_addr(&self, ioffset: usize) -> Option<Pointer<sm83::PtrVal>> {
         let pval = 0x4000 + (ioffset & 0x3FFF) as sm83::PtrVal;
-        let bank = ioffset >> 18;
+        let bank = ioffset >> 14;
 
         if bank < 0x200 {
-            let mut contexts = HashMap::new();
+            let mut pointer = Pointer::from(pval);
+            pointer.set_platform_context("R", Symbolic::from(bank as u64));
 
-            contexts.insert("R".to_string(), Symbolic::from(bank as u64));
-
-            Some(Pointer::from_ptrval_and_contexts(pval, contexts))
+            Some(pointer)
         } else {
             None
         }
