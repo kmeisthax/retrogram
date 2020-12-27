@@ -6,10 +6,142 @@ use crate::asm::Assembler;
 use crate::database::ProjectDatabase;
 use crate::input::parse_ptr;
 use crate::memory::{Memory, Pointer};
-use crate::project::Program;
+use crate::platform::Platform;
+use crate::project::{Program, Project};
+use cursive::Cursive;
 use std::any::Any;
+use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, RwLock};
+use std::thread::spawn;
+use std::{fs, io};
+
+/// An entire Retrogram project/session's saveable data.
+///
+/// Intended to be stored on a Cursive instance as user data.
+pub struct SessionContext {
+    /// The current project definition.
+    project: Project,
+
+    /// All open databases connected to this project, keyed by database path.
+    databases: HashMap<String, Arc<RwLock<ProjectDatabase>>>,
+
+    /// All currently-open program contexts, keyed by program.
+    contexts: HashMap<String, Box<dyn AnyProgramContext>>,
+}
+
+impl SessionContext {
+    /// Construct a session context from a project definition.
+    pub fn from_project(mut project: Project) -> io::Result<Self> {
+        let programs = project
+            .iter_programs()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect::<Vec<(String, Program)>>();
+        let mut databases = HashMap::new();
+
+        for (_name, program) in programs.iter() {
+            if !databases.contains_key(program.as_database_path()) {
+                let pjdb: io::Result<ProjectDatabase> = ProjectDatabase::read(
+                    &mut project,
+                    &mut fs::File::open(program.as_database_path())?,
+                )
+                .map_err(|e| e.into());
+
+                let pjdb = Arc::new(RwLock::new(match pjdb {
+                    Ok(pjdb) => pjdb,
+                    Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+                        eprintln!("Creating new database for project");
+                        ProjectDatabase::new()
+                    }
+                    Err(e) => return Err(e),
+                }));
+
+                databases.insert(program.as_database_path().to_string(), pjdb);
+            }
+        }
+
+        Ok(Self {
+            project,
+            databases,
+            contexts: HashMap::new(),
+        })
+    }
+
+    /// Open a program context to access the mutable state of a program with.
+    ///
+    /// This spawns a thread for the program context to run analysis on. The
+    /// Cursive instance passed to this program will be automatically refreshed
+    /// whenever the context's associated analysis queue does something.
+    pub fn program_context(
+        &mut self,
+        siv: &Cursive,
+        program_name: &str,
+    ) -> io::Result<Box<dyn AnyProgramContext>> {
+        if self.contexts.contains_key(program_name) {
+            return Ok(self.contexts.get(program_name).unwrap().duplicate());
+        }
+
+        let program = self.project.program(program_name).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Program {} does not exist", program_name),
+            )
+        })?;
+        let program_db = self
+            .databases
+            .get(program.as_database_path())
+            .cloned()
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!(
+                        "Unexpected database file {} encountered",
+                        program.as_database_path()
+                    ),
+                )
+            })?;
+        let image = program
+            .iter_images()
+            .next()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
+        let mut file = fs::File::open(image)?;
+        let prog_borrow = &program;
+
+        with_prog_architecture!(prog_borrow, |plat, arch, asm| {
+            let bus = plat.construct_platform(&mut file)?;
+            let bus = Arc::new(bus);
+
+            let (ctxt, recv) = ProgramContext::from_program_and_database(
+                arch,
+                asm,
+                program.clone(),
+                program_db,
+                bus,
+            );
+            let sink = siv.cb_sink().clone();
+
+            spawn(move || loop {
+                if matches!(recv.recv().unwrap(), Response::Fence) {
+                    sink.send(Box::new(|siv| {
+                        siv.refresh();
+                    }))
+                    .unwrap();
+                }
+            });
+
+            self.contexts
+                .insert(program_name.to_string(), Box::new(ctxt));
+
+            Ok(())
+        })?;
+
+        Ok(self.contexts.get(program_name).unwrap().duplicate())
+    }
+
+    pub fn iter_programs(&self) -> impl Iterator<Item = (&str, &Program)> {
+        self.project.iter_programs()
+    }
+}
 
 /// A bundle of all of the state that is tied to a single particular program.
 #[derive(Clone)]
@@ -132,6 +264,9 @@ pub trait AnyProgramContext: Any + AnyArch {
 
     /// Grab the program config for this context.
     fn as_program(&self) -> &Program;
+
+    /// Copy this context.
+    fn duplicate(&self) -> Box<dyn AnyProgramContext>;
 }
 
 impl<AR> AnyProgramContext for ProgramContext<AR>
@@ -148,6 +283,10 @@ where
 
     fn as_program(&self) -> &Program {
         &self.program
+    }
+
+    fn duplicate(&self) -> Box<dyn AnyProgramContext> {
+        Box::new(self.clone())
     }
 }
 

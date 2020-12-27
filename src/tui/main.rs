@@ -1,108 +1,29 @@
 //! Text UI for interactive use
 
-use crate::analysis::Response;
-use crate::database::ProjectDatabase;
-use crate::platform::Platform;
-use crate::project::{Program, Project};
-use crate::tui::context::{AnyProgramContext, ProgramContext};
+use crate::project::Project;
+use crate::tui::context::SessionContext;
 use crate::tui::menu::repopulate_menu;
 use crate::tui::tabs::tab_zygote;
 use backtrace::Backtrace;
 use cursive::view::Nameable;
 use cursive::views::{Dialog, ScrollView, TextView};
-use cursive::Cursive;
 use cursive_tabs::TabPanel;
-use std::collections::HashMap;
+use std::io;
 use std::panic::set_hook;
-use std::sync::{Arc, RwLock};
-use std::thread::spawn;
-use std::{fs, io};
-
-/// Open a program and construct a context that holds it's mutable state for
-/// later use.
-///
-/// The `siv` is used to trigger refreshes whenever the analysis queue for this
-/// context has mutated the database.
-fn context_zygote(
-    program: Program,
-    database: Arc<RwLock<ProjectDatabase>>,
-    siv: &Cursive,
-) -> io::Result<Box<dyn AnyProgramContext>> {
-    let image = program
-        .iter_images()
-        .next()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
-    let mut file = fs::File::open(image)?;
-    let prog_borrow = &program;
-
-    with_prog_architecture!(prog_borrow, |plat, arch, asm| {
-        let bus = plat.construct_platform(&mut file)?;
-        let bus = Arc::new(bus);
-
-        let (ctxt, recv) =
-            ProgramContext::from_program_and_database(arch, asm, program, database, bus);
-        let sink = siv.cb_sink().clone();
-
-        spawn(move || loop {
-            if matches!(recv.recv().unwrap(), Response::Fence) {
-                sink.send(Box::new(|siv| {
-                    siv.refresh();
-                }))
-                .unwrap();
-            }
-        });
-
-        Ok(Box::new(ctxt))
-    })
-}
 
 /// Start a TUI session.
-pub fn main(mut project: Project) -> io::Result<()> {
-    let programs = project
-        .iter_programs()
-        .map(|(k, v)| (k.to_string(), v.clone()))
-        .collect::<Vec<(String, Program)>>();
-    let mut databases = HashMap::new();
-
-    for (_name, program) in programs.iter() {
-        if !databases.contains_key(program.as_database_path()) {
-            let pjdb: io::Result<ProjectDatabase> = ProjectDatabase::read(
-                &mut project,
-                &mut fs::File::open(program.as_database_path())?,
-            )
-            .map_err(|e| e.into());
-
-            let pjdb = Arc::new(RwLock::new(match pjdb {
-                Ok(pjdb) => pjdb,
-                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-                    eprintln!("Creating new database for project");
-                    ProjectDatabase::new()
-                }
-                Err(e) => return Err(e),
-            }));
-
-            databases.insert(program.as_database_path().to_string(), pjdb);
-        }
-    }
-
+pub fn main(project: Project) -> io::Result<()> {
+    let mut session = SessionContext::from_project(project)?;
     let mut siv = cursive::default();
     let mut panel = TabPanel::new();
     let mut tab_nonce = 0;
+    let program_names = session
+        .iter_programs()
+        .map(|(k, _v)| k.to_string())
+        .collect::<Vec<String>>();
 
-    for (_name, program) in programs {
-        let program_db = databases
-            .get(program.as_database_path())
-            .cloned()
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::NotFound,
-                    format!(
-                        "Unexpected database file {} encountered",
-                        program.as_database_path()
-                    ),
-                )
-            })?;
-        let mut context = context_zygote(program, program_db, &siv)?;
+    for name in program_names {
+        let mut context = session.program_context(&siv, &name)?;
 
         tab_zygote(&mut *context, &mut panel, &mut tab_nonce)?;
     }
