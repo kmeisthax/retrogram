@@ -17,9 +17,16 @@ pub struct Project {
 
     #[serde(default)]
     data_sources: HashMap<String, DataSource>,
+
+    #[serde(skip)]
+    read_from: Option<String>,
 }
 
 impl Project {
+    /// Read the project from disk.
+    ///
+    /// The filename the project was read from will be retained in this copy of
+    /// the project.
     pub fn read(filename: &str) -> io::Result<Self> {
         let project_file = fs::File::open(filename)?;
         let mut project: Self = serde_json::from_reader(project_file)?;
@@ -30,7 +37,19 @@ impl Project {
             }
         }
 
+        project.read_from = Some(filename.into());
+
         Ok(project)
+    }
+
+    /// Write the project to disk.
+    pub fn write(&mut self, filename: &str) -> io::Result<()> {
+        let project_file = fs::File::create(filename)?;
+        serde_json::to_writer_pretty(project_file, self)?;
+
+        self.read_from = Some(filename.to_string());
+
+        Ok(())
     }
 
     /// Get the program with the given name within the project.
@@ -64,5 +83,12 @@ impl Project {
 
     pub fn iter_programs(&self) -> impl Iterator<Item = (&str, &Program)> {
         self.programs.iter().map(|(k, v)| (k.as_str(), v))
+    }
+
+    /// Get the location that this project file was last written to.
+    ///
+    /// `None` indicates that the project has not yet been written to disk.
+    pub fn read_from(&self) -> Option<&str> {
+        self.read_from.as_deref()
     }
 }
