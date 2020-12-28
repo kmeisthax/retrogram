@@ -1,9 +1,11 @@
 //! TUI menu tree utils
 
+use crate::tui::context::SessionContext;
 use crate::tui::jump::jump_dialog;
 use crate::tui::label::label_dialog;
 use crate::tui::tabs::{call_on_tab, TabHandle};
 use cursive::menu::MenuTree;
+use cursive::views::Dialog;
 use cursive::Cursive;
 use cursive_tabs::TabPanel;
 
@@ -11,7 +13,32 @@ use cursive_tabs::TabPanel;
 pub fn repopulate_menu(siv: &mut Cursive) {
     siv.menubar().clear();
     siv.menubar()
-        .add_subtree("File", MenuTree::new().leaf("Exit", |s| s.quit()))
+        .add_subtree(
+            "File",
+            MenuTree::new()
+                .leaf("New", |s| {
+                    s.call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
+                        for tab in v.tab_order() {
+                            v.remove_tab(&tab).unwrap()
+                        }
+                    });
+
+                    let new_session = SessionContext::empty_session();
+
+                    s.set_user_data(new_session);
+                    repopulate_menu(s);
+                })
+                .leaf("Open", |s| {
+                    s.add_layer(Dialog::text("Not yet implemented.").title("Error").button(
+                        "OK",
+                        |s| {
+                            s.pop_layer();
+                        },
+                    ));
+                })
+                .delimiter()
+                .leaf("Exit", |s| s.quit()),
+        )
         .add_subtree(
             "Edit",
             MenuTree::new()

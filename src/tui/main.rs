@@ -28,6 +28,8 @@ pub fn main(project: Project) -> io::Result<()> {
         tab_zygote(&mut *context, &mut panel, &mut tab_nonce)?;
     }
 
+    siv.set_user_data(session);
+
     siv.add_fullscreen_layer(panel.with_name("tabs"));
 
     siv.set_autohide_menu(false);
