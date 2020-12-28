@@ -121,11 +121,20 @@ impl SessionContext {
             let sink = siv.cb_sink().clone();
 
             spawn(move || loop {
-                if matches!(recv.recv().unwrap(), Response::Fence) {
-                    sink.send(Box::new(|siv| {
-                        siv.refresh();
-                    }))
-                    .unwrap();
+                match recv.recv() {
+                    Ok(Response::Fence) => sink
+                        .send(Box::new(|siv| {
+                            siv.refresh();
+                        }))
+                        .unwrap(),
+
+                    // Silently ignore all other responses.
+                    Ok(_) => continue,
+
+                    // If the analysis loop has exited or paniced for whatever
+                    // reason, just silently close off our callback handler
+                    // thread.
+                    Err(_) => return,
                 }
             });
 
