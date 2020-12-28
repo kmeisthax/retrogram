@@ -31,6 +31,15 @@ pub struct SessionContext {
 }
 
 impl SessionContext {
+    /// Build an empty project.
+    pub fn empty_session() -> Self {
+        Self {
+            project: Project::new(),
+            databases: HashMap::new(),
+            contexts: HashMap::new(),
+        }
+    }
+
     /// Construct a session context from a project definition.
     pub fn from_project(mut project: Project) -> io::Result<Self> {
         let programs = project

@@ -22,7 +22,22 @@ pub struct Project {
     read_from: Option<String>,
 }
 
+impl Default for Project {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Project {
+    /// Create a new, empty project.
+    pub fn new() -> Self {
+        Self {
+            programs: HashMap::new(),
+            data_sources: HashMap::new(),
+            read_from: None,
+        }
+    }
+
     /// Read the project from disk.
     ///
     /// The filename the project was read from will be retained in this copy of
