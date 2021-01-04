@@ -43,8 +43,9 @@ impl Project {
     ///
     /// The filename the project was read from will be retained in this copy of
     /// the project.
-    pub fn read(filename: &str) -> io::Result<Self> {
-        let project_file = fs::File::open(filename)?;
+    pub fn read<P: AsRef<Path>>(filename: P) -> io::Result<Self> {
+        let filename = filename.as_ref().to_path_buf();
+        let project_file = fs::File::open(&filename)?;
         let mut project: Self = serde_json::from_reader(project_file)?;
 
         for (name, prog) in project.programs.iter_mut() {
@@ -53,7 +54,7 @@ impl Project {
             }
         }
 
-        project.read_from = Some(filename.into());
+        project.read_from = Some(filename);
 
         Ok(project)
     }

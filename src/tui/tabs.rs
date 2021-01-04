@@ -3,8 +3,9 @@
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
 use crate::project::Program;
-use crate::tui::context::AnyProgramContext;
+use crate::tui::context::{AnyProgramContext, SessionContext};
 use crate::tui::disasm_view::DisassemblyView;
+use crate::tui::error_dialog::error_dialog;
 use cursive::view::{Nameable, View};
 use cursive::Cursive;
 use cursive_tabs::TabPanel;
@@ -67,16 +68,14 @@ impl TabHandle {
 }
 
 /// Construct a new disassembly tab for a given program and add it to the TUI
-pub fn tab_zygote(
+fn tab_zygote(
     context: &mut dyn AnyProgramContext,
     panel: &mut TabPanel<TabHandle>,
-    nonce: &mut u64,
+    nonce: u64,
 ) -> io::Result<()> {
     with_context_architecture!(context, |context, arch, asm| {
-        let handle = TabHandle::from_program(context.program().clone(), *nonce);
+        let handle = TabHandle::from_program(context.program().clone(), nonce);
         let name = handle.to_view_name();
-
-        *nonce += 1;
 
         panel.add_tab(
             handle,
@@ -104,4 +103,52 @@ where
     let name = handle.to_view_name();
 
     siv.call_on_name(&name, cbk)
+}
+
+/// Repopulate tabs with the current set of tabs in the session context.
+///
+/// This should only be called when a new session has been instantiated; doing
+/// so will be highly disruptive to all user view state.
+pub fn repopulate_tabs(siv: &mut Cursive) {
+    siv.call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
+        for tab in v.tab_order() {
+            v.remove_tab(&tab).unwrap()
+        }
+    });
+
+    let cb_sink = siv.cb_sink().clone();
+    let program_names = siv
+        .with_user_data(|session: &mut SessionContext| {
+            let programs = session
+                .iter_programs()
+                .map(|(k, _v)| k.to_string())
+                .collect::<Vec<String>>();
+            let mut out = vec![];
+
+            for program in programs {
+                let context = session.program_context(cb_sink.clone(), &program);
+                out.push((context, session.nonce()));
+            }
+
+            out
+        })
+        .unwrap();
+    let mut errors = vec![];
+
+    for (maybe_ctxt, nonce) in program_names {
+        match maybe_ctxt {
+            Err(e) => errors.push(e),
+            Ok(mut ctxt) => {
+                siv.call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
+                    if let Err(e) = tab_zygote(&mut *ctxt, v, nonce) {
+                        errors.push(e);
+                    }
+                });
+            }
+        }
+    }
+
+    for error in errors {
+        siv.add_layer(error_dialog(error));
+    }
 }

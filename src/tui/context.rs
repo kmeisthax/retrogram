@@ -8,9 +8,10 @@ use crate::input::parse_ptr;
 use crate::memory::{Memory, Pointer};
 use crate::platform::Platform;
 use crate::project::{Program, Project};
-use cursive::Cursive;
+use cursive::CbSink;
 use std::any::Any;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread::spawn;
@@ -28,6 +29,9 @@ pub struct SessionContext {
 
     /// All currently-open program contexts, keyed by program.
     contexts: HashMap<String, Box<dyn AnyProgramContext>>,
+
+    /// Number of opened tabs.
+    tab_nonce: u64,
 }
 
 impl SessionContext {
@@ -37,7 +41,15 @@ impl SessionContext {
             project: Project::new(),
             databases: HashMap::new(),
             contexts: HashMap::new(),
+            tab_nonce: 0,
         }
+    }
+
+    /// Construct a session context from a project filename.
+    pub fn from_filename<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        let project = Project::read(path)?;
+
+        Self::from_project(project)
     }
 
     /// Construct a session context from a project definition.
@@ -73,7 +85,15 @@ impl SessionContext {
             project,
             databases,
             contexts: HashMap::new(),
+            tab_nonce: 0,
         })
+    }
+
+    /// Get the location that this session's project file was last written to.
+    ///
+    /// `None` indicates that the project has not yet been written to disk.
+    pub fn read_from(&self) -> Option<&Path> {
+        self.project.read_from()
     }
 
     /// Open a program context to access the mutable state of a program with.
@@ -83,7 +103,7 @@ impl SessionContext {
     /// whenever the context's associated analysis queue does something.
     pub fn program_context(
         &mut self,
-        siv: &Cursive,
+        cb_sink: CbSink,
         program_name: &str,
     ) -> io::Result<Box<dyn AnyProgramContext>> {
         if self.contexts.contains_key(program_name) {
@@ -127,11 +147,10 @@ impl SessionContext {
                 program_db,
                 bus,
             );
-            let sink = siv.cb_sink().clone();
 
             spawn(move || loop {
                 match recv.recv() {
-                    Ok(Response::Fence) => sink
+                    Ok(Response::Fence) => cb_sink
                         .send(Box::new(|siv| {
                             siv.refresh();
                         }))
@@ -158,6 +177,15 @@ impl SessionContext {
 
     pub fn iter_programs(&self) -> impl Iterator<Item = (&str, &Program)> {
         self.project.iter_programs()
+    }
+
+    /// Get the next nonce in sequence.
+    pub fn nonce(&mut self) -> u64 {
+        let ret = self.tab_nonce;
+
+        self.tab_nonce += 1;
+
+        ret
     }
 }
 

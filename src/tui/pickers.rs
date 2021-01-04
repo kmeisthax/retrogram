@@ -68,15 +68,19 @@ where
 }
 
 /// Open a directory picker.
-/// 
+///
 /// The directory picker will start at the given path, which must be a
 /// directory. If a valid path is not given or the user later navigates to an
 /// invalid path, the directory picker will be dismissed without action.
-/// 
+///
 /// When a directory is selected, the `then` callback will be given with the
 /// selected path after the directory picker has been dismissed.
-pub fn directory_picker<THEN>(siv: &mut Cursive, title: &'static str, starting_path: &Path, then: THEN)
-where
+pub fn directory_picker<THEN>(
+    siv: &mut Cursive,
+    title: &'static str,
+    starting_path: &Path,
+    then: THEN,
+) where
     THEN: Fn(&mut Cursive, &Path) + 'static + Clone,
 {
     siv.add_layer(
@@ -140,9 +144,11 @@ where
                                 },
                             ),
                         )
-                        .child(
-                            Panel::new(ScrollView::new(directory_list.min_width(30)).scroll_y(true).full_height()),
-                        ),
+                        .child(Panel::new(
+                            ScrollView::new(directory_list.min_width(30))
+                                .scroll_y(true)
+                                .full_height(),
+                        )),
                 )
                 .title(title)
                 .button("OK", move |s| {

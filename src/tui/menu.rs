@@ -1,13 +1,15 @@
 //! TUI menu tree utils
 
 use crate::tui::context::SessionContext;
+use crate::tui::error_dialog::error_dialog;
 use crate::tui::jump::jump_dialog;
 use crate::tui::label::label_dialog;
-use crate::tui::tabs::{call_on_tab, TabHandle};
+use crate::tui::pickers::directory_picker;
+use crate::tui::tabs::{call_on_tab, repopulate_tabs, TabHandle};
 use cursive::menu::MenuTree;
-use cursive::views::Dialog;
 use cursive::Cursive;
 use cursive_tabs::TabPanel;
+use std::env;
 
 /// Regenerate the global menu in Cursive.
 pub fn repopulate_menu(siv: &mut Cursive) {
@@ -17,24 +19,43 @@ pub fn repopulate_menu(siv: &mut Cursive) {
             "File",
             MenuTree::new()
                 .leaf("New", |s| {
-                    s.call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
-                        for tab in v.tab_order() {
-                            v.remove_tab(&tab).unwrap()
-                        }
-                    });
+                    s.set_user_data(SessionContext::empty_session());
 
-                    let new_session = SessionContext::empty_session();
-
-                    s.set_user_data(new_session);
+                    repopulate_tabs(s);
                     repopulate_menu(s);
                 })
                 .leaf("Open", |s| {
-                    s.add_layer(Dialog::text("Not yet implemented.").title("Error").button(
-                        "OK",
-                        |s| {
-                            s.pop_layer();
-                        },
-                    ));
+                    let session = s
+                        .user_data::<SessionContext>()
+                        .expect("Session should exist");
+                    let mut path = env::current_dir().unwrap();
+                    if let Some(read_path) = session.read_from() {
+                        if read_path.is_absolute() {
+                            path = read_path.to_path_buf();
+                        } else {
+                            path = path.join(read_path);
+                        }
+                    }
+
+                    while !path.is_dir() && path.parent().is_some() {
+                        path = path.parent().unwrap().to_path_buf();
+                    }
+
+                    directory_picker(s, "Select project directory", &path, |s, path| {
+                        let new_session =
+                            SessionContext::from_filename(path.join("retrogram.json"));
+
+                        match new_session {
+                            Ok(new_session) => s.set_user_data(new_session),
+                            Err(e) => {
+                                s.add_layer(error_dialog(e));
+                                return;
+                            }
+                        };
+
+                        repopulate_tabs(s);
+                        repopulate_menu(s);
+                    });
                 })
                 .delimiter()
                 .leaf("Exit", |s| s.quit()),
