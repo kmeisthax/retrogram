@@ -4,6 +4,7 @@ use crate::project::datasource::DataSource;
 use crate::project::program::Program;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 /// In-memory representation of the current project configuration.
@@ -19,7 +20,7 @@ pub struct Project {
     data_sources: HashMap<String, DataSource>,
 
     #[serde(skip)]
-    read_from: Option<String>,
+    read_from: Option<PathBuf>,
 }
 
 impl Default for Project {
@@ -58,11 +59,12 @@ impl Project {
     }
 
     /// Write the project to disk.
-    pub fn write(&mut self, filename: &str) -> io::Result<()> {
-        let project_file = fs::File::create(filename)?;
+    pub fn write<P: AsRef<Path>>(&mut self, filename: P) -> io::Result<()> {
+        let filename = filename.as_ref().to_path_buf();
+        let project_file = fs::File::create(&filename)?;
         serde_json::to_writer_pretty(project_file, self)?;
 
-        self.read_from = Some(filename.to_string());
+        self.read_from = Some(filename);
 
         Ok(())
     }
@@ -103,7 +105,7 @@ impl Project {
     /// Get the location that this project file was last written to.
     ///
     /// `None` indicates that the project has not yet been written to disk.
-    pub fn read_from(&self) -> Option<&str> {
+    pub fn read_from(&self) -> Option<&Path> {
         self.read_from.as_deref()
     }
 }
