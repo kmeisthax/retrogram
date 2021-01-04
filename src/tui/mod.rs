@@ -4,6 +4,7 @@
 mod context;
 mod builder;
 mod disasm_view;
+mod pickers;
 mod jump;
 mod label;
 mod main;
