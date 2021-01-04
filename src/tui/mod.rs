@@ -2,6 +2,7 @@
 
 #[macro_use]
 mod context;
+mod builder;
 mod disasm_view;
 mod jump;
 mod label;
