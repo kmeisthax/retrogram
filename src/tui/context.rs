@@ -93,6 +93,16 @@ impl SessionContext {
         })
     }
 
+    /// Access the session's underlying project.
+    pub fn project(&self) -> &Project {
+        &self.project
+    }
+
+    /// Access the session's underlying project for mutation.
+    pub fn project_mut(&mut self) -> &mut Project {
+        &mut self.project
+    }
+
     /// Get the location that this session's project file was last written to.
     ///
     /// The returned path is guaranteed to be canonical and absolute.
@@ -191,6 +201,12 @@ impl SessionContext {
 
     pub fn iter_programs(&self) -> impl Iterator<Item = (&str, &Program)> {
         self.project.iter_programs()
+    }
+
+    pub fn iter_databases(
+        &self,
+    ) -> impl Iterator<Item = (&RelativePath, &Arc<RwLock<ProjectDatabase>>)> {
+        self.databases.iter().map(|(p, db)| (p.as_ref(), db))
     }
 
     /// Get the next nonce in sequence.

@@ -9,7 +9,71 @@ use crate::tui::tabs::{call_on_tab, repopulate_tabs, TabHandle};
 use cursive::menu::MenuTree;
 use cursive::Cursive;
 use cursive_tabs::TabPanel;
-use std::env;
+use std::path::Path;
+use std::{env, fs};
+
+/// Process a user command to save the current session.
+///
+/// The `overwrite` flag indicates if the user wants to overwrite the on-disk
+/// session or save it in a new directory.
+fn save_intent(siv: &mut Cursive, overwrite: bool) {
+    let session = siv
+        .user_data::<SessionContext>()
+        .expect("Session should exist");
+    let read_path = if overwrite {
+        session.path().map(|p| p.to_path_buf())
+    } else {
+        None
+    };
+
+    let then = |s: &mut Cursive, project_path: &Path| {
+        let session = s
+            .user_data::<SessionContext>()
+            .expect("Session should exist");
+        let mut project_file_path = project_path.to_path_buf();
+
+        project_file_path.push("retrogram.json");
+
+        if let Err(e) = session.project_mut().write(project_file_path) {
+            s.add_layer(error_dialog(e));
+            return;
+        }
+
+        let mut reportable_error = None;
+
+        for (db_path, db) in session.iter_databases() {
+            let mut db_lock = db.write().unwrap();
+            let mut db_file = match fs::File::create(db_path.to_path(project_path)) {
+                Err(e) => {
+                    reportable_error = Some(e);
+                    break;
+                }
+                Ok(file) => file,
+            };
+
+            if let Err(e) = db_lock.write(&mut db_file) {
+                reportable_error = Some(e.into());
+                break;
+            }
+        }
+
+        if let Some(reportable_error) = reportable_error {
+            s.add_layer(error_dialog(reportable_error));
+            return;
+        }
+    };
+
+    if let Some(base_path) = read_path {
+        then(siv, &base_path)
+    } else {
+        directory_picker(
+            siv,
+            "Select save directory",
+            &env::current_dir().unwrap(),
+            move |s, path| then(s, path),
+        );
+    }
+}
 
 /// Regenerate the global menu in Cursive.
 pub fn repopulate_menu(siv: &mut Cursive) {
@@ -24,7 +88,8 @@ pub fn repopulate_menu(siv: &mut Cursive) {
                     repopulate_tabs(s);
                     repopulate_menu(s);
                 })
-                .leaf("Open", |s| {
+                .delimiter()
+                .leaf("Open...", |s| {
                     let session = s
                         .user_data::<SessionContext>()
                         .expect("Session should exist");
@@ -57,6 +122,8 @@ pub fn repopulate_menu(siv: &mut Cursive) {
                         repopulate_menu(s);
                     });
                 })
+                .leaf("Save", |s| save_intent(s, true))
+                .leaf("Save as...", |s| save_intent(s, false))
                 .delimiter()
                 .leaf("Exit", |s| s.quit()),
         )
