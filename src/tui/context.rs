@@ -91,6 +91,8 @@ impl SessionContext {
 
     /// Get the location that this session's project file was last written to.
     ///
+    /// The returned path is guaranteed to be canonical and absolute.
+    ///
     /// `None` indicates that the project has not yet been written to disk.
     pub fn read_from(&self) -> Option<&Path> {
         self.project.read_from()

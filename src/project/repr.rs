@@ -54,7 +54,7 @@ impl Project {
             }
         }
 
-        project.read_from = Some(filename);
+        project.read_from = Some(fs::canonicalize(filename)?);
 
         Ok(project)
     }
@@ -65,7 +65,7 @@ impl Project {
         let project_file = fs::File::create(&filename)?;
         serde_json::to_writer_pretty(project_file, self)?;
 
-        self.read_from = Some(filename);
+        self.read_from = Some(fs::canonicalize(filename)?);
 
         Ok(())
     }
@@ -104,6 +104,8 @@ impl Project {
     }
 
     /// Get the location that this project file was last written to.
+    ///
+    /// The returned path is guaranteed to be canonical and absolute.
     ///
     /// `None` indicates that the project has not yet been written to disk.
     pub fn read_from(&self) -> Option<&Path> {
