@@ -9,9 +9,10 @@ use crate::memory::{Memory, Pointer};
 use crate::platform::Platform;
 use crate::project::{Program, Project};
 use cursive::CbSink;
+use relative_path::{RelativePath, RelativePathBuf};
 use std::any::Any;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread::spawn;
@@ -25,7 +26,10 @@ pub struct SessionContext {
     project: Project,
 
     /// All open databases connected to this project, keyed by database path.
-    databases: HashMap<PathBuf, Arc<RwLock<ProjectDatabase>>>,
+    ///
+    /// The database path is relative to the intended save location of the
+    /// project.
+    databases: HashMap<RelativePathBuf, Arc<RwLock<ProjectDatabase>>>,
 
     /// All currently-open program contexts, keyed by program.
     contexts: HashMap<String, Box<dyn AnyProgramContext>>,
@@ -62,11 +66,11 @@ impl SessionContext {
 
         for (_name, program) in programs.iter() {
             if !databases.contains_key(program.as_database_path()) {
-                let pjdb: io::Result<ProjectDatabase> = ProjectDatabase::read(
-                    &mut project,
-                    &mut fs::File::open(program.as_database_path())?,
-                )
-                .map_err(|e| e.into());
+                let base_path = project.implicit_path()?;
+                let database_path = program.as_database_path().to_path(base_path);
+                let pjdb: io::Result<ProjectDatabase> =
+                    ProjectDatabase::read(&mut project, &mut fs::File::open(database_path)?)
+                        .map_err(|e| e.into());
 
                 let pjdb = Arc::new(RwLock::new(match pjdb {
                     Ok(pjdb) => pjdb,
@@ -77,7 +81,7 @@ impl SessionContext {
                     Err(e) => return Err(e),
                 }));
 
-                databases.insert(program.as_database_path().to_path_buf(), pjdb);
+                databases.insert(program.as_database_path().to_relative_path_buf(), pjdb);
             }
         }
 
@@ -96,6 +100,14 @@ impl SessionContext {
     /// `None` indicates that the project has not yet been written to disk.
     pub fn read_from(&self) -> Option<&Path> {
         self.project.read_from()
+    }
+
+    /// Get the location that this session saves and loads relative paths to
+    /// and from.
+    ///
+    /// `None` indicates that the session has not yet been written to disk.
+    pub fn path(&self) -> Option<&Path> {
+        self.project.path()
     }
 
     /// Open a program context to access the mutable state of a program with.
@@ -127,7 +139,7 @@ impl SessionContext {
                     io::ErrorKind::NotFound,
                     format!(
                         "Unexpected database file {} encountered",
-                        program.as_database_path().display()
+                        program.as_database_path()
                     ),
                 )
             })?;

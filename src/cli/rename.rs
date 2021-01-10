@@ -24,9 +24,10 @@ where
     for<'dw> AR::Offset: serde::Deserialize<'dw> + serde::Serialize + One,
     for<'dw> AR::Byte: serde::Deserialize<'dw>,
 {
+    let project_path = project.implicit_path()?;
+    let database_path = prog.as_database_path().to_path(&project_path);
     let pjdb: io::Result<ProjectDatabase> =
-        ProjectDatabase::read(project, &mut fs::File::open(prog.as_database_path())?)
-            .map_err(|e| e.into());
+        ProjectDatabase::read(project, &mut fs::File::open(&database_path)?).map_err(|e| e.into());
     let mut pjdb = pjdb?;
     let db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
         io::Error::new(
@@ -55,7 +56,7 @@ where
 
     db.upsert_symbol(into_label, from_pc);
 
-    if let Err(e) = pjdb.write(&mut fs::File::create(prog.as_database_path())?) {
+    if let Err(e) = pjdb.write(&mut fs::File::create(database_path)?) {
         return Err(e.into());
     }
 

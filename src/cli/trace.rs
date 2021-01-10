@@ -15,10 +15,9 @@ use clap::ArgMatches;
 use serde::Deserialize;
 use std::cmp::max;
 use std::collections::HashSet;
-use std::fs;
-use std::io;
 use std::io::{stdin, stdout, BufRead, Write};
 use std::str::FromStr;
+use std::{fs, io};
 
 enum NextAction {
     Trace,
@@ -359,9 +358,10 @@ where
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
 {
+    let project_path = project.implicit_path()?;
+    let database_path = prog.as_database_path().to_path(&project_path);
     let pjdb: io::Result<ProjectDatabase> =
-        ProjectDatabase::read(project, &mut fs::File::open(prog.as_database_path())?)
-            .map_err(|e| e.into());
+        ProjectDatabase::read(project, &mut fs::File::open(database_path)?).map_err(|e| e.into());
     let mut pjdb = match pjdb {
         Ok(pjdb) => pjdb,
         Err(ref e) if e.kind() == io::ErrorKind::NotFound => {

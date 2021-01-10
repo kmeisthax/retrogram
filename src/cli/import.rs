@@ -24,9 +24,10 @@ where
         &mut database::Database<AR>,
     ) -> io::Result<()>,
 {
+    let project_path = project.implicit_path()?;
+    let database_path = prog.as_database_path().to_path(project_path);
     let pjdb: io::Result<ProjectDatabase> =
-        ProjectDatabase::read(project, &mut fs::File::open(prog.as_database_path())?)
-            .map_err(|e| e.into());
+        ProjectDatabase::read(project, &mut fs::File::open(database_path)?).map_err(|e| e.into());
     let mut pjdb = match pjdb {
         Ok(pjdb) => pjdb,
         Err(ref e) if e.kind() == io::ErrorKind::NotFound => {

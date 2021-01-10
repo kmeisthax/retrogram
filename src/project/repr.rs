@@ -3,9 +3,10 @@
 use crate::project::datasource::DataSource;
 use crate::project::program::Program;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::{fs, io};
+use std::{env, fs, io};
 
 /// In-memory representation of the current project configuration.
 ///
@@ -110,5 +111,30 @@ impl Project {
     /// `None` indicates that the project has not yet been written to disk.
     pub fn read_from(&self) -> Option<&Path> {
         self.read_from.as_deref()
+    }
+
+    /// Get the directory this project was stored into.
+    ///
+    /// The returned path is guaranteed to be canonical and absolute.
+    ///
+    /// `None` indicates that the project has not yet been written to disk.
+    pub fn path(&self) -> Option<&Path> {
+        self.read_from().and_then(|rf| rf.parent())
+    }
+
+    /// Get the directory this project was stored into, or the current
+    /// directory otherwise.
+    ///
+    /// TODO: The returned path is almost-guaranteed to be canonicalized; but
+    /// I'm not sure if that covers `env::current_dir`.
+    ///
+    /// Intended for use in contexts where the current working directory would
+    /// be a valid path to use when working with an in-memory project.
+    pub fn implicit_path(&self) -> io::Result<Cow<Path>> {
+        if let Some(p) = self.path().map(|p| p.into()) {
+            Ok(p)
+        } else {
+            Ok(env::current_dir()?.into())
+        }
     }
 }

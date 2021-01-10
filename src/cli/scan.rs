@@ -83,7 +83,9 @@ fn read_shareable_db(
     project: &mut Project,
     prog: &Program,
 ) -> io::Result<Arc<RwLock<ProjectDatabase>>> {
-    let mut maybe_file = fs::File::open(prog.as_database_path());
+    let project_path = project.implicit_path()?;
+    let database_path = prog.as_database_path().to_path(&project_path);
+    let mut maybe_file = fs::File::open(prog.as_database_path().to_path(database_path));
     let pjdb: io::Result<ProjectDatabase> = match maybe_file {
         Ok(ref mut file) => ProjectDatabase::read(project, file).map_err(|e| e.into()),
         Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
@@ -238,10 +240,13 @@ where
 
     eprintln!("Scan complete, writing database");
 
+    let project_path = project.implicit_path()?;
+    let database_path = prog.as_database_path().to_path(&project_path);
+
     if let Err(e) = pjdb
         .write()
         .unwrap()
-        .write(&mut fs::File::create(prog.as_database_path())?)
+        .write(&mut fs::File::create(database_path)?)
     {
         return Err(e.into());
     }

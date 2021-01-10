@@ -24,9 +24,10 @@ where
     ASM: Assembler,
     ASM::Literal: CompatibleLiteral<AR>,
 {
+    let project_path = project.implicit_path()?;
+    let database_path = prog.as_database_path().to_path(project_path);
     let pjdb: io::Result<ProjectDatabase> =
-        ProjectDatabase::read(project, &mut fs::File::open(prog.as_database_path())?)
-            .map_err(|e| e.into());
+        ProjectDatabase::read(project, &mut fs::File::open(database_path)?).map_err(|e| e.into());
     let mut pjdb = pjdb?;
     let db = pjdb.get_database_mut(prog.as_name().ok_or_else(|| {
         io::Error::new(
