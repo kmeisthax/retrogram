@@ -286,9 +286,9 @@ where
                 let mut state_list = state_list.clone();
 
                 while count < length.clone() {
-                    let ucount = count.clone().try_into().unwrap_or(0);
+                    let ucount: usize = count.clone().try_into().unwrap_or(0);
                     let mask_part = mask
-                        .get(ucount as usize)
+                        .get(ucount)
                         .cloned()
                         .unwrap_or_else(|| !AR::Byte::zero());
                     if mask_part == AR::Byte::zero() {
