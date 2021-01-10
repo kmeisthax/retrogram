@@ -5,6 +5,7 @@ use crate::asm::AssemblerName;
 use crate::platform::PlatformName;
 use clap::{App, Arg, ArgMatches, ArgSettings};
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -21,11 +22,11 @@ pub struct Program {
     data_sources: Vec<String>,
 
     #[serde(default = "default_db_filename")]
-    database_path: String,
+    database_path: PathBuf,
 }
 
-fn default_db_filename() -> String {
-    "retrogram.db".to_string()
+fn default_db_filename() -> PathBuf {
+    PathBuf::from("retrogram.db")
 }
 
 impl Default for Program {
@@ -125,8 +126,8 @@ impl Program {
         self.data_sources.iter()
     }
 
-    pub fn as_database_path(&self) -> &str {
-        &self.database_path
+    pub fn as_database_path(&self) -> &Path {
+        self.database_path.as_ref()
     }
 
     pub fn as_name(&self) -> Option<&str> {

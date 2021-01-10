@@ -11,7 +11,7 @@ use crate::project::{Program, Project};
 use cursive::CbSink;
 use std::any::Any;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread::spawn;
@@ -25,7 +25,7 @@ pub struct SessionContext {
     project: Project,
 
     /// All open databases connected to this project, keyed by database path.
-    databases: HashMap<String, Arc<RwLock<ProjectDatabase>>>,
+    databases: HashMap<PathBuf, Arc<RwLock<ProjectDatabase>>>,
 
     /// All currently-open program contexts, keyed by program.
     contexts: HashMap<String, Box<dyn AnyProgramContext>>,
@@ -77,7 +77,7 @@ impl SessionContext {
                     Err(e) => return Err(e),
                 }));
 
-                databases.insert(program.as_database_path().to_string(), pjdb);
+                databases.insert(program.as_database_path().to_path_buf(), pjdb);
             }
         }
 
@@ -125,7 +125,7 @@ impl SessionContext {
                     io::ErrorKind::NotFound,
                     format!(
                         "Unexpected database file {} encountered",
-                        program.as_database_path()
+                        program.as_database_path().display()
                     ),
                 )
             })?;
