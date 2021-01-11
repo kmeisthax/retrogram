@@ -12,6 +12,44 @@ use cursive_tabs::TabPanel;
 use std::path::Path;
 use std::{env, fs};
 
+/// Process a user command to load a new session.
+///
+/// The `revert` flag indicates if the user wants to re-open the project
+fn load_intent(siv: &mut Cursive, revert: bool) {
+    let session = siv
+        .user_data::<SessionContext>()
+        .expect("Session should exist");
+    let path = match session.project().implicit_path() {
+        Ok(p) => p,
+        Err(e) => {
+            siv.add_layer(error_dialog(e));
+            return;
+        }
+    }
+    .into_owned();
+
+    let then = |s: &mut Cursive, path: &Path| {
+        let new_session = SessionContext::from_filename(path.join("retrogram.json"));
+
+        match new_session {
+            Ok(new_session) => s.set_user_data(new_session),
+            Err(e) => {
+                s.add_layer(error_dialog(e));
+                return;
+            }
+        };
+
+        repopulate_tabs(s);
+        repopulate_menu(s);
+    };
+
+    if revert && session.path().is_some() {
+        then(siv, &path);
+    } else {
+        directory_picker(siv, "Select project directory", &path, then);
+    }
+}
+
 /// Process a user command to save the current session.
 ///
 /// The `overwrite` flag indicates if the user wants to overwrite the on-disk
@@ -89,39 +127,8 @@ pub fn repopulate_menu(siv: &mut Cursive) {
                     repopulate_menu(s);
                 })
                 .delimiter()
-                .leaf("Open...", |s| {
-                    let session = s
-                        .user_data::<SessionContext>()
-                        .expect("Session should exist");
-                    let mut path = env::current_dir().unwrap();
-                    if let Some(read_path) = session.read_from() {
-                        if read_path.is_absolute() {
-                            path = read_path.to_path_buf();
-                        } else {
-                            path = path.join(read_path);
-                        }
-                    }
-
-                    while !path.is_dir() && path.parent().is_some() {
-                        path = path.parent().unwrap().to_path_buf();
-                    }
-
-                    directory_picker(s, "Select project directory", &path, |s, path| {
-                        let new_session =
-                            SessionContext::from_filename(path.join("retrogram.json"));
-
-                        match new_session {
-                            Ok(new_session) => s.set_user_data(new_session),
-                            Err(e) => {
-                                s.add_layer(error_dialog(e));
-                                return;
-                            }
-                        };
-
-                        repopulate_tabs(s);
-                        repopulate_menu(s);
-                    });
-                })
+                .leaf("Open...", |s| load_intent(s, false))
+                .leaf("Revert", |s| load_intent(s, true))
                 .leaf("Save", |s| save_intent(s, true))
                 .leaf("Save as...", |s| save_intent(s, false))
                 .delimiter()
