@@ -114,7 +114,7 @@ impl Mapper for MBC1Mapper {
         byte: Symbolic<sm83::Data>,
         state: &mut State<sm83::SM83>,
     ) -> bool {
-        if ptr >= 0x2000 && ptr <= 0x3FFF {
+        if (0x2000..=0x3FFF).contains(&ptr) {
             let byte = match byte.into_concrete() {
                 Some(0x00) => Symbolic::from(0x01),
                 Some(0x20) => Symbolic::from(0x21),
@@ -176,7 +176,7 @@ impl Mapper for MBC2Mapper {
         byte: Symbolic<sm83::Data>,
         state: &mut State<sm83::SM83>,
     ) -> bool {
-        if ptr >= 0x2000 && ptr <= 0x3FFF && ptr & 0x0100 != 0 {
+        if (0x2000..=0x3FFF).contains(&ptr) && ptr & 0x0100 != 0 {
             state.set_platform_context(
                 "R",
                 Symbolic::<u64>::convert_from(byte) & self.context_mask().into(),
@@ -228,7 +228,7 @@ impl Mapper for MBC3Mapper {
         byte: Symbolic<sm83::Data>,
         state: &mut State<sm83::SM83>,
     ) -> bool {
-        if ptr >= 0x2000 && ptr <= 0x3FFF {
+        if (0x2000..=0x3FFF).contains(&ptr) {
             let byte = match byte.into_concrete() {
                 Some(0x00) => Symbolic::from(0x01),
                 _ => byte,
@@ -285,14 +285,14 @@ impl Mapper for MBC5Mapper {
         byte: Symbolic<sm83::Data>,
         state: &mut State<sm83::SM83>,
     ) -> bool {
-        if ptr >= 0x2000 && ptr <= 0x2FFF {
+        if (0x2000..=0x2FFF).contains(&ptr) {
             let old_data = state.get_platform_context("R") & Symbolic::from(0x100);
             state.set_platform_context(
                 "R",
                 old_data | Symbolic::<u64>::convert_from(byte) & self.context_mask().into(),
             );
             return true;
-        } else if ptr >= 0x3000 && ptr <= 0x3FFF {
+        } else if (0x3000..=0x3FFF).contains(&ptr) {
             let old_data = state.get_platform_context("R") & Symbolic::from(0x0FF);
             state.set_platform_context(
                 "R",

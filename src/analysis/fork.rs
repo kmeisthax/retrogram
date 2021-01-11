@@ -90,7 +90,7 @@ where
 
         for state in state_list {
             fork_list.push(Fork {
-                num_branches: num_branches + (2.0 as f64).powf(addl_branch_bits),
+                num_branches: num_branches + (2.0_f64).powf(addl_branch_bits),
                 pc: pc.clone(),
                 pre_state: state,
                 trace: trace.clone(),

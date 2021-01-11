@@ -5,7 +5,6 @@ use crate::arch::sm83;
 use crate::arch::sm83::dis::{AbstractOperand, ALU_TARGET_MEM, ALU_TARGET_REGS};
 use crate::arch::sm83::{Bus, Prerequisite, PtrVal, Register, State};
 use std::collections::HashSet;
-use std::iter::FromIterator;
 
 /// Return a prerequisite list for an instruction that reads or writes the
 /// address situated in the opcode of this instruction.
@@ -239,7 +238,7 @@ pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(HashSet<Prer
     };
 
     match ret {
-        Ok((preqs, is_complete)) => Ok((HashSet::from_iter(preqs.into_iter()), is_complete)),
+        Ok((preqs, is_complete)) => Ok((preqs.into_iter().collect(), is_complete)),
         Err(e) => Err(e),
     }
 }

@@ -278,7 +278,7 @@ where
     }
 
     /// Iterate the list of instruction offsets within this block.
-    pub fn instr_offsets<'a>(&'a self) -> impl 'a + Iterator<Item = AR::Offset> {
+    pub fn instr_offsets(&self) -> impl '_ + Iterator<Item = AR::Offset> {
         self.instr_offsets.iter().cloned()
     }
 

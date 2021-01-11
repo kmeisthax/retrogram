@@ -60,11 +60,11 @@ impl Popcount for u24 {
     type Output = u24;
 
     fn pop_count(mut self) -> Self::Output {
-        self -= (self >> 1) & u24::try_from(0x55_5555 as u32).unwrap();
-        self = (self & u24::try_from(0x33_3333 as u32).unwrap())
-            + ((self >> 2) & u24::try_from(0x33_3333 as u32).unwrap());
-        self = (self + (self >> 4)) & u24::try_from(0x0F_0F0F as u32).unwrap();
-        self.wrapping_mul(u24::try_from(0x01_0101 as u32).unwrap()) >> 16
+        self -= (self >> 1) & u24::try_from(0x55_5555_u32).unwrap();
+        self = (self & u24::try_from(0x33_3333_u32).unwrap())
+            + ((self >> 2) & u24::try_from(0x33_3333_u32).unwrap());
+        self = (self + (self >> 4)) & u24::try_from(0x0F_0F0F_u32).unwrap();
+        self.wrapping_mul(u24::try_from(0x01_0101_u32).unwrap()) >> 16
     }
 
     fn depop_count(self) -> Self::Output {

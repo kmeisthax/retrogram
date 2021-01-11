@@ -85,7 +85,7 @@ impl AnnotatedText {
     ///
     /// All text written into the writer will be assigned the given annotation
     /// kind.
-    pub fn as_annotated_writer<'a>(&'a mut self, kind: AnnotationKind) -> impl 'a + Write {
+    pub fn as_annotated_writer(&mut self, kind: AnnotationKind) -> impl '_ + Write {
         self.change_annotation(kind);
 
         &mut self.text
@@ -97,9 +97,9 @@ impl AnnotatedText {
     }
 
     /// Iterate annotations
-    pub fn iter_annotations<'a>(
-        &'a self,
-    ) -> impl 'a + Iterator<Item = AnyResult<(&'a str, AnnotationKind), Utf8Error>> {
+    pub fn iter_annotations(
+        &self,
+    ) -> impl Iterator<Item = AnyResult<(&str, AnnotationKind), Utf8Error>> {
         let mut last_annotation_start = 0;
 
         self.annotations.iter().enumerate().map(move |(i, a)| {

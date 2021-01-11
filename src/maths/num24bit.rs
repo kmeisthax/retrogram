@@ -196,7 +196,7 @@ binary_op_masked_impl!(u24, isize, Shr, shr, 0xFF_FFFF);
 
 boundwidth_impl!(u24, u8, 24);
 boundwidth_impl!(u24, u16, 24);
-boundwidth_impl!(u24, u24, u24::from(24 as u16));
+boundwidth_impl!(u24, u24, u24::from(24_u16));
 boundwidth_impl!(u24, u32, 24);
 boundwidth_impl!(u24, u64, 24);
 boundwidth_impl!(u24, u128, 24);

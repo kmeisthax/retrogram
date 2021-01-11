@@ -341,7 +341,7 @@ fn test_symbolic_iter_unsatisfiable() {
 
 #[test]
 fn test_symbolic_iter_concrete() {
-    let sym_value = reg::Symbolic::from(0x3F as u8);
+    let sym_value = reg::Symbolic::from(0x3F_u8);
     let mut sym_iter = sym_value.valid();
 
     assert_eq!(sym_iter.next(), Some(0x3F));

@@ -125,9 +125,7 @@ where
     /// Yields a list of tuples of booleans, strings, and context values. The
     /// boolean indicates if the context is architectural or no; the string is
     /// the context key, and the value is the context value.
-    pub fn iter_contexts<'a>(
-        &'a self,
-    ) -> impl Iterator<Item = (bool, &'a str, &'a reg::Symbolic<CV>)> + 'a {
+    pub fn iter_contexts(&self) -> impl Iterator<Item = (bool, &str, &reg::Symbolic<CV>)> {
         self.context
             .iter()
             .map(|(k, v)| (k.starts_with('A'), &k[1..], v))

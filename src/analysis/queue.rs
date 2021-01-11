@@ -335,9 +335,9 @@ where
                 extra_branch_bits += pr.necessary_forks(&post_state, &context.bus) as f64;
             }
 
-            let extra_branches = (2.0 as f64).powf(extra_branch_bits);
+            let extra_branches = (2.0_f64).powf(extra_branch_bits);
 
-            if (branches + extra_branches) > (2.0 as f64).powf(5.0) {
+            if (branches + extra_branches) > (2.0_f64).powf(5.0) {
                 //TODO: better heuristic please
                 //TODO: this should retrieve the block's total fork score
                 //TODO: what happens if we overtrace a block (say a utility fn)

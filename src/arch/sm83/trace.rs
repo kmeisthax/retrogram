@@ -223,9 +223,9 @@ where
 fn carry_flag_u9(val: reg::Symbolic<u16>) -> reg::Symbolic<u8> {
     let carry_bit = val & reg::Symbolic::from(0x100);
     match (carry_bit.into_concrete(), carry_bit.is_valid(0x100)) {
-        (Some(0), _) => reg::Symbolic::from(0 as u8),
-        (Some(_), _) => reg::Symbolic::from(0x10 as u8),
-        (None, true) => reg::Symbolic::from_cares(0 as u8, 0xEF as u8),
+        (Some(0), _) => reg::Symbolic::from(0_u8),
+        (Some(_), _) => reg::Symbolic::from(0x10_u8),
+        (None, true) => reg::Symbolic::from_cares(0_u8, 0xEF_u8),
         (None, false) => reg::Symbolic::from(0),
     }
 }
@@ -265,51 +265,47 @@ fn aluop(
     operand: reg::Symbolic<u8>,
     flags: reg::Symbolic<u8>,
 ) -> sm83::Result<(reg::Symbolic<u8>, reg::Symbolic<u8>)> {
-    let old_carry: reg::Symbolic<u8> = flags & (reg::Symbolic::from(0x10 as u8) >> 4);
-    let old_halfcarry: reg::Symbolic<u8> = flags & (reg::Symbolic::from(0x20 as u8) >> 5);
-    let _old_nflag: reg::Symbolic<u8> = flags & (reg::Symbolic::from(0x40 as u8) >> 6);
+    let old_carry: reg::Symbolic<u8> = flags & (reg::Symbolic::from(0x10_u8) >> 4);
+    let old_halfcarry: reg::Symbolic<u8> = flags & (reg::Symbolic::from(0x20_u8) >> 5);
+    let _old_nflag: reg::Symbolic<u8> = flags & (reg::Symbolic::from(0x40_u8) >> 6);
     let wide_carry: reg::Symbolic<u16> = reg::Symbolic::convert_from(old_carry);
     let wide_a: reg::Symbolic<u16> = reg::Symbolic::convert_from(a);
     let wide_op: reg::Symbolic<u16> = reg::Symbolic::convert_from(operand);
 
     let (new_halfcarry, new_nflag, wide_result) = match aluop {
-        0 => (
-            reg::Symbolic::from(0 as u8),
-            old_halfcarry,
-            wide_a + wide_op,
-        ), //add
+        0 => (reg::Symbolic::from(0_u8), old_halfcarry, wide_a + wide_op), //add
         1 => (
-            reg::Symbolic::from(0 as u8),
+            reg::Symbolic::from(0_u8),
             old_halfcarry,
             wide_a + wide_op + wide_carry,
         ), //adc
         2 => (
-            reg::Symbolic::from(1 as u8),
+            reg::Symbolic::from(1_u8),
             old_halfcarry,
             wide_a + !(wide_op + reg::Symbolic::from(1)),
         ), //sub
         3 => (
-            reg::Symbolic::from(1 as u8),
+            reg::Symbolic::from(1_u8),
             old_halfcarry,
             wide_a + !((wide_op + wide_carry) + reg::Symbolic::from(1)),
         ), //sbc
         4 => (
-            reg::Symbolic::from(0 as u8),
-            reg::Symbolic::from(1 as u8),
+            reg::Symbolic::from(0_u8),
+            reg::Symbolic::from(1_u8),
             wide_a & wide_op,
         ), //and
         5 => (
-            reg::Symbolic::from(0 as u8),
-            reg::Symbolic::from(0 as u8),
+            reg::Symbolic::from(0_u8),
+            reg::Symbolic::from(0_u8),
             wide_a ^ wide_op,
         ), //xor
         6 => (
-            reg::Symbolic::from(0 as u8),
-            reg::Symbolic::from(0 as u8),
+            reg::Symbolic::from(0_u8),
+            reg::Symbolic::from(0_u8),
             wide_a | wide_op,
         ), //or
         7 => (
-            reg::Symbolic::from(1 as u8),
+            reg::Symbolic::from(1_u8),
             old_halfcarry,
             wide_a + !(wide_op + reg::Symbolic::from(1)),
         ), //cp
@@ -586,9 +582,9 @@ fn trace_sp_adjust(p: PtrVal, mem: &Bus, mut state: State, trace: &mut Trace) ->
     let new_sp = (hi_sp << 8 | lo_sp) + adjust;
 
     let hi_new_sp: reg::Symbolic<u8> =
-        reg::Symbolic::try_convert_from(new_sp >> 8 as u8).expect("Edit:");
+        reg::Symbolic::try_convert_from(new_sp >> 8_u8).expect("Edit:");
     let lo_new_sp: reg::Symbolic<u8> =
-        reg::Symbolic::try_convert_from(new_sp & reg::Symbolic::from(0xFF as u16))
+        reg::Symbolic::try_convert_from(new_sp & reg::Symbolic::from(0xFF_u16))
             .expect("Downvotes, really?");
 
     trace.register_set(Register::S, hi_new_sp, &mut state);
@@ -625,10 +621,10 @@ fn trace_sp_offset_calc(
     trace: &mut Trace,
 ) -> sm83::Result<State> {
     let r8: reg::Symbolic<u16> = reg::Symbolic::convert_from(mem.read_unit_stateful(p + 1, &state));
-    let sign = match (r8 & reg::Symbolic::from(0x0080 as u16)).into_concrete() {
-        Some(0x80) => reg::Symbolic::from(0xFF80 as u16),
-        Some(0x00) => reg::Symbolic::from(0x0000 as u16),
-        _ => reg::Symbolic::from_cares(0 as u16, 0x007F as u16),
+    let sign = match (r8 & reg::Symbolic::from(0x0080_u16)).into_concrete() {
+        Some(0x80) => reg::Symbolic::from(0xFF80_u16),
+        Some(0x00) => reg::Symbolic::from(0x0000_u16),
+        _ => reg::Symbolic::from_cares(0_u16, 0x007F_u16),
     };
     let offset = sign | r8;
     let s: reg::Symbolic<u16> = reg::Symbolic::convert_from(state.get_register(&Register::S));
@@ -637,9 +633,8 @@ fn trace_sp_offset_calc(
     let hl = sp + offset;
     let h: reg::Symbolic<u8> =
         reg::Symbolic::try_convert_from(hl >> 8).map_err(|_| analysis::Error::BlockSizeOverflow)?;
-    let l: reg::Symbolic<u8> =
-        reg::Symbolic::try_convert_from(hl & reg::Symbolic::from(0xFF as u16))
-            .map_err(|_| analysis::Error::BlockSizeOverflow)?;
+    let l: reg::Symbolic<u8> = reg::Symbolic::try_convert_from(hl & reg::Symbolic::from(0xFF_u16))
+        .map_err(|_| analysis::Error::BlockSizeOverflow)?;
 
     trace.register_set(Register::H, h, &mut state);
     trace.register_set(Register::L, l, &mut state);

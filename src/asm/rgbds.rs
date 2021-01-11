@@ -77,14 +77,14 @@ impl Assembler for RGBDS {
         section_name: &str,
         where_to: &Pointer<<Self::Literal as ast::Literal>::PtrVal>,
     ) -> Result<()> {
-        if *where_to.as_pointer() < 0x4000 as u16 {
+        if *where_to.as_pointer() < 0x4000_u16 {
             writeln!(
                 stream,
                 "SECTION \"{}\", ROM0[${:X}]",
                 section_name,
                 where_to.as_pointer()
             )
-        } else if *where_to.as_pointer() < 0x8000 as u16 {
+        } else if *where_to.as_pointer() < 0x8000_u16 {
             if let Some(bank) = where_to.get_platform_context("R").into_concrete() {
                 writeln!(
                     stream,
@@ -101,7 +101,7 @@ impl Assembler for RGBDS {
                     where_to.as_pointer()
                 )
             }
-        } else if *where_to.as_pointer() < 0xA000 as u16 {
+        } else if *where_to.as_pointer() < 0xA000_u16 {
             if let Some(bank) = where_to.get_platform_context("V").into_concrete() {
                 writeln!(
                     stream,
@@ -118,7 +118,7 @@ impl Assembler for RGBDS {
                     where_to.as_pointer()
                 )
             }
-        } else if *where_to.as_pointer() < 0xC000 as u16 {
+        } else if *where_to.as_pointer() < 0xC000_u16 {
             if let Some(bank) = where_to.get_platform_context("S").into_concrete() {
                 writeln!(
                     stream,
@@ -135,14 +135,14 @@ impl Assembler for RGBDS {
                     where_to.as_pointer()
                 )
             }
-        } else if *where_to.as_pointer() < 0xD000 as u16 {
+        } else if *where_to.as_pointer() < 0xD000_u16 {
             writeln!(
                 stream,
                 "SECTION \"{}\", WRAM0[${:X}]",
                 section_name,
                 where_to.as_pointer()
             )
-        } else if *where_to.as_pointer() < 0xE000 as u16 {
+        } else if *where_to.as_pointer() < 0xE000_u16 {
             if let Some(bank) = where_to.get_platform_context("W").into_concrete() {
                 writeln!(
                     stream,
