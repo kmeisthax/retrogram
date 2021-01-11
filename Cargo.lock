@@ -829,6 +829,7 @@ dependencies = [
  "lazy_static",
  "num 0.2.1",
  "num-traits",
+ "owning_ref",
  "rayon",
  "relative-path",
  "serde",

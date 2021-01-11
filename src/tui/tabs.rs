@@ -9,23 +9,54 @@ use crate::tui::error_dialog::error_dialog;
 use cursive::view::{Nameable, View};
 use cursive::Cursive;
 use cursive_tabs::TabPanel;
+use std::borrow::Borrow;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::{fmt, io};
 
+/// Names what kind of view a particular tab shows.
+pub enum TabViewType {
+    /// This tab contains a view of disassembled code.
+    DisassemblyView {
+        /// The program this disassembly view is displaying.
+        program: Box<dyn AnyProgramContext>,
+    },
+}
+
+impl Clone for TabViewType {
+    fn clone(&self) -> Self {
+        match self {
+            TabViewType::DisassemblyView { program } => TabViewType::DisassemblyView {
+                program: program.duplicate(),
+            },
+        }
+    }
+}
+
 /// Information about a particular open tab.
 #[derive(Clone)]
 pub struct TabHandle {
-    /// The program this tab is associated with.
-    program: Program,
+    /// What view this tab contains.
+    view_type: TabViewType,
 
-    /// A nonce to separate multiple tabs open and viewing the same program.
+    /// A nonce to separate multiple otherwise-identical tabs.
     nonce: u64,
 }
 
 impl PartialEq for TabHandle {
     fn eq(&self, rhs: &Self) -> bool {
-        self.program.as_name() == rhs.program.as_name() && self.nonce == rhs.nonce
+        let view = match (&self.view_type, &rhs.view_type) {
+            (
+                TabViewType::DisassemblyView {
+                    program: self_program,
+                },
+                TabViewType::DisassemblyView {
+                    program: rhs_program,
+                },
+            ) => (self_program.as_program_name() == rhs_program.as_program_name()),
+        };
+
+        view && (self.nonce == rhs.nonce)
     }
 }
 
@@ -33,20 +64,34 @@ impl Eq for TabHandle {}
 
 impl Hash for TabHandle {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.program.as_name().hash(state);
+        match &self.view_type {
+            TabViewType::DisassemblyView { program } => {
+                "DisassemblyView".hash(state);
+                program.as_program_name().hash(state);
+            }
+        };
+
         self.nonce.hash(state);
     }
 }
 
 impl Display for TabHandle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.program.as_name().unwrap_or("?"))
+        match &self.view_type {
+            TabViewType::DisassemblyView { program } => {
+                write!(f, "Disasm View ({})", program.as_program_name())
+            }
+        }
     }
 }
 
 impl TabHandle {
-    fn from_program(program: Program, nonce: u64) -> Self {
-        Self { program, nonce }
+    /// Create a handle for a disassembly view of a particular program.
+    fn disasm_from_program(program: Box<dyn AnyProgramContext>, nonce: u64) -> Self {
+        Self {
+            view_type: TabViewType::DisassemblyView { program },
+            nonce,
+        }
     }
 
     /// Calculate a string form of this handle to use as the view name of any
@@ -55,26 +100,28 @@ impl TabHandle {
     /// This is separate from the `Display` impl so that we can just have the
     /// program title in the tab.
     fn to_view_name(&self) -> String {
-        format!(
-            "tab_{}_{}",
-            self.program.as_name().unwrap_or(""),
-            self.nonce
-        )
+        match &self.view_type {
+            TabViewType::DisassemblyView { program } => {
+                format!("tab_disasm_{}_{}", program.as_program_name(), self.nonce)
+            }
+        }
     }
 
-    pub fn program(&self) -> &Program {
-        &self.program
+    pub fn program(&mut self) -> Option<impl '_ + Borrow<Program>> {
+        match &mut self.view_type {
+            TabViewType::DisassemblyView { program } => Some(program.as_program()),
+        }
     }
 }
 
 /// Construct a new disassembly tab for a given program and add it to the TUI
-fn tab_zygote(
+fn disasm_tab_zygote(
     context: &mut dyn AnyProgramContext,
     panel: &mut TabPanel<TabHandle>,
     nonce: u64,
 ) -> io::Result<()> {
     with_context_architecture!(context, |context, arch, asm| {
-        let handle = TabHandle::from_program(context.program().clone(), nonce);
+        let handle = TabHandle::disasm_from_program(context.duplicate(), nonce);
         let name = handle.to_view_name();
 
         panel.add_tab(
@@ -120,6 +167,7 @@ pub fn repopulate_tabs(siv: &mut Cursive) {
     let program_names = siv
         .with_user_data(|session: &mut SessionContext| {
             let programs = session
+                .project()
                 .iter_programs()
                 .map(|(k, _v)| k.to_string())
                 .collect::<Vec<String>>();
@@ -140,7 +188,7 @@ pub fn repopulate_tabs(siv: &mut Cursive) {
             Err(e) => errors.push(e),
             Ok(mut ctxt) => {
                 siv.call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
-                    if let Err(e) = tab_zygote(&mut *ctxt, v, nonce) {
+                    if let Err(e) = disasm_tab_zygote(&mut *ctxt, v, nonce) {
                         errors.push(e);
                     }
                 });

@@ -9,6 +9,7 @@ use crate::tui::tabs::{call_on_tab, repopulate_tabs, TabHandle};
 use cursive::menu::MenuTree;
 use cursive::Cursive;
 use cursive_tabs::TabPanel;
+use std::borrow::Borrow;
 use std::path::Path;
 use std::{env, fs};
 
@@ -19,14 +20,14 @@ fn load_intent(siv: &mut Cursive, revert: bool) {
     let session = siv
         .user_data::<SessionContext>()
         .expect("Session should exist");
-    let path = match session.project().implicit_path() {
+    let res = session.project().implicit_path().map(|p| p.into_owned());
+    let path = match res {
         Ok(p) => p,
         Err(e) => {
             siv.add_layer(error_dialog(e));
             return;
         }
-    }
-    .into_owned();
+    };
 
     let then = |s: &mut Cursive, path: &Path| {
         let new_session = SessionContext::from_filename(path.join("retrogram.json"));
@@ -59,20 +60,21 @@ fn save_intent(siv: &mut Cursive, overwrite: bool) {
         .user_data::<SessionContext>()
         .expect("Session should exist");
     let read_path = if overwrite {
-        session.path().map(|p| p.to_path_buf())
+        session.path().map(|p| p.borrow().to_path_buf())
     } else {
         None
     };
 
     let then = |s: &mut Cursive, project_path: &Path| {
-        let session = s
-            .user_data::<SessionContext>()
-            .expect("Session should exist");
         let mut project_file_path = project_path.to_path_buf();
 
         project_file_path.push("retrogram.json");
 
-        if let Err(e) = session.project_mut().write(project_file_path) {
+        let session = s
+            .user_data::<SessionContext>()
+            .expect("Session should exist");
+        let res = session.project_mut().write(project_file_path);
+        if let Err(e) = res {
             s.add_layer(error_dialog(e));
             return;
         }
@@ -144,18 +146,19 @@ pub fn repopulate_menu(siv: &mut Cursive) {
                         })
                         .flatten();
 
-                    if let Some(handle) = handle {
-                        let program = handle.program();
+                    if let Some(mut handle) = handle {
+                        if let Some(program) = handle.program().map(|p| p.borrow().clone()) {
+                            let borrow = &program;
+                            with_prog_architecture!(borrow, |_plat, arch, asm| {
+                                call_on_tab(arch, asm, s, &handle, |v| {
+                                    v.declare_code();
+                                })
+                                .unwrap();
 
-                        with_prog_architecture!(program, |_plat, arch, asm| {
-                            call_on_tab(arch, asm, s, &handle, |v| {
-                                v.declare_code();
+                                Ok(())
                             })
                             .unwrap();
-
-                            Ok(())
-                        })
-                        .unwrap();
+                        }
                     }
                 })
                 .leaf("Declare label...", |s| {
@@ -165,24 +168,26 @@ pub fn repopulate_menu(siv: &mut Cursive) {
                         })
                         .flatten();
 
-                    if let Some(handle) = handle {
-                        let program = handle.program();
+                    if let Some(mut handle) = handle {
+                        if let Some(program) = handle.program().map(|p| p.borrow().clone()) {
+                            let borrow = &program;
+                            with_prog_architecture!(borrow, |_plat, arch, asm| {
+                                let (mem, pjdb, prog_name) =
+                                    call_on_tab(arch, asm, s, &handle, |v| {
+                                        let mem = v.memory_location();
+                                        let pjdb = v.context().project_database();
+                                        let prog_name = v.context().program_name().to_string();
 
-                        with_prog_architecture!(program, |_plat, arch, asm| {
-                            let (mem, pjdb, prog_name) = call_on_tab(arch, asm, s, &handle, |v| {
-                                let mem = v.memory_location();
-                                let pjdb = v.context().project_database();
-                                let prog_name = v.context().program_name().to_string();
+                                        (mem, pjdb, prog_name)
+                                    })
+                                    .unwrap();
 
-                                (mem, pjdb, prog_name)
+                                label_dialog(arch, s, mem, pjdb, prog_name);
+
+                                Ok(())
                             })
                             .unwrap();
-
-                            label_dialog(arch, s, mem, pjdb, prog_name);
-
-                            Ok(())
-                        })
-                        .unwrap();
+                        }
                     }
                 }),
         )
@@ -195,22 +200,25 @@ pub fn repopulate_menu(siv: &mut Cursive) {
                     })
                     .flatten();
 
-                if let Some(handle) = handle {
-                    let program = handle.program();
+                if let Some(mut handle) = handle {
+                    if let Some(program) = handle.program().map(|p| p.borrow().clone()) {
+                        let borrow = &program;
+                        with_prog_architecture!(borrow, |_plat, arch, asm| {
+                            let context =
+                                call_on_tab(arch, asm, s, &handle, |v| v.context().clone())
+                                    .unwrap();
 
-                    with_prog_architecture!(program, |_plat, arch, asm| {
-                        let context =
-                            call_on_tab(arch, asm, s, &handle, |v| v.context().clone()).unwrap();
+                            jump_dialog(arch, s, &context, move |s, scroll| {
+                                call_on_tab(arch, asm, s, &handle, |v| v.scroll_to(scroll))
+                                    .unwrap();
 
-                        jump_dialog(arch, s, &context, move |s, scroll| {
-                            call_on_tab(arch, asm, s, &handle, |v| v.scroll_to(scroll)).unwrap();
+                                true
+                            });
 
-                            true
-                        });
-
-                        Ok(())
-                    })
-                    .unwrap();
+                            Ok(())
+                        })
+                        .unwrap();
+                    }
                 }
             }),
         );

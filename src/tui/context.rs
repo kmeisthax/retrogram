@@ -9,9 +9,12 @@ use crate::memory::{Memory, Pointer};
 use crate::platform::Platform;
 use crate::project::{Program, Project};
 use cursive::CbSink;
+use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRef, RwLockWriteGuardRefMut};
 use relative_path::{RelativePath, RelativePathBuf};
 use std::any::Any;
+use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, RwLock};
@@ -23,7 +26,7 @@ use std::{fs, io};
 /// Intended to be stored on a Cursive instance as user data.
 pub struct SessionContext {
     /// The current project definition.
-    project: Project,
+    project: Arc<RwLock<Project>>,
 
     /// All open databases connected to this project, keyed by database path.
     ///
@@ -42,7 +45,7 @@ impl SessionContext {
     /// Build an empty project.
     pub fn empty_session() -> Self {
         Self {
-            project: Project::new(),
+            project: Arc::new(RwLock::new(Project::new())),
             databases: HashMap::new(),
             contexts: HashMap::new(),
             tab_nonce: 0,
@@ -86,7 +89,7 @@ impl SessionContext {
         }
 
         Ok(Self {
-            project,
+            project: Arc::new(RwLock::new(project)),
             databases,
             contexts: HashMap::new(),
             tab_nonce: 0,
@@ -94,30 +97,29 @@ impl SessionContext {
     }
 
     /// Access the session's underlying project.
-    pub fn project(&self) -> &Project {
-        &self.project
+    pub fn project(&self) -> impl '_ + Deref<Target = Project> {
+        self.project.read().unwrap()
     }
 
     /// Access the session's underlying project for mutation.
-    pub fn project_mut(&mut self) -> &mut Project {
-        &mut self.project
-    }
-
-    /// Get the location that this session's project file was last written to.
-    ///
-    /// The returned path is guaranteed to be canonical and absolute.
-    ///
-    /// `None` indicates that the project has not yet been written to disk.
-    pub fn read_from(&self) -> Option<&Path> {
-        self.project.read_from()
+    pub fn project_mut(&mut self) -> impl '_ + DerefMut<Target = Project> {
+        self.project.write().unwrap()
     }
 
     /// Get the location that this session saves and loads relative paths to
     /// and from.
     ///
     /// `None` indicates that the session has not yet been written to disk.
-    pub fn path(&self) -> Option<&Path> {
-        self.project.path()
+    pub fn path(&self) -> Option<impl '_ + Borrow<Path>> {
+        RwLockReadGuardRef::new(self.project.read().unwrap())
+            .try_map(|p| p.path().ok_or(()))
+            .ok()
+    }
+
+    pub fn program(&mut self, name: &str) -> Option<impl '_ + Borrow<Program>> {
+        RwLockWriteGuardRefMut::new(self.project.write().unwrap())
+            .try_map(|p| p.program(name).ok_or(()))
+            .ok()
     }
 
     /// Open a program context to access the mutable state of a program with.
@@ -134,40 +136,41 @@ impl SessionContext {
             return Ok(self.contexts.get(program_name).unwrap().duplicate());
         }
 
-        let program = self.project.program(program_name).ok_or_else(|| {
+        let program = self.program(program_name).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("Program {} does not exist", program_name),
             )
         })?;
-        let program_db = self
-            .databases
-            .get(program.as_database_path())
-            .cloned()
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::NotFound,
-                    format!(
-                        "Unexpected database file {} encountered",
-                        program.as_database_path()
-                    ),
-                )
-            })?;
+        let db_path = program.borrow().as_database_path().to_relative_path_buf();
+        drop(program);
+
+        let program_db = self.databases.get(&db_path).cloned().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Unexpected database file {} encountered", db_path),
+            )
+        })?;
+
+        let child_project_ref = self.project.clone();
+        let program = self.program(program_name).unwrap();
         let image = program
+            .borrow()
             .iter_images()
             .next()
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Did not specify an image"))?;
         let mut file = fs::File::open(image)?;
-        let prog_borrow = &program;
+        let prog_borrow = &program.borrow();
 
-        with_prog_architecture!(prog_borrow, |plat, arch, asm| {
+        let new_context = with_prog_architecture!(prog_borrow, |plat, arch, asm| {
             let bus = plat.construct_platform(&mut file)?;
             let bus = Arc::new(bus);
 
             let (ctxt, recv) = ProgramContext::from_program_and_database(
                 arch,
                 asm,
-                program.clone(),
+                child_project_ref,
+                prog_borrow.as_name().unwrap_or("").to_string(),
                 program_db,
                 bus,
             );
@@ -190,17 +193,16 @@ impl SessionContext {
                 }
             });
 
-            self.contexts
-                .insert(program_name.to_string(), Box::new(ctxt));
+            let anyctxt: Box<dyn AnyProgramContext> = Box::new(ctxt);
 
-            Ok(())
+            Ok(anyctxt)
         })?;
 
-        Ok(self.contexts.get(program_name).unwrap().duplicate())
-    }
+        drop(program);
 
-    pub fn iter_programs(&self) -> impl Iterator<Item = (&str, &Program)> {
-        self.project.iter_programs()
+        self.contexts.insert(program_name.to_string(), new_context);
+
+        Ok(self.contexts.get(program_name).unwrap().duplicate())
     }
 
     pub fn iter_databases(
@@ -228,8 +230,11 @@ where
     /// The architecture being analyzed
     arch: AR,
 
-    /// The program configuration (as read in by retrogram.json).
-    program: Program,
+    /// The project this program belongs to.
+    project: Arc<RwLock<Project>>,
+
+    /// The ID of the program.
+    program: String,
 
     /// The project database file that contains the mutable analysis state for
     /// this program.
@@ -251,7 +256,8 @@ where
     pub fn from_program_and_database<ASM>(
         arch: AR,
         _asm: ASM,
-        program: Program,
+        project: Arc<RwLock<Project>>,
+        program: String,
         database: Arc<RwLock<ProjectDatabase>>,
         bus: Arc<Memory<AR>>,
     ) -> (Self, Receiver<Response<AR>>)
@@ -262,13 +268,14 @@ where
         let (command_sender, response_reciever) = start_analysis_queue::<ASM::Literal, AR>(
             arch,
             database.clone(),
-            program.as_name().unwrap_or("").to_string(),
+            program.clone(),
             bus.clone(),
         );
 
         (
             Self {
                 arch,
+                project,
                 program,
                 database,
                 bus,
@@ -278,12 +285,13 @@ where
         )
     }
 
-    pub fn program(&self) -> &Program {
-        &self.program
+    pub fn program(&mut self) -> RwLockWriteGuardRef<'_, Project, Program> {
+        RwLockWriteGuardRefMut::new(self.project.write().unwrap())
+            .map(|p| p.program(&self.program).unwrap())
     }
 
     pub fn program_name(&self) -> &str {
-        self.program.as_name().unwrap_or("")
+        &self.program
     }
 
     /// Get the memory model for this program context.
@@ -339,7 +347,10 @@ pub trait AnyProgramContext: Any + AnyArch {
     fn as_mut_any(&mut self) -> &mut dyn Any;
 
     /// Grab the program config for this context.
-    fn as_program(&self) -> &Program;
+    fn as_program(&mut self) -> RwLockWriteGuardRef<'_, Project, Program>;
+
+    /// Grab the program name for this context.
+    fn as_program_name(&self) -> &str;
 
     /// Copy this context.
     fn duplicate(&self) -> Box<dyn AnyProgramContext>;
@@ -357,8 +368,12 @@ where
         self
     }
 
-    fn as_program(&self) -> &Program {
-        &self.program
+    fn as_program(&mut self) -> RwLockWriteGuardRef<'_, Project, Program> {
+        self.program()
+    }
+
+    fn as_program_name(&self) -> &str {
+        self.program_name()
     }
 
     fn duplicate(&self) -> Box<dyn AnyProgramContext> {
@@ -386,7 +401,9 @@ where
 macro_rules! with_context_architecture {
     ($ctxt:ident, |$concrete_ctxt: ident, $arch:ident, $asm:ident| $callback:block) => {{
         let program = $ctxt.as_program();
-        with_prog_architecture!(program, |_plat, arch, asm| {
+        let borrow = &program;
+        let result = with_prog_architecture!(borrow, |_plat, arch, asm| {
+            drop(program);
             if let Some($concrete_ctxt) = crate::tui::context::downcast_context(arch, $ctxt) {
                 let $arch = arch;
                 let $asm = asm;
@@ -397,6 +414,8 @@ macro_rules! with_context_architecture {
                     "Unsupported architecture for program context.",
                 ))
             }
-        })
+        });
+
+        result
     }};
 }
