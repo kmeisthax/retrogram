@@ -1,10 +1,7 @@
 //! TUI menu tree utils
 
 use crate::tui::context::SessionContext;
-use crate::tui::error_dialog::error_dialog;
-use crate::tui::jump::jump_dialog;
-use crate::tui::label::label_dialog;
-use crate::tui::pickers::directory_picker;
+use crate::tui::dialog::{directory_picker, error_dialog, jump_dialog, label_dialog};
 use crate::tui::tabs::{call_on_tab, repopulate_tabs, TabHandle};
 use cursive::menu::MenuTree;
 use cursive::Cursive;
