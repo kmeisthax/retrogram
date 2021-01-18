@@ -8,7 +8,7 @@ use relative_path::{RelativePath, RelativePathBuf};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Program {
     platform: Option<PlatformName>,
     arch: Option<ArchName>,
@@ -104,12 +104,24 @@ impl Program {
         self.platform
     }
 
+    pub fn set_platform(&mut self, platform: PlatformName) {
+        self.platform = Some(platform);
+    }
+
     pub fn arch(&self) -> Option<ArchName> {
         self.arch
     }
 
+    pub fn set_arch(&mut self, arch: ArchName) {
+        self.arch = Some(arch);
+    }
+
     pub fn assembler(&self) -> Option<AssemblerName> {
         self.assembler
+    }
+
+    pub fn set_assembler(&mut self, asm: AssemblerName) {
+        self.assembler = Some(asm);
     }
 
     /// List all the image files related to a given program.

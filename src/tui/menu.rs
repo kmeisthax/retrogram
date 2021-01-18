@@ -1,7 +1,9 @@
 //! TUI menu tree utils
 
 use crate::tui::context::SessionContext;
-use crate::tui::dialog::{directory_picker, error_dialog, jump_dialog, label_dialog};
+use crate::tui::dialog::{
+    directory_picker, error_dialog, jump_dialog, label_dialog, program_config_dialog,
+};
 use crate::tui::tabs::{call_on_tab, repopulate_tabs, TabHandle};
 use cursive::menu::MenuTree;
 use cursive::Cursive;
@@ -117,7 +119,7 @@ pub fn repopulate_menu(siv: &mut Cursive) {
     siv.menubar().clear();
     siv.menubar()
         .add_subtree(
-            "File",
+            "Project",
             MenuTree::new()
                 .leaf("New", |s| {
                     s.set_user_data(SessionContext::empty_session());
@@ -130,6 +132,10 @@ pub fn repopulate_menu(siv: &mut Cursive) {
                 .leaf("Revert", |s| load_intent(s, true))
                 .leaf("Save", |s| save_intent(s, true))
                 .leaf("Save as...", |s| save_intent(s, false))
+                .delimiter()
+                .leaf("Add Program...", |s| {
+                    program_config_dialog(s, Default::default(), |_s, _p| {})
+                })
                 .delimiter()
                 .leaf("Exit", |s| s.quit()),
         )

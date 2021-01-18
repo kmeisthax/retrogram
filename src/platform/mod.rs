@@ -15,7 +15,7 @@ use serde::Serialize;
 use std::str;
 
 /// Enumeration of all platforms that ship with Retrogram.
-#[derive(Copy, Clone, Serialize, Debug)]
+#[derive(Copy, Clone, Serialize, Debug, PartialEq, Eq)]
 pub enum PlatformName {
     GB,
     AGB,
@@ -30,6 +30,19 @@ impl PlatformName {
         match self {
             PlatformName::GB => Some(arch::ArchName::SM83),
             PlatformName::AGB => Some(arch::ArchName::AARCH32),
+        }
+    }
+
+    /// Iterate all valid platform names.
+    pub fn iter() -> impl IntoIterator<Item = PlatformName> {
+        vec![Self::GB, Self::AGB]
+    }
+
+    /// Yield a name for this platform.
+    pub fn friendly_name(self) -> &'static str {
+        match self {
+            Self::GB => "Game Boy",
+            Self::AGB => "Game Boy Advance",
         }
     }
 }

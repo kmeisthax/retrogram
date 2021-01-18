@@ -28,7 +28,10 @@ pub struct Builder<S> {
     content: LastSizeView<BoxedView>,
 }
 
-impl<S> Builder<S> where S: PartialEq + Clone {
+impl<S> Builder<S>
+where
+    S: PartialEq + Clone,
+{
     /// Construct a new builder view around a given function.
     ///
     /// This is only viable if your choice of state structure provides an

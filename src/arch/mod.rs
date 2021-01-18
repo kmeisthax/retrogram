@@ -50,7 +50,7 @@ use serde::Serialize;
 use std::str;
 
 /// Enumeration of all architectures that ship with Retrogram.
-#[derive(Copy, Clone, Serialize, Debug)]
+#[derive(Copy, Clone, Serialize, Debug, PartialEq, Eq)]
 pub enum ArchName {
     SM83,
     AARCH32,
@@ -72,6 +72,22 @@ impl ArchName {
 
             #[cfg(test)]
             ArchName::TEST => None,
+        }
+    }
+
+    /// Iterate all supported architectures.
+    pub fn iter() -> impl IntoIterator<Item = Self> {
+        vec![Self::SM83, Self::AARCH32]
+    }
+
+    /// Yield a human-friendly name for this architecture.
+    pub fn friendly_name(self) -> &'static str {
+        match self {
+            Self::SM83 => "SM83 (LR35902 / \"Game Boy\" Z80)",
+            Self::AARCH32 => "ARM Architecture 32-bit",
+
+            #[cfg(test)]
+            Self::TEST => "Test Architecture",
         }
     }
 }
