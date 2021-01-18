@@ -13,7 +13,7 @@ impl<S, FN> BuilderFn<S> for FN where FN: Fn(&S) -> BoxedView + 'static {}
 /// Rebuildable view with associated state.
 ///
 /// A `Builder` is a view that holds state and can be rebuilt by calling a
-/// builder function, which generates a new view hierarchy to
+/// builder function, which generates a new view hierarchy to display.
 pub struct Builder<S> {
     /// The view state.
     state: S,
@@ -28,7 +28,7 @@ pub struct Builder<S> {
     content: LastSizeView<BoxedView>,
 }
 
-impl<S> Builder<S> {
+impl<S> Builder<S> where S: PartialEq + Clone {
     /// Construct a new builder view around a given function.
     ///
     /// This is only viable if your choice of state structure provides an
@@ -72,9 +72,13 @@ impl<S> Builder<S> {
     where
         M: FnOnce(&mut S),
     {
+        let old_state = self.state.clone();
+
         mutator(&mut self.state);
 
-        self.rebuild();
+        if old_state != self.state {
+            self.rebuild();
+        }
     }
 }
 
