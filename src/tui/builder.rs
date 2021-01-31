@@ -2,7 +2,7 @@
 
 use cursive::direction::Direction;
 use cursive::event::{AnyCb, Event, EventResult};
-use cursive::view::Selector;
+use cursive::view::{Selector, ViewNotFound};
 use cursive::views::{BoxedView, LastSizeView};
 use cursive::{Printer, Rect, View, XY};
 
@@ -113,7 +113,7 @@ where
         self.content.call_on_any(selector, then)
     }
 
-    fn focus_view(&mut self, selector: &Selector) -> Result<(), ()> {
+    fn focus_view(&mut self, selector: &Selector) -> Result<(), ViewNotFound> {
         self.content.focus_view(selector)
     }
 

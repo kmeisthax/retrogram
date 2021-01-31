@@ -5,6 +5,7 @@ use crate::database::ProjectDatabase;
 use crate::platform::Platform;
 use crate::project::{Program, Project};
 use crate::tui::context::program::{AnyProgramContext, ProgramContext};
+use cursive::event::Event;
 use cursive::CbSink;
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 use relative_path::{RelativePath, RelativePathBuf};
@@ -174,7 +175,7 @@ impl SessionContext {
                 match recv.recv() {
                     Ok(Response::Fence) => cb_sink
                         .send(Box::new(|siv| {
-                            siv.refresh();
+                            siv.on_event(Event::Refresh);
                         }))
                         .unwrap(),
 

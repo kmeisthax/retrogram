@@ -483,25 +483,25 @@ where
             Event::Key(Key::Up) if self.lock_focus => {
                 self.cursor_up();
                 EventResult::Consumed(Some(Callback::from_fn(|s| {
-                    s.refresh();
+                    s.on_event(Event::Refresh);
                 })))
             }
             Event::Key(Key::PageUp) if self.lock_focus => {
                 self.page_up();
                 EventResult::Consumed(Some(Callback::from_fn(|s| {
-                    s.refresh();
+                    s.on_event(Event::Refresh);
                 })))
             }
             Event::Key(Key::Down) if self.lock_focus => {
                 self.cursor_down();
                 EventResult::Consumed(Some(Callback::from_fn(|s| {
-                    s.refresh();
+                    s.on_event(Event::Refresh);
                 })))
             }
             Event::Key(Key::PageDown) if self.lock_focus => {
                 self.page_down();
                 EventResult::Consumed(Some(Callback::from_fn(|s| {
-                    s.refresh();
+                    s.on_event(Event::Refresh);
                 })))
             }
             Event::Key(Key::Esc) if self.lock_focus => {

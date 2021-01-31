@@ -1,7 +1,6 @@
 //! TUI File Picker
 
-use crate::tui::builder::Builder;
-use cursive::event::{Callback, EventResult, Key};
+use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::view::{Nameable, Resizable};
 use cursive::views::{
     BoxedView, Dialog, LinearLayout, OnEventView, Panel, ScrollView, SelectView, TextArea,
@@ -92,7 +91,7 @@ pub fn directory_picker<THEN>(
                     })
                 });
 
-                s.refresh();
+                s.on_event(Event::Refresh);
             };
             let directory_list = match directory_tree(path, on_change) {
                 Ok(directory_list) => directory_list,
@@ -139,7 +138,7 @@ pub fn directory_picker<THEN>(
                                             },
                                         );
 
-                                        s.refresh();
+                                        s.on_event(Event::Refresh);
                                     }))))
                                 },
                             ),

@@ -5,6 +5,7 @@ use crate::asm::AssemblerName;
 use crate::platform::PlatformName;
 use crate::project::Program;
 use crate::tui::builder::Builder;
+use cursive::event::Event;
 use cursive::event::{Callback, EventResult, Key};
 use cursive::view::{Nameable, View};
 use cursive::views::{
@@ -105,7 +106,7 @@ where
                                         },
                                     );
 
-                                    s.refresh();
+                                    s.on_event(Event::Refresh);
                                 },
                             ))
                             .on_pre_event_inner(
@@ -138,7 +139,7 @@ where
                                                     },
                                                 );
 
-                                                s.refresh();
+                                                s.on_event(Event::Refresh);
                                             },
                                         ))))
                                     } else {
@@ -158,7 +159,7 @@ where
                                 },
                             );
 
-                            s.refresh();
+                            s.on_event(Event::Refresh);
                         }))
                         .child(TextView::new("Platform"))
                         .child(platform_selector(program.platform(), |s, new_pf| {
@@ -171,7 +172,7 @@ where
                                 },
                             );
 
-                            s.refresh();
+                            s.on_event(Event::Refresh);
                         }))
                         .child(TextView::new("Assembler Syntax"))
                         .child(asm_selector(program.assembler(), |s, new_asm| {
@@ -184,7 +185,7 @@ where
                                 },
                             );
 
-                            s.refresh();
+                            s.on_event(Event::Refresh);
                         })),
                 )
                 .title("")
