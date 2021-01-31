@@ -1,26 +1,58 @@
 //! TUI File Picker
 
 use crate::tui::builder::{BoxedMergeable, Builder};
-use cursive::event::{Callback, Event, EventResult, Key};
+use cursive::event::Event;
 use cursive::view::{Nameable, Resizable};
-use cursive::views::{Dialog, LinearLayout, OnEventView, Panel, ScrollView, SelectView, TextArea};
+use cursive::views::{Dialog, EditView, LinearLayout, OnEventView, Panel, ScrollView, SelectView};
 use cursive::Cursive;
 use std::fs::read_dir;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf, Prefix};
 
 /// Construct a directory tree selector.
+///
+/// This directory selector goes through great pains to avoid yielding an error
+/// when the user types an invalid path. It will assume the path has not yet
+/// been completed, and instead continue with the longest valid subset of the
+/// path. If the path is completely invalid, then an empty select view is
+/// shown.
+///
+/// UNC paths are always treated as invalid to avoid locking up the UI thread
+/// by trying to connect remote servers that don't exist.
 #[allow(clippy::needless_collect)]
 fn directory_tree<P: AsRef<Path>, CHANGE>(
-    path: P,
+    maybe_good_path: P,
     on_change: CHANGE,
 ) -> io::Result<SelectView<PathBuf>>
 where
     CHANGE: Fn(&mut Cursive, &PathBuf) + 'static,
 {
+    let mut known_good_path = maybe_good_path.as_ref();
+    if let Some(Component::Prefix(prefix)) = known_good_path.components().next() {
+        if !matches!(prefix.kind(), Prefix::Disk(_))
+            && !matches!(prefix.kind(), Prefix::VerbatimDisk(_))
+        {
+            return Ok(SelectView::new());
+        }
+    } else {
+        return Ok(SelectView::new());
+    }
+
+    while let Err(e) = read_dir(known_good_path) {
+        if e.kind() == io::ErrorKind::NotFound {
+            if let Some(parent) = known_good_path.parent() {
+                known_good_path = parent;
+            } else {
+                return Ok(SelectView::new());
+            }
+        } else {
+            return Err(e);
+        }
+    }
+
     let mut list = SelectView::new();
     let mut depth = 0;
-    let ancestors = path.as_ref().ancestors().collect::<Vec<_>>();
+    let ancestors = known_good_path.ancestors().collect::<Vec<_>>();
 
     for ancestor in ancestors.into_iter().rev() {
         if let Some(file_name) = ancestor.file_name() {
@@ -42,7 +74,7 @@ where
         }
     }
 
-    let directory = read_dir(path)?;
+    let directory = read_dir(known_good_path)?;
 
     for entry in directory {
         let entry = entry?;
@@ -115,33 +147,19 @@ pub fn directory_picker<THEN>(
             BoxedMergeable::boxed(
                 Dialog::around(
                     LinearLayout::vertical()
-                        .child(
-                            OnEventView::new(
-                                TextArea::new()
-                                    .content(path.to_string_lossy())
-                                    .fixed_height(1),
-                            )
-                            .on_pre_event_inner(
-                                Key::Enter,
-                                |ta, _evt| {
-                                    let new_path = PathBuf::from(ta.get_inner().get_content());
+                        .child(EditView::new().content(path.to_string_lossy()).on_edit(
+                            |s, new_path, _pos| {
+                                let new_path = PathBuf::from(new_path);
 
-                                    Some(EventResult::Consumed(Some(Callback::from_fn(move |s| {
-                                        let new_path = new_path.clone();
-                                        s.call_on_name(
-                                            "file_picker",
-                                            move |v: &mut Builder<PathBuf>| {
-                                                v.with_state_mut(|pathbuf| {
-                                                    *pathbuf = new_path;
-                                                })
-                                            },
-                                        );
+                                s.call_on_name("file_picker", move |v: &mut Builder<PathBuf>| {
+                                    v.with_state_mut(|pathbuf| {
+                                        *pathbuf = new_path;
+                                    })
+                                });
 
-                                        s.on_event(Event::Refresh);
-                                    }))))
-                                },
-                            ),
-                        )
+                                s.on_event(Event::Refresh);
+                            },
+                        ))
                         .child(Panel::new(
                             ScrollView::new(directory_list.min_width(30))
                                 .scroll_y(true)
