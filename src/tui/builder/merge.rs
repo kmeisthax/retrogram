@@ -146,23 +146,7 @@ impl Mergeable for Dialog {
         to: Box<dyn Mergeable>,
     ) -> Option<Box<dyn Mergeable>> {
         if let (Some(from), Some(_)) = (from.downcast_ref::<Self>(), to.downcast_ref::<Self>()) {
-            //Ok, so this merge is particularly tricky because most of the
-            //things we'd want to copy from `to` are write-only properties,
-            //which means we need to keep `to` and merge our focus state onto
-            //it. However, we also need to merge the underlying content views
-            //in standard order. This poses some problems:
-            //
-            // 1. We can't take `self`'s content to move it into `to`, because
-            //    `merge` takes `&mut self`.
-            // 2. Taking `to`'s content will delete all of the padding and
-            //    title configuration that we wanted
-            //
-            //So instead we swap the contents of `self` and `to`'s boxes so
-            //that they hold nominal views we don't care about. We then merge
-            //the now-owned content and move it into `to`, and then return that
-            //as our new merged view.
-
-            let mut self_content = self.replace_content(TextView::new("test"));
+            let mut self_content = self.replace_content(TextView::new("test_from"));
 
             let mut boxed_to = if let Ok(to) = to.downcast::<Self>() {
                 to
@@ -186,6 +170,8 @@ impl Mergeable for Dialog {
                 if let Some(to) = inner_self_content.merge(from_content, inner_to_content) {
                     self_content = BoxedView::new(to.upcast_to_view());
                 }
+            } else {
+                self_content = BoxedView::new(boxed_to_content);
             }
 
             boxed_to.set_focus(self.focus());
