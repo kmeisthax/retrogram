@@ -3,11 +3,40 @@
 use crate::tui::builder::{BoxedMergeable, Builder};
 use cursive::event::Event;
 use cursive::view::{Nameable, Resizable};
-use cursive::views::{Dialog, EditView, LinearLayout, OnEventView, Panel, ScrollView, SelectView};
+use cursive::views::{Dialog, EditView, LinearLayout, Panel, ScrollView, SelectView};
 use cursive::Cursive;
 use std::fs::read_dir;
 use std::io;
 use std::path::{Component, Path, PathBuf, Prefix};
+
+/// Determine if a path is a valid filesystem directory.
+///
+/// If `Some`, then the returned path is some prefix of the given path that
+/// corresponds to a valid directory on the filesystem. Otherwise, `None`
+/// indicates that no prefix of the given path can be used.
+///
+/// We treat all paths that have a Windows prefix component of non-Disk as
+/// invalid. This is to avoid locking the UI thread on server timeouts.
+fn validate_directory(maybe_good_path: &Path) -> Option<&Path> {
+    let mut known_good_path = maybe_good_path;
+    if let Some(Component::Prefix(prefix)) = known_good_path.components().next() {
+        if !matches!(prefix.kind(), Prefix::Disk(_))
+            && !matches!(prefix.kind(), Prefix::VerbatimDisk(_))
+        {
+            return None;
+        }
+    }
+
+    while read_dir(known_good_path).is_err() {
+        if let Some(parent) = known_good_path.parent() {
+            known_good_path = parent;
+        } else {
+            return None;
+        }
+    }
+
+    Some(known_good_path)
+}
 
 /// Construct a directory tree selector.
 ///
@@ -27,30 +56,13 @@ fn directory_tree<P: AsRef<Path>, CHANGE>(
 where
     CHANGE: Fn(&mut Cursive, &PathBuf) + 'static,
 {
-    let mut known_good_path = maybe_good_path.as_ref();
-    if let Some(Component::Prefix(prefix)) = known_good_path.components().next() {
-        if !matches!(prefix.kind(), Prefix::Disk(_))
-            && !matches!(prefix.kind(), Prefix::VerbatimDisk(_))
-        {
-            return Ok(SelectView::new());
-        }
-    } else {
-        return Ok(SelectView::new());
-    }
-
-    while let Err(e) = read_dir(known_good_path) {
-        if e.kind() == io::ErrorKind::NotFound {
-            if let Some(parent) = known_good_path.parent() {
-                known_good_path = parent;
-            } else {
-                return Ok(SelectView::new());
-            }
-        } else {
-            return Err(e);
-        }
-    }
-
     let mut list = SelectView::new();
+    let known_good_path = if let Some(p) = validate_directory(maybe_good_path.as_ref()) {
+        p
+    } else {
+        return Ok(list);
+    };
+
     let mut depth = 0;
     let ancestors = known_good_path.ancestors().collect::<Vec<_>>();
 
