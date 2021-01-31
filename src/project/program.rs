@@ -125,17 +125,13 @@ impl Program {
     }
 
     /// List all the image files related to a given program.
-    ///
-    /// TODO: This should return &str, not &String, no?
-    pub fn iter_images<'a>(&'a self) -> impl Iterator<Item = &String> + 'a {
-        self.images.iter()
+    pub fn iter_images(&self) -> impl Iterator<Item = &str> {
+        self.images.iter().map(|s| s.as_ref())
     }
 
     /// List all the external data sources this program pulls data from.
-    ///
-    /// TODO: This should return &str, not &String, no?
-    pub fn iter_sources<'a>(&'a self) -> impl Iterator<Item = &String> + 'a {
-        self.data_sources.iter()
+    pub fn iter_sources(&self) -> impl Iterator<Item = &str> {
+        self.data_sources.iter().map(|s| s.as_ref())
     }
 
     pub fn as_database_path(&self) -> &RelativePath {
