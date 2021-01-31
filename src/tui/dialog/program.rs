@@ -7,7 +7,7 @@ use crate::project::Program;
 use crate::tui::builder::{BoxedMergeable, Builder};
 use crate::tui::dialog::pickers::file_picker;
 use cursive::event::Event;
-use cursive::view::Nameable;
+use cursive::view::{Nameable, Resizable};
 use cursive::views::{Button, Dialog, EditView, LinearLayout, ListView, SelectView, TextView};
 use cursive::Cursive;
 use std::env;
@@ -76,8 +76,8 @@ where
 }
 
 /// Build the image list for a program configurator.
-/// 
-/// 
+///
+///
 fn image_list<REMOVE>(images: &[&str], remove: REMOVE) -> ListView
 where
     REMOVE: Fn(&mut Cursive, usize) + Clone + 'static,
@@ -108,85 +108,123 @@ where
             BoxedMergeable::boxed(
                 Dialog::around(
                     LinearLayout::vertical()
-                        .child(TextView::new("Name"))
                         .child(
-                            EditView::new()
-                                .content(&old_name)
-                                .on_edit(|s, new_name, _pos| {
-                                    let new_name = new_name.to_string();
+                            LinearLayout::horizontal()
+                                .child(TextView::new("Name").min_width(25))
+                                .weight(1)
+                                .child(
+                                    EditView::new()
+                                        .content(&old_name)
+                                        .on_edit(|s, new_name, _pos| {
+                                            let new_name = new_name.to_string();
 
-                                    s.call_on_name(
-                                        "program_configurator",
-                                        move |v: &mut Builder<Program>| {
-                                            v.with_state_mut(|program| {
-                                                program.set_name(&new_name);
-                                            });
-                                        },
-                                    );
+                                            s.call_on_name(
+                                                "program_configurator",
+                                                move |v: &mut Builder<Program>| {
+                                                    v.with_state_mut(|program| {
+                                                        program.set_name(&new_name);
+                                                    });
+                                                },
+                                            );
 
-                                    s.on_event(Event::Refresh);
-                                }),
+                                            s.on_event(Event::Refresh);
+                                        })
+                                        .min_width(30),
+                                )
+                                .weight(5),
                         )
-                        .child(TextView::new("Analysis Architecture"))
-                        .child(arch_selector(program.arch(), |s, new_ar| {
-                            s.call_on_name(
-                                "program_configurator",
-                                move |v: &mut Builder<Program>| {
-                                    v.with_state_mut(|program| {
-                                        program.set_arch(*new_ar);
-                                    });
-                                },
-                            );
-
-                            s.on_event(Event::Refresh);
-                        }))
-                        .child(TextView::new("Platform"))
-                        .child(platform_selector(program.platform(), |s, new_pf| {
-                            s.call_on_name(
-                                "program_configurator",
-                                move |v: &mut Builder<Program>| {
-                                    v.with_state_mut(|program| {
-                                        program.set_platform(*new_pf);
-                                    });
-                                },
-                            );
-
-                            s.on_event(Event::Refresh);
-                        }))
-                        .child(TextView::new("Assembler Syntax"))
-                        .child(asm_selector(program.assembler(), |s, new_asm| {
-                            s.call_on_name(
-                                "program_configurator",
-                                move |v: &mut Builder<Program>| {
-                                    v.with_state_mut(|program| {
-                                        program.set_assembler(*new_asm);
-                                    });
-                                },
-                            );
-
-                            s.on_event(Event::Refresh);
-                        }))
-                        .child(TextView::new("Images"))
                         .child(
-                            LinearLayout::horizontal().child(Button::new("Add Image", |s| {
-                                file_picker(
-                                    s,
-                                    "Select Image File",
-                                    &env::current_dir().unwrap(),
-                                    move |s, path| {
+                            LinearLayout::horizontal()
+                                .child(TextView::new("Analysis Architecture").min_width(25))
+                                .weight(1)
+                                .child(
+                                    arch_selector(program.arch(), |s, new_ar| {
                                         s.call_on_name(
                                             "program_configurator",
                                             move |v: &mut Builder<Program>| {
                                                 v.with_state_mut(|program| {
-                                                    program.add_image_path(&path.to_string_lossy());
+                                                    program.set_arch(*new_ar);
                                                 });
                                             },
                                         );
 
                                         s.on_event(Event::Refresh);
-                                    },
+                                    })
+                                    .min_width(30),
                                 )
-                            })),
+                                .weight(5),
+                        )
+                        .child(
+                            LinearLayout::horizontal()
+                                .child(TextView::new("Platform").min_width(25))
+                                .weight(1)
+                                .child(
+                                    platform_selector(program.platform(), |s, new_pf| {
+                                        s.call_on_name(
+                                            "program_configurator",
+                                            move |v: &mut Builder<Program>| {
+                                                v.with_state_mut(|program| {
+                                                    program.set_platform(*new_pf);
+                                                });
+                                            },
+                                        );
+
+                                        s.on_event(Event::Refresh);
+                                    })
+                                    .min_width(30),
+                                )
+                                .weight(5)
+                        )
+                        .child(
+                            LinearLayout::horizontal()
+                                .child(TextView::new("Assembler Syntax").min_width(25))
+                                .weight(1)
+                                .child(
+                                    asm_selector(program.assembler(), |s, new_asm| {
+                                        s.call_on_name(
+                                            "program_configurator",
+                                            move |v: &mut Builder<Program>| {
+                                                v.with_state_mut(|program| {
+                                                    program.set_assembler(*new_asm);
+                                                });
+                                            },
+                                        );
+
+                                        s.on_event(Event::Refresh);
+                                    })
+                                    .min_width(30),
+                                )
+                                .weight(5),
+                        )
+                        .child(
+                            LinearLayout::horizontal()
+                                .child(TextView::new("Images").min_width(25))
+                                .weight(1)
+                                .child(
+                                    Button::new("Add Image", |s| {
+                                        file_picker(
+                                            s,
+                                            "Select Image File",
+                                            &env::current_dir().unwrap(),
+                                            move |s, path| {
+                                                s.call_on_name(
+                                                    "program_configurator",
+                                                    move |v: &mut Builder<Program>| {
+                                                        v.with_state_mut(|program| {
+                                                            program.add_image_path(
+                                                                &path.to_string_lossy(),
+                                                            );
+                                                        });
+                                                    },
+                                                );
+
+                                                s.on_event(Event::Refresh);
+                                            },
+                                        )
+                                    })
+                                    .min_width(15),
+                                )
+                                .weight(5),
                         )
                         .child(image_list(
                             &program.iter_images().collect::<Vec<&str>>(),
