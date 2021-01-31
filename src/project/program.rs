@@ -129,6 +129,16 @@ impl Program {
         self.images.iter().map(|s| s.as_ref())
     }
 
+    /// Add an image path.
+    pub fn add_image_path(&mut self, path: &str) {
+        self.images.push(path.to_string());
+    }
+
+    /// Remove an image by index.
+    pub fn remove_image_index(&mut self, index: usize) {
+        self.images.remove(index);
+    }
+
     /// List all the external data sources this program pulls data from.
     pub fn iter_sources(&self) -> impl Iterator<Item = &str> {
         self.data_sources.iter().map(|s| s.as_ref())

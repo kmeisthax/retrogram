@@ -5,10 +5,12 @@ use crate::asm::AssemblerName;
 use crate::platform::PlatformName;
 use crate::project::Program;
 use crate::tui::builder::{BoxedMergeable, Builder};
+use crate::tui::dialog::pickers::file_picker;
 use cursive::event::Event;
 use cursive::view::Nameable;
 use cursive::views::{Button, Dialog, EditView, LinearLayout, ListView, SelectView, TextView};
 use cursive::Cursive;
+use std::env;
 
 /// Build the platform selector
 fn platform_selector<CHANGE>(
@@ -71,6 +73,24 @@ where
     }
 
     select.popup().on_submit(change)
+}
+
+/// Build the image list for a program configurator.
+/// 
+/// 
+fn image_list<REMOVE>(images: &[&str], remove: REMOVE) -> ListView
+where
+    REMOVE: Fn(&mut Cursive, usize) + Clone + 'static,
+{
+    let mut list = ListView::new();
+
+    for (i, image) in images.iter().enumerate() {
+        let my_remove = remove.clone();
+
+        list.add_child(image, Button::new("Remove", move |s| my_remove(s, i)));
+    }
+
+    list
 }
 
 /// Open a program configurator dialog, and call `then` if the dialog was
@@ -145,7 +165,44 @@ where
                             );
 
                             s.on_event(Event::Refresh);
-                        })),
+                        }))
+                        .child(TextView::new("Images"))
+                        .child(
+                            LinearLayout::horizontal().child(Button::new("Add Image", |s| {
+                                file_picker(
+                                    s,
+                                    "Select Image File",
+                                    &env::current_dir().unwrap(),
+                                    move |s, path| {
+                                        s.call_on_name(
+                                            "program_configurator",
+                                            move |v: &mut Builder<Program>| {
+                                                v.with_state_mut(|program| {
+                                                    program.add_image_path(&path.to_string_lossy());
+                                                });
+                                            },
+                                        );
+
+                                        s.on_event(Event::Refresh);
+                                    },
+                                )
+                            })),
+                        )
+                        .child(image_list(
+                            &program.iter_images().collect::<Vec<&str>>(),
+                            |s, i| {
+                                s.call_on_name(
+                                    "program_configurator",
+                                    move |v: &mut Builder<Program>| {
+                                        v.with_state_mut(|program| {
+                                            program.remove_image_index(i);
+                                        });
+                                    },
+                                );
+
+                                s.on_event(Event::Refresh);
+                            },
+                        )),
                 )
                 .title("")
                 .button("OK", move |s| {
