@@ -15,64 +15,87 @@ use std::env;
 /// Build the platform selector
 fn platform_selector<CHANGE>(
     platform: Option<PlatformName>,
+    current_arch: Option<ArchName>,
     change: CHANGE,
-) -> SelectView<PlatformName>
+) -> SelectView<Option<PlatformName>>
 where
-    CHANGE: Fn(&mut Cursive, &PlatformName) + 'static,
+    CHANGE: Fn(&mut Cursive, Option<PlatformName>) + 'static,
 {
     let mut select = SelectView::new();
 
+    select.add_item("Select platform...", None);
+
     for (i, pn) in PlatformName::iter().into_iter().enumerate() {
-        select.add_item(pn.friendly_name(), pn);
+        if let Some(arch) = current_arch {
+            if !pn.is_compatible_with_arch(arch) {
+                continue;
+            }
+        }
+
+        select.add_item(pn.friendly_name(), Some(pn));
 
         if let Some(platform) = platform {
             if platform == pn {
-                select.set_selection(i);
+                select.set_selection(i + 1);
             }
         }
     }
 
-    select.popup().on_submit(change)
+    select.popup().on_submit(move |s, p| change(s, *p))
 }
 
 /// Build the architecture selector
-fn arch_selector<CHANGE>(arch: Option<ArchName>, change: CHANGE) -> SelectView<ArchName>
+fn arch_selector<CHANGE>(arch: Option<ArchName>, change: CHANGE) -> SelectView<Option<ArchName>>
 where
-    CHANGE: Fn(&mut Cursive, &ArchName) + 'static,
+    CHANGE: Fn(&mut Cursive, Option<ArchName>) + 'static,
 {
     let mut select = SelectView::new();
 
+    select.add_item("Select architecture...", None);
+
     for (i, an) in ArchName::iter().into_iter().enumerate() {
-        select.add_item(an.friendly_name(), an);
+        select.add_item(an.friendly_name(), Some(an));
 
         if let Some(arch) = arch {
             if arch == an {
-                select.set_selection(i);
+                select.set_selection(i + 1);
             }
         }
     }
 
-    select.popup().on_submit(change)
+    select.popup().on_submit(move |s, a| change(s, *a))
 }
 
 /// Build the assembler selector
-fn asm_selector<CHANGE>(arch: Option<AssemblerName>, change: CHANGE) -> SelectView<AssemblerName>
+fn asm_selector<CHANGE>(
+    arch: Option<AssemblerName>,
+    current_arch: Option<ArchName>,
+    change: CHANGE,
+) -> SelectView<Option<AssemblerName>>
 where
-    CHANGE: Fn(&mut Cursive, &AssemblerName) + 'static,
+    CHANGE: Fn(&mut Cursive, Option<AssemblerName>) + 'static,
 {
     let mut select = SelectView::new();
 
+    select.add_item("Select assembler...", None);
+
     for (i, an) in AssemblerName::iter().into_iter().enumerate() {
-        select.add_item(an.friendly_name(), an);
+        if let Some(arch) = current_arch {
+            if !an.is_compatible_with_arch(arch) {
+                continue;
+            }
+        }
+
+        select.add_item(an.friendly_name(), Some(an));
 
         if let Some(arch) = arch {
             if arch == an {
-                select.set_selection(i);
+                select.set_selection(i + 1);
             }
         }
     }
 
-    select.popup().on_submit(change)
+    select.popup().on_submit(move |s, a| change(s, *a))
 }
 
 /// Build the image list for a program configurator.
@@ -143,7 +166,11 @@ where
                                             "program_configurator",
                                             move |v: &mut Builder<Program>| {
                                                 v.with_state_mut(|program| {
-                                                    program.set_arch(*new_ar);
+                                                    if let Some(arch) = new_ar {
+                                                        program.set_arch(arch);
+                                                    } else {
+                                                        program.unset_arch();
+                                                    }
                                                 });
                                             },
                                         );
@@ -159,39 +186,55 @@ where
                                 .child(TextView::new("Platform").min_width(25))
                                 .weight(1)
                                 .child(
-                                    platform_selector(program.platform(), |s, new_pf| {
-                                        s.call_on_name(
-                                            "program_configurator",
-                                            move |v: &mut Builder<Program>| {
-                                                v.with_state_mut(|program| {
-                                                    program.set_platform(*new_pf);
-                                                });
-                                            },
-                                        );
+                                    platform_selector(
+                                        program.platform(),
+                                        program.arch(),
+                                        |s, new_pf| {
+                                            s.call_on_name(
+                                                "program_configurator",
+                                                move |v: &mut Builder<Program>| {
+                                                    v.with_state_mut(|program| {
+                                                        if let Some(pf) = new_pf {
+                                                            program.set_platform(pf);
+                                                        } else {
+                                                            program.unset_platform();
+                                                        }
+                                                    });
+                                                },
+                                            );
 
-                                        s.on_event(Event::Refresh);
-                                    })
+                                            s.on_event(Event::Refresh);
+                                        },
+                                    )
                                     .min_width(30),
                                 )
-                                .weight(5)
+                                .weight(5),
                         )
                         .child(
                             LinearLayout::horizontal()
                                 .child(TextView::new("Assembler Syntax").min_width(25))
                                 .weight(1)
                                 .child(
-                                    asm_selector(program.assembler(), |s, new_asm| {
-                                        s.call_on_name(
-                                            "program_configurator",
-                                            move |v: &mut Builder<Program>| {
-                                                v.with_state_mut(|program| {
-                                                    program.set_assembler(*new_asm);
-                                                });
-                                            },
-                                        );
+                                    asm_selector(
+                                        program.assembler(),
+                                        program.arch(),
+                                        |s, new_asm| {
+                                            s.call_on_name(
+                                                "program_configurator",
+                                                move |v: &mut Builder<Program>| {
+                                                    v.with_state_mut(|program| {
+                                                        if let Some(asm) = new_asm {
+                                                            program.set_assembler(asm);
+                                                        } else {
+                                                            program.unset_assembler();
+                                                        }
+                                                    });
+                                                },
+                                            );
 
-                                        s.on_event(Event::Refresh);
-                                    })
+                                            s.on_event(Event::Refresh);
+                                        },
+                                    )
                                     .min_width(30),
                                 )
                                 .weight(5),

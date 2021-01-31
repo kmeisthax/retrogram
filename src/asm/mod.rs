@@ -8,6 +8,7 @@ mod traits;
 pub use annotator::{AnnotatedText, AnnotationKind};
 pub use traits::Assembler;
 
+use crate::arch;
 use serde::Serialize;
 use std::str;
 
@@ -38,6 +39,17 @@ impl AssemblerName {
         match self {
             Self::RGBDS => "RGBDS",
             Self::ARMIPS => "ARMIPS",
+        }
+    }
+
+    /// Determine if this assembler supports the mnemonics & syntax necessary
+    /// for this architecture.
+    pub fn is_compatible_with_arch(self, arch: arch::ArchName) -> bool {
+        match (self, arch) {
+            (AssemblerName::RGBDS, arch::ArchName::SM83) => true,
+            (AssemblerName::RGBDS, _) => false,
+            (AssemblerName::ARMIPS, arch::ArchName::AARCH32) => true,
+            (AssemblerName::ARMIPS, _) => false,
         }
     }
 }

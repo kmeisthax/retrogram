@@ -33,6 +33,17 @@ impl PlatformName {
         }
     }
 
+    /// Determine if this platform supports binaries compiled for this
+    /// architecture.
+    pub fn is_compatible_with_arch(self, arch: arch::ArchName) -> bool {
+        match (self, arch) {
+            (PlatformName::GB, arch::ArchName::SM83) => true,
+            (PlatformName::GB, _) => false,
+            (PlatformName::AGB, arch::ArchName::AARCH32) => true,
+            (PlatformName::AGB, _) => false,
+        }
+    }
+
     /// Iterate all valid platform names.
     pub fn iter() -> impl IntoIterator<Item = PlatformName> {
         vec![Self::GB, Self::AGB]

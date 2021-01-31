@@ -108,6 +108,10 @@ impl Program {
         self.platform = Some(platform);
     }
 
+    pub fn unset_platform(&mut self) {
+        self.platform = None;
+    }
+
     pub fn arch(&self) -> Option<ArchName> {
         self.arch
     }
@@ -116,12 +120,20 @@ impl Program {
         self.arch = Some(arch);
     }
 
+    pub fn unset_arch(&mut self) {
+        self.arch = None;
+    }
+
     pub fn assembler(&self) -> Option<AssemblerName> {
         self.assembler
     }
 
     pub fn set_assembler(&mut self, asm: AssemblerName) {
         self.assembler = Some(asm);
+    }
+
+    pub fn unset_assembler(&mut self) {
+        self.assembler = None;
     }
 
     /// List all the image files related to a given program.
