@@ -4,13 +4,10 @@ use crate::arch::ArchName;
 use crate::asm::AssemblerName;
 use crate::platform::PlatformName;
 use crate::project::Program;
-use crate::tui::builder::Builder;
+use crate::tui::builder::{BoxedMergeable, Builder};
 use cursive::event::Event;
-use cursive::event::{Callback, EventResult, Key};
-use cursive::view::{Nameable, View};
-use cursive::views::{
-    BoxedView, Dialog, EditView, LinearLayout, OnEventView, SelectView, TextView,
-};
+use cursive::view::Nameable;
+use cursive::views::{Button, Dialog, EditView, LinearLayout, ListView, SelectView, TextView};
 use cursive::Cursive;
 
 /// Build the platform selector
@@ -88,13 +85,14 @@ where
             let then = then.clone();
             let old_name = program.as_name().unwrap_or("").to_string();
 
-            BoxedView::boxed(
+            BoxedMergeable::boxed(
                 Dialog::around(
                     LinearLayout::vertical()
                         .child(TextView::new("Name"))
                         .child(
-                            OnEventView::new(EditView::new().content(&old_name).on_submit(
-                                |s, new_name| {
+                            EditView::new()
+                                .content(&old_name)
+                                .on_edit(|s, new_name, _pos| {
                                     let new_name = new_name.to_string();
 
                                     s.call_on_name(
@@ -107,46 +105,7 @@ where
                                     );
 
                                     s.on_event(Event::Refresh);
-                                },
-                            ))
-                            .on_pre_event_inner(
-                                Key::Down,
-                                move |ev, evt| {
-                                    let new_name = ev.get_content().to_string();
-                                    let callback = if let EventResult::Consumed(Some(cbk)) =
-                                        ev.on_event(evt.clone())
-                                    {
-                                        Some(cbk)
-                                    } else {
-                                        None
-                                    };
-
-                                    if new_name != old_name {
-                                        Some(EventResult::Consumed(Some(Callback::from_fn(
-                                            move |s| {
-                                                let new_name = new_name.clone();
-
-                                                if let Some(cbk) = &callback {
-                                                    cbk(s);
-                                                }
-
-                                                s.call_on_name(
-                                                    "program_configurator",
-                                                    move |v: &mut Builder<Program>| {
-                                                        v.with_state_mut(|program| {
-                                                            program.set_name(&new_name);
-                                                        });
-                                                    },
-                                                );
-
-                                                s.on_event(Event::Refresh);
-                                            },
-                                        ))))
-                                    } else {
-                                        None
-                                    }
-                                },
-                            ),
+                                }),
                         )
                         .child(TextView::new("Analysis Architecture"))
                         .child(arch_selector(program.arch(), |s, new_ar| {

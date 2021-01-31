@@ -1,14 +1,16 @@
 //! Builder views
 
+use crate::tui::builder::merge::BoxedMergeable;
 use cursive::direction::Direction;
 use cursive::event::{AnyCb, Event, EventResult};
 use cursive::view::{Selector, ViewNotFound};
-use cursive::views::{BoxedView, LastSizeView};
+use cursive::views::LastSizeView;
 use cursive::{Printer, Rect, View, XY};
+use std::ops::{Deref, DerefMut};
 
-pub trait BuilderFn<S>: Fn(&S) -> BoxedView + 'static {}
+pub trait BuilderFn<S>: Fn(&S) -> BoxedMergeable + 'static {}
 
-impl<S, FN> BuilderFn<S> for FN where FN: Fn(&S) -> BoxedView + 'static {}
+impl<S, FN> BuilderFn<S> for FN where FN: Fn(&S) -> BoxedMergeable + 'static {}
 
 /// Rebuildable view with associated state.
 ///
@@ -25,7 +27,11 @@ pub struct Builder<S> {
     builder: Box<dyn BuilderFn<S>>,
 
     /// The current cached view, generated from state.
-    content: LastSizeView<BoxedView>,
+    content: LastSizeView<BoxedMergeable>,
+
+    /// The last generated copy of the builder state, free from any
+    /// modifications that may have been made by the widget toolkit.
+    old: BoxedMergeable,
 }
 
 impl<S> Builder<S>
@@ -54,17 +60,31 @@ where
         B: BuilderFn<S> + 'static,
     {
         let content = LastSizeView::new(builder(&state));
+        let old = builder(&state);
 
         Self {
             state,
             builder: Box::new(builder),
             content,
+            old,
         }
     }
 
     /// Rebuild the view.
     fn rebuild(&mut self) {
-        self.content = LastSizeView::new((&self.builder)(&self.state));
+        let new = (self.builder)(&self.state);
+        let to = (self.builder)(&self.state);
+
+        if let Some(v) = self
+            .content
+            .view
+            .deref_mut()
+            .merge(self.old.deref(), to.unwrap())
+        {
+            self.content.view = BoxedMergeable::new(v);
+        }
+
+        self.old = new;
     }
 
     /// Get the state data for mutation.

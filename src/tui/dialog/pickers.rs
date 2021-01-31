@@ -1,10 +1,9 @@
 //! TUI File Picker
 
+use crate::tui::builder::{BoxedMergeable, Builder};
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::view::{Nameable, Resizable};
-use cursive::views::{
-    BoxedView, Dialog, LinearLayout, OnEventView, Panel, ScrollView, SelectView, TextArea,
-};
+use cursive::views::{Dialog, LinearLayout, OnEventView, Panel, ScrollView, SelectView, TextArea};
 use cursive::Cursive;
 use std::fs::read_dir;
 use std::io;
@@ -96,7 +95,7 @@ pub fn directory_picker<THEN>(
             let directory_list = match directory_tree(path, on_change) {
                 Ok(directory_list) => directory_list,
                 Err(e) => {
-                    return BoxedView::boxed(
+                    return BoxedMergeable::boxed(
                         Dialog::text(format!(
                             "{}\n(when reading contents of: {})",
                             e,
@@ -113,7 +112,7 @@ pub fn directory_picker<THEN>(
             let confirm_path = path.clone();
             let confirm_then = then.clone();
 
-            BoxedView::boxed(
+            BoxedMergeable::boxed(
                 Dialog::around(
                     LinearLayout::vertical()
                         .child(
