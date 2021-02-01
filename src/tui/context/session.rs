@@ -56,40 +56,24 @@ impl SessionContext {
     }
 
     /// Construct a session context from a project definition.
-    pub fn from_project(mut project: Project) -> io::Result<Self> {
+    pub fn from_project(project: Project) -> io::Result<Self> {
         let programs = project
             .iter_programs()
             .map(|(k, v)| (k.to_string(), v.clone()))
             .collect::<Vec<(String, Program)>>();
-        let mut databases = HashMap::new();
 
-        for (_name, program) in programs.iter() {
-            if !databases.contains_key(program.as_database_path()) {
-                let base_path = project.implicit_path()?;
-                let database_path = program.as_database_path().to_path(base_path);
-                let pjdb: io::Result<ProjectDatabase> =
-                    ProjectDatabase::read(&mut project, &mut fs::File::open(database_path)?)
-                        .map_err(|e| e.into());
-
-                let pjdb = Arc::new(RwLock::new(match pjdb {
-                    Ok(pjdb) => pjdb,
-                    Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-                        eprintln!("Creating new database for project");
-                        ProjectDatabase::new()
-                    }
-                    Err(e) => return Err(e),
-                }));
-
-                databases.insert(program.as_database_path().to_relative_path_buf(), pjdb);
-            }
-        }
-
-        Ok(Self {
+        let mut session = Self {
             project: Arc::new(RwLock::new(project)),
-            databases,
+            databases: HashMap::new(),
             contexts: HashMap::new(),
             tab_nonce: 0,
-        })
+        };
+
+        for (_name, program) in programs.iter() {
+            session.add_database_to_project(program.as_database_path())?;
+        }
+
+        Ok(session)
     }
 
     /// Access the session's underlying project.
@@ -100,6 +84,44 @@ impl SessionContext {
     /// Access the session's underlying project for mutation.
     pub fn project_mut(&mut self) -> impl '_ + DerefMut<Target = Project> {
         self.project.write().unwrap()
+    }
+
+    /// Add a database to the project (if it is not already opened).
+    pub fn add_database_to_project(&mut self, db_path: &RelativePath) -> io::Result<()> {
+        if !self.databases.contains_key(db_path) {
+            let mut project = self.project.write().unwrap();
+
+            let pjdb: io::Result<ProjectDatabase> = if let Some(base_path) = project.path() {
+                //On-disk project, read database relative to the project
+                let database_path = db_path.to_path(base_path);
+                ProjectDatabase::read(&mut project, &mut fs::File::open(database_path)?)
+                    .map_err(|e| e.into())
+            } else {
+                //In-memory project, store database in memory
+                Ok(ProjectDatabase::new())
+            };
+
+            let pjdb = Arc::new(RwLock::new(match pjdb {
+                Ok(pjdb) => pjdb,
+                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+                    eprintln!("Creating new database for project");
+                    ProjectDatabase::new()
+                }
+                Err(e) => return Err(e),
+            }));
+
+            self.databases.insert(db_path.to_relative_path_buf(), pjdb);
+        }
+
+        Ok(())
+    }
+
+    /// Install a program into the current project.
+    pub fn add_program_to_project(&mut self, program: Program) -> io::Result<()> {
+        self.add_database_to_project(program.as_database_path())?;
+        self.project.write().unwrap().add_program(program);
+
+        Ok(())
     }
 
     /// Get the location that this session saves and loads relative paths to

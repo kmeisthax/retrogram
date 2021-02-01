@@ -200,3 +200,29 @@ pub fn repopulate_tabs(siv: &mut Cursive) {
         siv.add_layer(error_dialog(error));
     }
 }
+
+/// Open a new disasm tab for a context program with the given name.
+pub fn open_disasm_tab(siv: &mut Cursive, for_program_name: &str) -> io::Result<()> {
+    let cb_sink = siv.cb_sink().clone();
+    let session = siv
+        .user_data::<SessionContext>()
+        .expect("Session should exist");
+
+    let mut ctxt = session.program_context(cb_sink, for_program_name)?;
+    let nonce = session.nonce();
+
+    siv.call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
+        disasm_tab_zygote(&mut *ctxt, v, nonce)
+    })
+    .ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "Could not find program {} in session context",
+                for_program_name
+            ),
+        )
+    })??;
+
+    Ok(())
+}

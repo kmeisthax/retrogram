@@ -84,6 +84,15 @@ impl Project {
         None
     }
 
+    /// Add a program to the project.
+    pub fn add_program(&mut self, program: Program) {
+        let name = program
+            .as_name()
+            .expect("Cannot add unnamed program to project")
+            .to_string();
+        self.programs.insert(name, program);
+    }
+
     /// Get the project's default program.
     pub fn default_program(&self) -> Option<(&String, &Program)> {
         self.programs.iter().next()

@@ -4,8 +4,9 @@ use crate::tui::context::SessionContext;
 use crate::tui::dialog::{
     directory_picker, error_dialog, jump_dialog, label_dialog, program_config_dialog,
 };
-use crate::tui::tabs::{call_on_tab, repopulate_tabs, TabHandle};
+use crate::tui::tabs::{call_on_tab, open_disasm_tab, repopulate_tabs, TabHandle};
 use cursive::menu::MenuTree;
+use cursive::views::Dialog;
 use cursive::Cursive;
 use cursive_tabs::TabPanel;
 use std::borrow::Borrow;
@@ -134,7 +135,25 @@ pub fn repopulate_menu(siv: &mut Cursive) {
                 .leaf("Save as...", |s| save_intent(s, false))
                 .delimiter()
                 .leaf("Add Program...", |s| {
-                    program_config_dialog(s, Default::default(), |_s, _p| {})
+                    program_config_dialog(s, Default::default(), |s, p| {
+                        let program_name = p.as_name().unwrap().to_string();
+                        let session = s
+                            .user_data::<SessionContext>()
+                            .expect("Session should exist");
+
+                        if let Err(e) = session.add_program_to_project(p.clone()) {
+                            s.add_layer(Dialog::info(format!(
+                                "Error when adding to project: {}",
+                                e
+                            )));
+
+                            return;
+                        }
+
+                        if let Err(e) = open_disasm_tab(s, &program_name) {
+                            s.add_layer(Dialog::info(format!("Error when opening new tab: {}", e)));
+                        }
+                    })
                 })
                 .delimiter()
                 .leaf("Exit", |s| s.quit()),
