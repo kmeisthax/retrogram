@@ -16,6 +16,7 @@ rayon = "1.5.0"
 backtrace = "0.3.55"
 relative-path = { version="1.3.2", features = ["serde"] }
 owning_ref = "0.4.1"
+thiserror = "1.0.23"
 
 [dependencies.cursive]
 git = "https://github.com/kmeisthax/cursive.git"

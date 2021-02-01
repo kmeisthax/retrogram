@@ -287,8 +287,15 @@ where
                 )
                 .title("")
                 .button("OK", move |s| {
-                    s.pop_layer();
-                    then(s, &then_program)
+                    if let Err(e) = then_program.validate() {
+                        s.add_layer(Dialog::info(format!(
+                            "Your program is currently invalid: {}.\nPlease reconfigure it first.",
+                            e
+                        )));
+                    } else {
+                        s.pop_layer();
+                        then(s, &then_program);
+                    }
                 })
                 .button("Cancel", |s| {
                     s.pop_layer();

@@ -7,6 +7,28 @@ use clap::{App, Arg, ArgMatches, ArgSettings};
 use relative_path::{RelativePath, RelativePathBuf};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ValidationError {
+    #[error("Program is untitled")]
+    Untitled,
+
+    #[error("No architecture selected")]
+    NoArchitecture,
+
+    #[error("No platform selected")]
+    NoPlatform,
+
+    #[error("No assembler syntax selected")]
+    NoAssembler,
+
+    #[error("The given combination of architecture, platform, and assembler syntax is invalid")]
+    InvalidCombination,
+
+    #[error("There is no image file to select")]
+    NoImages,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Program {
@@ -187,5 +209,50 @@ impl Program {
             },
             database_path: default_db_filename(),
         }
+    }
+
+    /// Determine if this program is valid.
+    ///
+    /// A program is valid if it specifies a name, platform, architecture,
+    /// assembler, at least one image, and all the combinations of those above
+    /// things are valid together.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.name.is_none() || self.name.as_ref().unwrap().is_empty() {
+            return Err(ValidationError::Untitled);
+        }
+
+        if self.arch.is_none() {
+            return Err(ValidationError::NoArchitecture);
+        }
+
+        if self.platform.is_none() {
+            return Err(ValidationError::NoPlatform);
+        }
+
+        if self.assembler.is_none() {
+            return Err(ValidationError::NoAssembler);
+        }
+
+        if !self
+            .platform
+            .unwrap()
+            .is_compatible_with_arch(self.arch.unwrap())
+        {
+            return Err(ValidationError::InvalidCombination);
+        }
+
+        if !self
+            .assembler
+            .unwrap()
+            .is_compatible_with_arch(self.arch.unwrap())
+        {
+            return Err(ValidationError::InvalidCombination);
+        }
+
+        if self.images.is_empty() {
+            return Err(ValidationError::NoImages);
+        }
+
+        Ok(())
     }
 }
