@@ -1,5 +1,6 @@
 //! Builder views
 
+use crate::tui::builder::bind::Binder;
 use crate::tui::builder::merge::BoxedMergeable;
 use cursive::direction::Direction;
 use cursive::event::{AnyCb, Event, EventResult};
@@ -8,15 +9,18 @@ use cursive::views::LastSizeView;
 use cursive::{Printer, Rect, View, XY};
 use std::ops::{Deref, DerefMut};
 
-pub trait BuilderFn<S>: Fn(&S) -> BoxedMergeable + 'static {}
+pub trait BuilderFn<S>: Fn(&S, &Binder<S>) -> BoxedMergeable + 'static {}
 
-impl<S, FN> BuilderFn<S> for FN where FN: Fn(&S) -> BoxedMergeable + 'static {}
+impl<S, FN> BuilderFn<S> for FN where FN: Fn(&S, &Binder<S>) -> BoxedMergeable + 'static {}
 
 /// Rebuildable view with associated state.
 ///
 /// A `Builder` is a view that holds state and can be rebuilt by calling a
 /// builder function, which generates a new view hierarchy to display.
 pub struct Builder<S> {
+    /// The Cursive-accessible name for this builder.
+    name: String,
+
     /// The view state.
     state: S,
 
@@ -40,29 +44,37 @@ where
 {
     /// Construct a new builder view around a given function.
     ///
+    /// `name` should be a string unique to this view builder for the duration
+    /// of it's execution.
+    ///
     /// This is only viable if your choice of state structure provides an
     /// initial default state. Otherwise, to provide one, use
     /// `from_state_and_builder`.
     #[allow(dead_code)]
-    pub fn new<B>(builder: B) -> Self
+    pub fn new<B>(name: &str, builder: B) -> Self
     where
         S: Default,
         B: BuilderFn<S> + 'static,
     {
         let state = Default::default();
 
-        Self::from_state_and_builder(state, builder)
+        Self::from_state_and_builder(name, state, builder)
     }
 
     /// Construct a new builder view around a given function and initial state.
-    pub fn from_state_and_builder<B>(state: S, builder: B) -> Self
+    ///
+    /// `name` should be a string unique to this view builder for the duration
+    /// of it's execution.
+    pub fn from_state_and_builder<B>(name: &str, state: S, builder: B) -> Self
     where
         B: BuilderFn<S> + 'static,
     {
-        let content = LastSizeView::new(builder(&state));
-        let old = builder(&state);
+        let binder = Binder::new(name);
+        let content = LastSizeView::new(builder(&state, &binder));
+        let old = builder(&state, &binder);
 
         Self {
+            name: name.to_string(),
             state,
             builder: Box::new(builder),
             content,
@@ -72,8 +84,9 @@ where
 
     /// Rebuild the view.
     fn rebuild(&mut self) {
-        let new = (self.builder)(&self.state);
-        let to = (self.builder)(&self.state);
+        let binder = Binder::new(&self.name);
+        let new = (self.builder)(&self.state, &binder);
+        let to = (self.builder)(&self.state, &binder);
 
         if let Some(v) = self
             .content

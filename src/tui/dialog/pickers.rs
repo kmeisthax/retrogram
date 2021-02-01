@@ -1,7 +1,6 @@
 //! TUI File Picker
 
-use crate::tui::builder::{BoxedMergeable, Builder};
-use cursive::event::Event;
+use crate::tui::builder::{Binder, BoxedMergeable, Builder};
 use cursive::view::{Nameable, Resizable};
 use cursive::views::{Dialog, EditView, LinearLayout, Panel, ScrollView, SelectView};
 use cursive::Cursive;
@@ -139,56 +138,47 @@ pub fn directory_picker<THEN>(
     THEN: Fn(&mut Cursive, &Path) + 'static + Clone,
 {
     siv.add_layer(
-        Builder::from_state_and_builder(starting_path.to_path_buf(), move |path: &PathBuf| {
-            let on_change = |s: &mut Cursive, path: &PathBuf| {
-                s.call_on_name("file_picker", |v: &mut Builder<PathBuf>| {
-                    v.with_state_mut(|pathbuf: &mut PathBuf| {
-                        *pathbuf = path.clone();
-                    })
+        Builder::from_state_and_builder(
+            "file_picker",
+            starting_path.to_path_buf(),
+            move |path: &PathBuf, binder: &Binder<_>| {
+                let on_change = binder.bind_ref(|state: &mut PathBuf, new_path: &PathBuf| {
+                    *state = new_path.clone();
                 });
 
-                s.on_event(Event::Refresh);
-            };
-            let directory_list = match directory_tree(path, on_change) {
-                Ok(directory_list) => directory_list,
-                Err(e) => return BoxedMergeable::boxed(error_dialog(e, path)),
-            };
+                let directory_list = match directory_tree(path, on_change) {
+                    Ok(directory_list) => directory_list,
+                    Err(e) => return BoxedMergeable::boxed(error_dialog(e, path)),
+                };
 
-            let confirm_path = path.clone();
-            let confirm_then = then.clone();
+                let confirm_path = path.clone();
+                let confirm_then = then.clone();
 
-            BoxedMergeable::boxed(
-                Dialog::around(
-                    LinearLayout::vertical()
-                        .child(EditView::new().content(path.to_string_lossy()).on_edit(
-                            |s, new_path, _pos| {
-                                let new_path = PathBuf::from(new_path);
-
-                                s.call_on_name("file_picker", move |v: &mut Builder<PathBuf>| {
-                                    v.with_state_mut(|pathbuf| {
-                                        *pathbuf = new_path;
-                                    })
-                                });
-
-                                s.on_event(Event::Refresh);
-                            },
-                        ))
-                        .child(Panel::new(
-                            ScrollView::new(directory_list.min_width(30))
-                                .scroll_y(true)
-                                .full_height(),
-                        )),
+                BoxedMergeable::boxed(
+                    Dialog::around(
+                        LinearLayout::vertical()
+                            .child(EditView::new().content(path.to_string_lossy()).on_edit(
+                                binder.bind_ref_owned(|pathbuf, new_path, _pos| {
+                                    *pathbuf = PathBuf::from(new_path);
+                                }),
+                            ))
+                            .child(Panel::new(
+                                ScrollView::new(directory_list.min_width(30))
+                                    .scroll_y(true)
+                                    .full_height(),
+                            )),
+                    )
+                    .title(title)
+                    .button("OK", move |s| {
+                        s.pop_layer();
+                        confirm_then(s, &confirm_path);
+                    })
+                    .button("Cancel", |s| {
+                        s.pop_layer();
+                    }),
                 )
-                .title(title)
-                .button("OK", move |s| {
-                    s.pop_layer();
-                    confirm_then(s, &confirm_path);
-                })
-                .button("Cancel", |s| {
-                    s.pop_layer();
-                }),
-            )
-        })
+            },
+        )
         .with_name("file_picker"),
     );
 }
@@ -258,68 +248,59 @@ where
     THEN: Fn(&mut Cursive, &Path) + 'static + Clone,
 {
     siv.add_layer(
-        Builder::from_state_and_builder(starting_path.to_path_buf(), move |path: &PathBuf| {
-            let on_change = |s: &mut Cursive, path: &PathBuf| {
-                s.call_on_name("file_picker", |v: &mut Builder<PathBuf>| {
-                    v.with_state_mut(|pathbuf: &mut PathBuf| {
-                        *pathbuf = path.clone();
-                    })
+        Builder::from_state_and_builder(
+            "file_picker",
+            starting_path.to_path_buf(),
+            move |path: &PathBuf, binder: &Binder<_>| {
+                let on_change = binder.bind_ref(|state: &mut PathBuf, new_path: &PathBuf| {
+                    *state = new_path.clone();
                 });
 
-                s.on_event(Event::Refresh);
-            };
-            let directory_list = match directory_tree(path, on_change) {
-                Ok(directory_list) => directory_list,
-                Err(e) => return BoxedMergeable::boxed(error_dialog(e, path)),
-            };
-            let file_list = match file_listing(path, on_change) {
-                Ok(file_list) => file_list,
-                Err(e) => return BoxedMergeable::boxed(error_dialog(e, path)),
-            };
+                let directory_list = match directory_tree(path, on_change.clone()) {
+                    Ok(directory_list) => directory_list,
+                    Err(e) => return BoxedMergeable::boxed(error_dialog(e, path)),
+                };
+                let file_list = match file_listing(path, on_change) {
+                    Ok(file_list) => file_list,
+                    Err(e) => return BoxedMergeable::boxed(error_dialog(e, path)),
+                };
 
-            let confirm_path = path.clone();
-            let confirm_then = then.clone();
+                let confirm_path = path.clone();
+                let confirm_then = then.clone();
 
-            BoxedMergeable::boxed(
-                Dialog::around(
-                    LinearLayout::vertical()
-                        .child(EditView::new().content(path.to_string_lossy()).on_edit(
-                            |s, new_path, _pos| {
-                                let new_path = PathBuf::from(new_path);
-
-                                s.call_on_name("file_picker", move |v: &mut Builder<PathBuf>| {
-                                    v.with_state_mut(|pathbuf| {
-                                        *pathbuf = new_path;
-                                    })
-                                });
-
-                                s.on_event(Event::Refresh);
-                            },
-                        ))
-                        .child(
-                            LinearLayout::horizontal()
-                                .child(Panel::new(
-                                    ScrollView::new(directory_list.min_width(30))
-                                        .scroll_y(true)
-                                        .full_height(),
-                                ))
-                                .child(Panel::new(
-                                    ScrollView::new(file_list.min_width(60))
-                                        .scroll_y(true)
-                                        .full_height(),
-                                )),
-                        ),
+                BoxedMergeable::boxed(
+                    Dialog::around(
+                        LinearLayout::vertical()
+                            .child(EditView::new().content(path.to_string_lossy()).on_edit(
+                                binder.bind_ref_owned(|pathbuf, new_path_str: &str, _pos| {
+                                    *pathbuf = PathBuf::from(new_path_str);
+                                }),
+                            ))
+                            .child(
+                                LinearLayout::horizontal()
+                                    .child(Panel::new(
+                                        ScrollView::new(directory_list.min_width(30))
+                                            .scroll_y(true)
+                                            .full_height(),
+                                    ))
+                                    .child(Panel::new(
+                                        ScrollView::new(file_list.min_width(60))
+                                            .scroll_y(true)
+                                            .full_height(),
+                                    )),
+                            ),
+                    )
+                    .title(title)
+                    .button("OK", move |s| {
+                        s.pop_layer();
+                        confirm_then(s, &confirm_path);
+                    })
+                    .button("Cancel", |s| {
+                        s.pop_layer();
+                    }),
                 )
-                .title(title)
-                .button("OK", move |s| {
-                    s.pop_layer();
-                    confirm_then(s, &confirm_path);
-                })
-                .button("Cancel", |s| {
-                    s.pop_layer();
-                }),
-            )
-        })
+            },
+        )
         .with_name("file_picker"),
     );
 }

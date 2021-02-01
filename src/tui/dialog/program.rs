@@ -4,13 +4,13 @@ use crate::arch::ArchName;
 use crate::asm::AssemblerName;
 use crate::platform::PlatformName;
 use crate::project::Program;
-use crate::tui::builder::{BoxedMergeable, Builder};
+use crate::tui::builder::{Binder, BoxedMergeable, Builder};
 use crate::tui::dialog::pickers::file_picker;
-use cursive::event::Event;
 use cursive::view::{Nameable, Resizable};
 use cursive::views::{Button, Dialog, EditView, LinearLayout, ListView, SelectView, TextView};
 use cursive::Cursive;
 use std::env;
+use std::path::Path;
 
 /// Build the platform selector
 fn platform_selector<CHANGE>(
@@ -123,185 +123,141 @@ where
     THEN: Fn(&mut Cursive, &Program) + 'static + Clone,
 {
     siv.add_layer(
-        Builder::from_state_and_builder(program, move |program: &Program| {
-            let then_program = program.clone();
-            let then = then.clone();
-            let old_name = program.as_name().unwrap_or("").to_string();
+        Builder::from_state_and_builder(
+            "program_configurator",
+            program,
+            move |program: &Program, binder: &Binder<_>| {
+                let then_program = program.clone();
+                let then = then.clone();
+                let old_name = program.as_name().unwrap_or("").to_string();
+                let add_image_binder = binder.clone();
 
-            BoxedMergeable::boxed(
-                Dialog::around(
-                    LinearLayout::vertical()
-                        .child(
-                            LinearLayout::horizontal()
-                                .child(TextView::new("Name").min_width(25))
-                                .weight(1)
-                                .child(
-                                    EditView::new()
-                                        .content(&old_name)
-                                        .on_edit(|s, new_name, _pos| {
-                                            let new_name = new_name.to_string();
-
-                                            s.call_on_name(
-                                                "program_configurator",
-                                                move |v: &mut Builder<Program>| {
-                                                    v.with_state_mut(|program| {
-                                                        program.set_name(&new_name);
-                                                    });
+                BoxedMergeable::boxed(
+                    Dialog::around(
+                        LinearLayout::vertical()
+                            .child(
+                                LinearLayout::horizontal()
+                                    .child(TextView::new("Name").min_width(25))
+                                    .weight(1)
+                                    .child(
+                                        EditView::new()
+                                            .content(&old_name)
+                                            .on_edit(binder.bind_ref_owned(
+                                                |program: &mut Program, new_name, _pos| {
+                                                    program.set_name(new_name);
                                                 },
-                                            );
-
-                                            s.on_event(Event::Refresh);
-                                        })
-                                        .min_width(30),
-                                )
-                                .weight(5),
-                        )
-                        .child(
-                            LinearLayout::horizontal()
-                                .child(TextView::new("Analysis Architecture").min_width(25))
-                                .weight(1)
-                                .child(
-                                    arch_selector(program.arch(), |s, new_ar| {
-                                        s.call_on_name(
-                                            "program_configurator",
-                                            move |v: &mut Builder<Program>| {
-                                                v.with_state_mut(|program| {
-                                                    if let Some(arch) = new_ar {
-                                                        program.set_arch(arch);
-                                                    } else {
-                                                        program.unset_arch();
-                                                    }
-                                                });
-                                            },
-                                        );
-
-                                        s.on_event(Event::Refresh);
-                                    })
-                                    .min_width(30),
-                                )
-                                .weight(5),
-                        )
-                        .child(
-                            LinearLayout::horizontal()
-                                .child(TextView::new("Platform").min_width(25))
-                                .weight(1)
-                                .child(
-                                    platform_selector(
-                                        program.platform(),
-                                        program.arch(),
-                                        |s, new_pf| {
-                                            s.call_on_name(
-                                                "program_configurator",
-                                                move |v: &mut Builder<Program>| {
-                                                    v.with_state_mut(|program| {
-                                                        if let Some(pf) = new_pf {
-                                                            program.set_platform(pf);
-                                                        } else {
-                                                            program.unset_platform();
-                                                        }
-                                                    });
-                                                },
-                                            );
-
-                                            s.on_event(Event::Refresh);
-                                        },
+                                            ))
+                                            .min_width(30),
                                     )
-                                    .min_width(30),
-                                )
-                                .weight(5),
-                        )
-                        .child(
-                            LinearLayout::horizontal()
-                                .child(TextView::new("Assembler Syntax").min_width(25))
-                                .weight(1)
-                                .child(
-                                    asm_selector(
-                                        program.assembler(),
-                                        program.arch(),
-                                        |s, new_asm| {
-                                            s.call_on_name(
-                                                "program_configurator",
-                                                move |v: &mut Builder<Program>| {
-                                                    v.with_state_mut(|program| {
-                                                        if let Some(asm) = new_asm {
-                                                            program.set_assembler(asm);
-                                                        } else {
-                                                            program.unset_assembler();
-                                                        }
-                                                    });
-                                                },
-                                            );
-
-                                            s.on_event(Event::Refresh);
-                                        },
-                                    )
-                                    .min_width(30),
-                                )
-                                .weight(5),
-                        )
-                        .child(
-                            LinearLayout::horizontal()
-                                .child(TextView::new("Images").min_width(25))
-                                .weight(1)
-                                .child(
-                                    Button::new("Add Image", |s| {
-                                        file_picker(
-                                            s,
-                                            "Select Image File",
-                                            &env::current_dir().unwrap(),
-                                            move |s, path| {
-                                                s.call_on_name(
-                                                    "program_configurator",
-                                                    move |v: &mut Builder<Program>| {
-                                                        v.with_state_mut(|program| {
-                                                            program.add_image_path(
-                                                                &path.to_string_lossy(),
-                                                            );
-                                                        });
-                                                    },
-                                                );
-
-                                                s.on_event(Event::Refresh);
-                                            },
+                                    .weight(5),
+                            )
+                            .child(
+                                LinearLayout::horizontal()
+                                    .child(TextView::new("Analysis Architecture").min_width(25))
+                                    .weight(1)
+                                    .child(
+                                        arch_selector(
+                                            program.arch(),
+                                            binder.bind_owned(|program: &mut Program, new_ar| {
+                                                if let Some(arch) = new_ar {
+                                                    program.set_arch(arch);
+                                                } else {
+                                                    program.unset_arch();
+                                                }
+                                            }),
                                         )
-                                    })
-                                    .min_width(15),
-                                )
-                                .weight(5),
-                        )
-                        .child(image_list(
-                            &program.iter_images().collect::<Vec<&str>>(),
-                            |s, i| {
-                                s.call_on_name(
-                                    "program_configurator",
-                                    move |v: &mut Builder<Program>| {
-                                        v.with_state_mut(|program| {
-                                            program.remove_image_index(i);
-                                        });
-                                    },
-                                );
-
-                                s.on_event(Event::Refresh);
-                            },
-                        )),
-                )
-                .title("")
-                .button("OK", move |s| {
-                    if let Err(e) = then_program.validate() {
-                        s.add_layer(Dialog::info(format!(
+                                        .min_width(30),
+                                    )
+                                    .weight(5),
+                            )
+                            .child(
+                                LinearLayout::horizontal()
+                                    .child(TextView::new("Platform").min_width(25))
+                                    .weight(1)
+                                    .child(
+                                        platform_selector(
+                                            program.platform(),
+                                            program.arch(),
+                                            binder.bind_owned(|program, new_pf| {
+                                                if let Some(pf) = new_pf {
+                                                    program.set_platform(pf);
+                                                } else {
+                                                    program.unset_platform();
+                                                }
+                                            }),
+                                        )
+                                        .min_width(30),
+                                    )
+                                    .weight(5),
+                            )
+                            .child(
+                                LinearLayout::horizontal()
+                                    .child(TextView::new("Assembler Syntax").min_width(25))
+                                    .weight(1)
+                                    .child(
+                                        asm_selector(
+                                            program.assembler(),
+                                            program.arch(),
+                                            binder.bind_owned(|program, new_asm| {
+                                                if let Some(asm) = new_asm {
+                                                    program.set_assembler(asm);
+                                                } else {
+                                                    program.unset_assembler();
+                                                }
+                                            }),
+                                        )
+                                        .min_width(30),
+                                    )
+                                    .weight(5),
+                            )
+                            .child(
+                                LinearLayout::horizontal()
+                                    .child(TextView::new("Images").min_width(25))
+                                    .weight(1)
+                                    .child(
+                                        Button::new("Add Image", move |s| {
+                                            file_picker(
+                                                s,
+                                                "Select Image File",
+                                                &env::current_dir().unwrap(),
+                                                add_image_binder.bind_ref(
+                                                    |program, path: &Path| {
+                                                        program.add_image_path(
+                                                            &path.to_string_lossy(),
+                                                        );
+                                                    },
+                                                ),
+                                            )
+                                        })
+                                        .min_width(15),
+                                    )
+                                    .weight(5),
+                            )
+                            .child(image_list(
+                                &program.iter_images().collect::<Vec<&str>>(),
+                                binder.bind_owned(|program, i| {
+                                    program.remove_image_index(i);
+                                }),
+                            )),
+                    )
+                    .title("")
+                    .button("OK", move |s| {
+                        if let Err(e) = then_program.validate() {
+                            s.add_layer(Dialog::info(format!(
                             "Your program is currently invalid: {}.\nPlease reconfigure it first.",
                             e
                         )));
-                    } else {
+                        } else {
+                            s.pop_layer();
+                            then(s, &then_program);
+                        }
+                    })
+                    .button("Cancel", |s| {
                         s.pop_layer();
-                        then(s, &then_program);
-                    }
-                })
-                .button("Cancel", |s| {
-                    s.pop_layer();
-                }),
-            )
-        })
+                    }),
+                )
+            },
+        )
         .with_name("program_configurator"),
     )
 }
