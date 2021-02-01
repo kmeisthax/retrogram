@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 
+/// Errors yielded from `Program.validate`.
 #[derive(Error, Debug)]
 pub enum ValidationError {
     #[error("Program is untitled")]
@@ -30,6 +31,7 @@ pub enum ValidationError {
     NoImages,
 }
 
+/// A description of a disassemblable program.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Program {
     platform: Option<PlatformName>,
