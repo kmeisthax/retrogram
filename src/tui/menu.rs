@@ -153,6 +153,8 @@ pub fn repopulate_menu(siv: &mut Cursive) {
                         if let Err(e) = open_disasm_tab(s, &program_name) {
                             s.add_layer(Dialog::info(format!("Error when opening new tab: {}", e)));
                         }
+
+                        repopulate_menu(s);
                     })
                 })
                 .delimiter()
