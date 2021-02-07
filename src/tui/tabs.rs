@@ -158,25 +158,11 @@ impl TabHandle {
             )),
         }
     }
-}
 
-/// Construct a new disassembly tab for a given program and add it to the TUI
-fn disasm_tab_zygote(
-    context: &mut dyn AnyProgramContext,
-    panel: &mut TabPanel<TabHandle>,
-    nonce: u64,
-) -> io::Result<()> {
-    with_context_architecture!(context, |context, arch, asm| {
-        let handle = TabHandle::disasm_from_program(context.duplicate(), nonce);
-        let name = handle.to_view_name();
-
-        panel.add_tab(
-            handle,
-            DisassemblyView::new(context.clone(), &name, arch, asm).with_name(name),
-        );
-
-        Ok(())
-    })
+    /// Determine if this tab handle is an EmptyView type of tab
+    pub fn is_empty(&self) -> bool {
+        matches!(self.view_type, TabViewType::EmptyView)
+    }
 }
 
 pub fn call_on_tab<AR, ASM, CBK, R>(
@@ -258,11 +244,21 @@ pub fn open_disasm_tab(siv: &mut Cursive, for_program_name: &str) -> io::Result<
         .user_data::<SessionContext>()
         .expect("Session should exist");
 
-    let mut ctxt = session.program_context(cb_sink, for_program_name)?;
-    let nonce = session.nonce();
+    let ctxt = session.program_context(cb_sink, for_program_name)?;
+    let mut handle = TabHandle::disasm_from_program(ctxt, session.nonce());
 
-    siv.call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
-        disasm_tab_zygote(&mut *ctxt, v, nonce)
+    siv.call_on_name::<_, _, io::Result<()>>("tabs", |v: &mut TabPanel<TabHandle>| {
+        for tab in v.tab_order() {
+            if tab.is_empty() {
+                v.remove_tab(&tab).unwrap();
+            }
+        }
+
+        let view = handle.construct()?;
+        v.add_tab(handle.clone(), view);
+        v.set_active_tab(handle).unwrap();
+
+        Ok(())
     })
     .ok_or_else(|| {
         io::Error::new(
