@@ -6,7 +6,9 @@ use crate::project::Program;
 use crate::tui::context::{AnyProgramContext, SessionContext};
 use crate::tui::dialog::error_dialog;
 use crate::tui::disasm_view::DisassemblyView;
+use cursive::traits::Resizable;
 use cursive::view::{Nameable, View};
+use cursive::views::{BoxedView, TextView};
 use cursive::Cursive;
 use cursive_tabs::TabPanel;
 use std::borrow::Borrow;
@@ -21,6 +23,9 @@ pub enum TabViewType {
         /// The program this disassembly view is displaying.
         program: Box<dyn AnyProgramContext>,
     },
+
+    /// This tab exists to keep the disassembly view from crashing.
+    EmptyView,
 }
 
 impl Clone for TabViewType {
@@ -29,6 +34,7 @@ impl Clone for TabViewType {
             TabViewType::DisassemblyView { program } => TabViewType::DisassemblyView {
                 program: program.duplicate(),
             },
+            TabViewType::EmptyView => TabViewType::EmptyView,
         }
     }
 }
@@ -54,6 +60,9 @@ impl PartialEq for TabHandle {
                     program: rhs_program,
                 },
             ) => (self_program.as_program_name() == rhs_program.as_program_name()),
+            (TabViewType::DisassemblyView { .. }, _) => false,
+            (TabViewType::EmptyView, TabViewType::EmptyView) => true,
+            (TabViewType::EmptyView, _) => false,
         };
 
         view && (self.nonce == rhs.nonce)
@@ -69,6 +78,9 @@ impl Hash for TabHandle {
                 "DisassemblyView".hash(state);
                 program.as_program_name().hash(state);
             }
+            TabViewType::EmptyView => {
+                "EmptyView".hash(state);
+            }
         };
 
         self.nonce.hash(state);
@@ -80,6 +92,9 @@ impl Display for TabHandle {
         match &self.view_type {
             TabViewType::DisassemblyView { program } => {
                 write!(f, "Disasm View ({})", program.as_program_name())
+            }
+            TabViewType::EmptyView => {
+                write!(f, "Empty")
             }
         }
     }
@@ -94,6 +109,14 @@ impl TabHandle {
         }
     }
 
+    /// Create a handle for an empty view of a particular program.
+    fn empty(nonce: u64) -> Self {
+        Self {
+            view_type: TabViewType::EmptyView,
+            nonce,
+        }
+    }
+
     /// Calculate a string form of this handle to use as the view name of any
     /// tab referenced by this handle.
     ///
@@ -104,12 +127,35 @@ impl TabHandle {
             TabViewType::DisassemblyView { program } => {
                 format!("tab_disasm_{}_{}", program.as_program_name(), self.nonce)
             }
+            TabViewType::EmptyView => {
+                format!("tab_empty_{}", self.nonce)
+            }
         }
     }
 
     pub fn program(&mut self) -> Option<impl '_ + Borrow<Program>> {
         match &mut self.view_type {
             TabViewType::DisassemblyView { program } => Some(program.as_program()),
+            TabViewType::EmptyView => None,
+        }
+    }
+
+    /// Construct the view that should go with this tab.
+    pub fn construct(&mut self) -> io::Result<BoxedView> {
+        let name = self.to_view_name();
+
+        match &mut self.view_type {
+            TabViewType::DisassemblyView { program } => {
+                let context = &mut **program;
+                with_context_architecture!(context, |program, arch, asm| {
+                    Ok(BoxedView::boxed(
+                        DisassemblyView::new(program.clone(), &name, arch, asm).with_name(name),
+                    ))
+                })
+            }
+            TabViewType::EmptyView => Ok(BoxedView::boxed(
+                TextView::new("Please add a program to this project.").full_screen(),
+            )),
         }
     }
 }
@@ -164,7 +210,8 @@ pub fn repopulate_tabs(siv: &mut Cursive) {
     });
 
     let cb_sink = siv.cb_sink().clone();
-    let program_names = siv
+    let mut errors = vec![];
+    let tab_handles = siv
         .with_user_data(|session: &mut SessionContext| {
             let programs = session
                 .project()
@@ -174,27 +221,30 @@ pub fn repopulate_tabs(siv: &mut Cursive) {
             let mut out = vec![];
 
             for program in programs {
-                let context = session.program_context(cb_sink.clone(), &program);
-                out.push((context, session.nonce()));
+                match session.program_context(cb_sink.clone(), &program) {
+                    Ok(context) => {
+                        out.push(TabHandle::disasm_from_program(context, session.nonce()))
+                    }
+                    Err(e) => errors.push(e),
+                }
+            }
+
+            if out.is_empty() {
+                out.push(TabHandle::empty(session.nonce()))
             }
 
             out
         })
         .unwrap();
-    let mut errors = vec![];
 
-    for (maybe_ctxt, nonce) in program_names {
-        match maybe_ctxt {
-            Err(e) => errors.push(e),
-            Ok(mut ctxt) => {
-                siv.call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
-                    if let Err(e) = disasm_tab_zygote(&mut *ctxt, v, nonce) {
-                        errors.push(e);
-                    }
-                });
+    siv.call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
+        for mut handle in tab_handles {
+            match handle.construct() {
+                Ok(view) => v.add_tab(handle, view),
+                Err(e) => errors.push(e),
             }
         }
-    }
+    });
 
     for error in errors {
         siv.add_layer(error_dialog(error));
