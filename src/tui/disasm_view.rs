@@ -6,7 +6,7 @@ use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
 use crate::ast::{Directive, Literal, Section};
 use crate::database::Database;
 use crate::memory::{Memory, Pointer, Tumbler};
-use crate::tui::dialog::{jump_dialog, label_dialog};
+use crate::tui::dialog::{error_dialog, jump_dialog, label_dialog, xrefs_dialog};
 use crate::tui::ProgramContext;
 use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
@@ -548,6 +548,19 @@ where
 
                 EventResult::Consumed(Some(Callback::from_fn(move |s| {
                     label_dialog(arch, s, mem.clone(), pjdb.clone(), prog_name.clone())
+                })))
+            }
+            Event::Char('x') => {
+                let arch = self.arch;
+                let pjdb = self.context.project_database();
+                let prog_name = self.context.program_name().to_string();
+                let position = self.context.bus().encode_tumbler(self.cursor);
+
+                EventResult::Consumed(Some(Callback::from_fn(move |s| {
+                    match xrefs_dialog(arch, position.clone(), pjdb.clone(), &prog_name) {
+                        Ok(d) => s.add_layer(d),
+                        Err(e) => s.add_layer(error_dialog(e)),
+                    }
                 })))
             }
             _ => EventResult::Ignored,

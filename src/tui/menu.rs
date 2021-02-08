@@ -5,9 +5,10 @@ use crate::tui::dialog::{
     directory_picker, error_dialog, jump_dialog, label_dialog, program_config_dialog,
 };
 use crate::tui::tabs::{call_on_tab, open_disasm_tab, repopulate_tabs, TabHandle};
+use cursive::event::{Event, EventResult};
 use cursive::menu::MenuTree;
 use cursive::views::Dialog;
-use cursive::Cursive;
+use cursive::{Cursive, View};
 use cursive_tabs::TabPanel;
 use std::borrow::Borrow;
 use std::path::Path;
@@ -217,34 +218,61 @@ pub fn repopulate_menu(siv: &mut Cursive) {
         )
         .add_subtree(
             "View",
-            MenuTree::new().leaf("Jump to...", |s| {
-                let handle = s
-                    .call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
-                        v.active_tab().cloned()
-                    })
-                    .flatten();
-
-                if let Some(mut handle) = handle {
-                    if let Some(program) = handle.program().map(|p| p.borrow().clone()) {
-                        let borrow = &program;
-                        with_prog_architecture!(borrow, |_plat, arch, asm| {
-                            let context =
-                                call_on_tab(arch, asm, s, &handle, |v| v.context().clone())
-                                    .unwrap();
-
-                            jump_dialog(arch, s, &context, move |s, scroll| {
-                                call_on_tab(arch, asm, s, &handle, |v| v.scroll_to(scroll))
-                                    .unwrap();
-
-                                true
-                            });
-
-                            Ok(())
+            MenuTree::new()
+                .leaf("Jump to...", |s| {
+                    let handle = s
+                        .call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
+                            v.active_tab().cloned()
                         })
-                        .unwrap();
+                        .flatten();
+
+                    if let Some(mut handle) = handle {
+                        if let Some(program) = handle.program().map(|p| p.borrow().clone()) {
+                            let borrow = &program;
+                            with_prog_architecture!(borrow, |_plat, arch, asm| {
+                                let context =
+                                    call_on_tab(arch, asm, s, &handle, |v| v.context().clone())
+                                        .unwrap();
+
+                                jump_dialog(arch, s, &context, move |s, scroll| {
+                                    call_on_tab(arch, asm, s, &handle, |v| v.scroll_to(scroll))
+                                        .unwrap();
+
+                                    true
+                                });
+
+                                Ok(())
+                            })
+                            .unwrap();
+                        }
                     }
-                }
-            }),
+                })
+                .delimiter()
+                .leaf("Crossreferences...", |s| {
+                    let handle = s
+                        .call_on_name("tabs", |v: &mut TabPanel<TabHandle>| {
+                            v.active_tab().cloned()
+                        })
+                        .flatten();
+
+                    if let Some(mut handle) = handle {
+                        if let Some(program) = handle.program().map(|p| p.borrow().clone()) {
+                            let borrow = &program;
+                            let event_result =
+                                with_prog_architecture!(borrow, |_plat, arch, asm| {
+                                    Ok(call_on_tab(arch, asm, s, &handle, |v| {
+                                        v.on_event(Event::Char('x'))
+                                    })
+                                    .unwrap())
+                                })
+                                .unwrap();
+
+                            if let EventResult::Consumed(Some(cbk)) = event_result {
+                                cbk(s)
+                            }
+                        }
+                    }
+                }),
         );
 
     let windows = siv
