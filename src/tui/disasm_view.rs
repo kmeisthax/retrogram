@@ -336,6 +336,10 @@ where
                 .command_sender()
                 .send(Command::StaticScanCode(ptr))
                 .unwrap();
+            self.context
+                .command_sender()
+                .send(Command::ExtractAllScans(false))
+                .unwrap();
             self.context.command_sender().send(Command::Fence).unwrap()
         }
     }

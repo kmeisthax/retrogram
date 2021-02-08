@@ -95,6 +95,9 @@ where
 
     /// The number of scans extracted from the database.
     ///
+    /// The first parameter indicates if the extract operation given allowed
+    /// dynamic tracing.
+    ///
     /// A count of zero indicates that scanning has completed. A non-zero count
     /// may indicate that further scans may be extractable from the database.
     ExtractScanCount(bool, usize),
