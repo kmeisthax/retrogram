@@ -25,12 +25,26 @@ pub fn label_dialog<AR>(
         let symbol_id = db.pointer_symbol(&address);
         let label_name = symbol_id
             .and_then(|symbol_id| Some(db.symbol(symbol_id)?.as_label().name().to_string()));
-        let label_parent = symbol_id.and_then(|symbol_id| {
-            db.symbol(symbol_id)?
-                .as_label()
-                .parent_name()
-                .map(|s| s.to_string())
-        });
+        let label_parent = symbol_id
+            .and_then(|symbol_id| {
+                db.symbol(symbol_id)?
+                    .as_label()
+                    .parent_name()
+                    .map(|s| s.to_string())
+            })
+            .or_else(|| {
+                if let Some(block_id) = db.find_block_membership(&address) {
+                    let start = db.block(block_id).unwrap().as_start();
+                    if start != &address {
+                        db.pointer_symbol(start)
+                            .map(|ps| db.symbol(ps).unwrap().as_label().name().to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            });
 
         drop(pjdb_lock);
 
