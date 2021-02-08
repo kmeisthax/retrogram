@@ -5,7 +5,7 @@ use crate::asm::Assembler;
 use crate::database::ProjectDatabase;
 use crate::platform::Platform;
 use crate::project::{Program, Project};
-use crate::{analysis, input, maths, memory};
+use crate::{input, maths, memory};
 use clap::ArgMatches;
 use num_traits::One;
 use std::{fs, io};
@@ -60,26 +60,13 @@ where
 
                     asm.emit_instr(&mut io::stdout(), instr_asm)?;
 
-                    println!(
-                        " ({})",
-                        match xref.kind() {
-                            analysis::ReferenceKind::Unknown => "Unknown",
-                            analysis::ReferenceKind::Data => "Data",
-                            analysis::ReferenceKind::Code => "Code, branch",
-                            analysis::ReferenceKind::Subroutine => "Code, call",
-                        }
-                    );
+                    println!(" ({})", xref.kind().friendly_name());
                 }
                 Err(_) => {
                     println!(
                         "{:X}: ??? ({})",
                         xref.as_source(),
-                        match xref.kind() {
-                            analysis::ReferenceKind::Unknown => "Unknown",
-                            analysis::ReferenceKind::Data => "Data",
-                            analysis::ReferenceKind::Code => "Code, branch",
-                            analysis::ReferenceKind::Subroutine => "Code, call",
-                        }
+                        xref.kind().friendly_name()
                     );
                 }
             }

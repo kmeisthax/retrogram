@@ -25,6 +25,17 @@ impl Display for ReferenceKind {
     }
 }
 
+impl ReferenceKind {
+    pub fn friendly_name(self) -> &'static str {
+        match self {
+            ReferenceKind::Unknown => "Unknown",
+            ReferenceKind::Data => "Data",
+            ReferenceKind::Code => "Code, branch",
+            ReferenceKind::Subroutine => "Code, call",
+        }
+    }
+}
+
 /// Represents a reference in the database.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Reference<P>
