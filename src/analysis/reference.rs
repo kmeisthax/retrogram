@@ -3,9 +3,15 @@
 use crate::cli::Nameable;
 use crate::memory;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ord;
 use std::fmt::{Display, Formatter, Result};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// Represents the type of a reference.
+///
+/// Reference kinds are strictly ordered: for any given symbol, you can state
+/// it's strongest reference kind by taking the maximum of all incoming
+/// reference kinds.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ReferenceKind {
     Unknown,
     Data,
