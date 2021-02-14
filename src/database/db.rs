@@ -67,7 +67,7 @@ where
 
     /// A list of all pointer values in the program which have a label.
     #[serde(skip)]
-    pointer_symbols: HashMap<memory::Pointer<AR::PtrVal>, usize>,
+    pointer_symbols: BTreeMap<memory::Pointer<AR::PtrVal>, usize>,
 
     /// A list of crossreferences sorted by source address.
     #[serde(skip)]
@@ -228,7 +228,7 @@ where
             xrefs: Vec::new(),
             failed_analysis: HashMap::new(),
             label_symbols: HashMap::new(),
-            pointer_symbols: HashMap::new(),
+            pointer_symbols: BTreeMap::new(),
             xref_source_index: BTreeMap::new(),
             xref_target_index: BTreeMap::new(),
         }
@@ -341,6 +341,18 @@ where
     }
 
     /// Create a label for a location that is not named in the database.
+    ///
+    /// This function will attempt to make placeholder labels local to the
+    /// subroutine they are a part of. This requires a rigorous definition of
+    /// 'subroutine', which we don't have - it's entirely possible and indeed
+    /// expected for machine code to jump to the middle of another subroutine,
+    /// or call a fragment of another subroutine.
+    ///
+    /// Instead, we define a heuristic, based on the reference kind and
+    /// existing labels. If this is a non-subroutine reference, and this label
+    /// does not already exist, then we localize it. Otherwise, we keep it
+    /// as-is. This allows jumps to create local labels without also
+    /// delocalizing already-established calls.
     pub fn insert_placeholder_label(
         &mut self,
         ptr: memory::Pointer<AR::PtrVal>,
@@ -357,7 +369,27 @@ where
 
         name = format!("{}_{:X}", name, ptr.as_pointer());
 
-        self.upsert_symbol(ast::Label::new_placeholder(&name, None), ptr);
+        let mut parent = None;
+
+        if !matches!(kind, analysis::ReferenceKind::Subroutine)
+            && self.pointer_symbol(&ptr).is_none()
+        {
+            for (sym_ptr, sym_id) in self.pointer_symbols.range(..ptr.clone()).rev() {
+                if !sym_ptr.is_context_eq(&ptr) {
+                    continue;
+                }
+
+                let symbol = self.symbol(*sym_id).unwrap();
+                if symbol.0.parent_name().is_some() {
+                    continue;
+                }
+
+                parent = Some(symbol.0.name().to_string());
+                break;
+            }
+        }
+
+        self.upsert_symbol(ast::Label::new_placeholder(&name, parent.as_deref()), ptr);
 
         ast::Label::new(&name, None)
     }
