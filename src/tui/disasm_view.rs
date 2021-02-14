@@ -335,6 +335,10 @@ where
         if let Some(ptr) = ptr {
             self.context
                 .command_sender()
+                .send(Command::DeclareEntryPoint(ptr.clone()))
+                .unwrap();
+            self.context
+                .command_sender()
                 .send(Command::StaticScanCode(ptr))
                 .unwrap();
             self.context

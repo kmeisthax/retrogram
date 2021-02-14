@@ -166,6 +166,9 @@ where
     cmd_send
         .send(Command::SetPowerOnState(poweron_state))
         .unwrap();
+    cmd_send
+        .send(Command::DeclareEntryPoint(start_pc.clone()))
+        .unwrap();
     cmd_send.send(Command::StaticScanCode(start_pc)).unwrap();
     cmd_send.send(Command::Fence).unwrap();
     cmd_send
@@ -177,6 +180,9 @@ where
 
     loop {
         match resp_recv.recv().unwrap() {
+            Response::DeclaredEntryPoint(p) => {
+                eprintln!("Marked ${:X} as an entry point", p);
+            }
             Response::StaticScanCode {
                 scan_start,
                 scan_end_offset,

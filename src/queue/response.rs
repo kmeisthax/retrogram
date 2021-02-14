@@ -9,6 +9,9 @@ pub enum Response<AR>
 where
     AR: Architecture,
 {
+    /// Result of declaring a new entrypoint.
+    DeclaredEntryPoint(Pointer<AR::PtrVal>),
+
     /// Result of a static scan at a given address.
     StaticScanCode {
         /// The start of the scan.

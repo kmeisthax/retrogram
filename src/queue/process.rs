@@ -4,7 +4,7 @@ use crate::arch::{Architecture, CompatibleLiteral};
 use crate::database::ProjectDatabase;
 use crate::memory::Memory;
 use crate::queue::actions::{
-    extract_scans_from_database, process_dynamic_scan, process_static_scan,
+    declare_entry_point, extract_scans_from_database, process_dynamic_scan, process_static_scan,
 };
 use crate::queue::command::Command;
 use crate::queue::context::QueueContext;
@@ -29,6 +29,10 @@ where
     Memory<AR>: Send + Sync,
 {
     match cmd {
+        Command::DeclareEntryPoint(p) => {
+            declare_entry_point(&context, p);
+            true
+        }
         Command::StaticScanCode(start) => {
             let my_sender = resp_sender;
             context.spawn(move |my_context| {

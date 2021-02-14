@@ -15,6 +15,9 @@ pub enum Command<AR>
 where
     AR: Architecture,
 {
+    /// Declare a new entrypoint into the program.
+    DeclareEntryPoint(Pointer<AR::PtrVal>),
+
     /// Start a static scan at a given address.
     StaticScanCode(Pointer<AR::PtrVal>),
 

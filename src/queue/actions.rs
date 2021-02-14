@@ -1,7 +1,8 @@
 //! Queue command executors
 
 use crate::analysis::{
-    analyze_trace_log, disassemble_block, trace_until_fork, Error, Fork, ReferenceKind, Trace,
+    analyze_trace_log, disassemble_block, trace_until_fork, Error, Fork, Reference, ReferenceKind,
+    Trace,
 };
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::database::Database;
@@ -13,6 +14,24 @@ use crate::queue::response::Response;
 use num::Zero;
 use std::convert::TryFrom;
 use std::sync::mpsc::Sender;
+
+pub fn declare_entry_point<AR>(
+    context: &QueueContext<AR>,
+    start: Pointer<AR::PtrVal>,
+) -> Response<AR>
+where
+    AR: Architecture,
+{
+    let mut db_write = context.project_db.write().unwrap();
+    let db = db_write
+        .get_database_mut::<AR>(&context.program_name)
+        .unwrap();
+
+    db.insert_crossreference(Reference::new_entrypoint(start.clone()));
+    db.insert_placeholder_label(start.clone(), ReferenceKind::Entrypoint);
+
+    Response::DeclaredEntryPoint(start)
+}
 
 /// Run a static disassembly on a particular location in the program.
 ///
