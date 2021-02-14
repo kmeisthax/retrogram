@@ -44,19 +44,6 @@ where
         if let Some(sym_id) = db.label_symbol(&text_lbl) {
             let sym = db.symbol(sym_id).expect("DB handed back invalid symbol ID");
             return Some(sym.as_pointer().clone());
-        } else {
-            //Stupid workaround for the fact that the database treats the
-            //autogen bit as part of the symbol's identity
-
-            //TODO: When the database stops treating the autogen bit as part of
-            //the label's "primary key" remove this code
-
-            let autogen_ver = ast::Label::new_placeholder(text_lbl.name(), text_lbl.parent_name());
-
-            if let Some(sym_id) = db.label_symbol(&autogen_ver) {
-                let sym = db.symbol(sym_id).expect("DB handed back invalid symbol ID");
-                return Some(sym.as_pointer().clone());
-            }
         }
     }
 

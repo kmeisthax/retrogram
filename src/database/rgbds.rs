@@ -76,10 +76,15 @@ pub fn parse_symbol_file(
                             if let Some(local_part) = name_split.next() {
                                 db.upsert_symbol(
                                     ast::Label::new(local_part, Some(global_part)),
+                                    None,
                                     ctxt_ptr,
                                 );
                             } else {
-                                db.upsert_symbol(ast::Label::new(global_part, None), ctxt_ptr);
+                                db.upsert_symbol(
+                                    ast::Label::new(global_part, None),
+                                    None,
+                                    ctxt_ptr,
+                                );
                             }
                         }
                     }

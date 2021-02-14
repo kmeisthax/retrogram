@@ -54,7 +54,7 @@ where
         )
     })?;
 
-    db.upsert_symbol(into_label, from_pc);
+    db.upsert_symbol(into_label, None, from_pc);
 
     if let Err(e) = pjdb.write(&mut fs::File::create(database_path)?) {
         return Err(e.into());

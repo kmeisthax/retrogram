@@ -90,6 +90,10 @@ where
         Reference::Dynamic { at, reftype }
     }
 
+    pub fn new_entrypoint(loc: memory::Pointer<P>) -> Self {
+        Reference::Entry { loc }
+    }
+
     pub fn as_source(&self) -> Option<&memory::Pointer<P>> {
         match self {
             Reference::Static {

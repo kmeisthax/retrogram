@@ -10,10 +10,6 @@ pub struct Label {
     /// Name of the parent label (if any).
     /// If None, then the label is global.
     parent_name: Option<String>,
-
-    /// TRUE if the label is auto-generated, FALSE if the label came from user
-    /// input
-    is_autogen: bool,
 }
 
 impl Label {
@@ -21,15 +17,6 @@ impl Label {
         Label {
             name: name.to_string(),
             parent_name: parent_name.map(|s| s.to_string()),
-            is_autogen: false,
-        }
-    }
-
-    pub fn new_placeholder(name: &str, parent_name: Option<&str>) -> Label {
-        Label {
-            name: name.to_string(),
-            parent_name: parent_name.map(|s| s.to_string()),
-            is_autogen: true,
         }
     }
 
@@ -44,10 +31,6 @@ impl Label {
             None
         }
     }
-
-    pub fn is_placeholder(&self) -> bool {
-        self.is_autogen
-    }
 }
 
 impl str::FromStr for Label {
@@ -57,40 +40,23 @@ impl str::FromStr for Label {
         let mut split = s.split('.');
         let maybe_parent = split.next();
         let maybe_child = split.next();
-        let maybe_autogen_flag = s.get(0..2);
 
-        match (maybe_autogen_flag, maybe_parent, maybe_child) {
-            (Some("!!"), Some(parent), Some(child)) => Ok(Label {
-                name: child.to_string(),
-                parent_name: Some(parent.get(2..).expect("I expect that there's at least 2 characters in a string that matched two of them").to_string()),
-                is_autogen: true
-            }),
-            (Some("!!"), Some(parent), None) => Ok(Label {
-                name: parent.get(2..).expect("I expect that there's at least 2 characters in a string that matched two of them").to_string(),
-                parent_name: None,
-                is_autogen: true
-            }),
-            (_, Some(parent), Some(child)) => Ok(Label {
+        match (maybe_parent, maybe_child) {
+            (Some(parent), Some(child)) => Ok(Label {
                 name: child.to_string(),
                 parent_name: Some(parent.to_string()),
-                is_autogen: false
             }),
-            (_, Some(parent), None) => Ok(Label {
+            (Some(parent), None) => Ok(Label {
                 name: parent.to_string(),
                 parent_name: None,
-                is_autogen: false
             }),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
 
 impl fmt::Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.is_autogen {
-            write!(f, "!!")?;
-        }
-
         if let Some(ref parent_name) = self.parent_name {
             write!(f, "{}.", parent_name)?;
         }
