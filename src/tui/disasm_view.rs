@@ -1,11 +1,12 @@
 //! Disassembly view
 
-use crate::analysis::{replace_labels, Command, Error};
+use crate::analysis::{replace_labels, Error};
 use crate::arch::{AnyArch, ArchName, Architecture, CompatibleLiteral};
 use crate::asm::{AnnotatedText, AnnotationKind, Assembler};
 use crate::ast::{Directive, Literal, Section};
 use crate::database::Database;
 use crate::memory::{Memory, Pointer, Tumbler};
+use crate::queue::Command;
 use crate::tui::dialog::{error_dialog, jump_dialog, label_dialog, xrefs_dialog};
 use crate::tui::ProgramContext;
 use cursive::direction::Direction;

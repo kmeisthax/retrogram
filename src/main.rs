@@ -23,6 +23,7 @@ pub mod input;
 mod maths;
 pub mod platform;
 pub mod project;
+mod queue;
 pub mod reg;
 mod tui;
 

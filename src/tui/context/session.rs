@@ -1,9 +1,9 @@
 //! Entire-session context
 
-use crate::analysis::{Command, Response};
 use crate::database::ProjectDatabase;
 use crate::platform::Platform;
 use crate::project::{Program, Project};
+use crate::queue::{Command, Response};
 use crate::tui::context::program::{AnyProgramContext, ProgramContext};
 use cursive::event::Event;
 use cursive::CbSink;

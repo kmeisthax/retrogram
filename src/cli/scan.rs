@@ -1,6 +1,5 @@
 //! CLI command: scan
 
-use crate::analysis::{start_analysis_queue, Command, Response};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
 use crate::cli::common::reg_parse;
@@ -9,6 +8,7 @@ use crate::maths::FromStrRadix;
 use crate::memory::{Memory, Offset};
 use crate::platform::Platform;
 use crate::project::{Program, Project};
+use crate::queue::{start_analysis_queue, Command, Response};
 use crate::reg::{Bitwise, State};
 use crate::{analysis, ast, input, maths, memory, reg};
 use clap::ArgMatches;

@@ -1,12 +1,12 @@
 //! Individual program context
 
-use crate::analysis::{start_analysis_queue, Command, Response};
 use crate::arch::{AnyArch, ArchName, Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
 use crate::database::ProjectDatabase;
 use crate::input::parse_ptr;
 use crate::memory::{Memory, Pointer};
 use crate::project::{Program, Project};
+use crate::queue::{start_analysis_queue, Command, Response};
 use owning_ref::{RwLockWriteGuardRef, RwLockWriteGuardRefMut};
 use std::any::Any;
 use std::sync::mpsc::{Receiver, Sender};
