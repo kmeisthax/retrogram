@@ -36,38 +36,40 @@ where
         let xref_obj = db.xref(inbound_xref).unwrap();
         let kind = xref_obj.kind().friendly_name();
 
-        let source = if let Some(sym_id) = db.pointer_symbol(&xref_obj.as_source()) {
-            let symbol = db.symbol(sym_id).unwrap().as_label();
-            if let Some(parent) = symbol.parent_name() {
-                format!("{}.{} ({})", parent, symbol.name(), kind)
-            } else {
-                format!("{} ({})", symbol.name(), kind)
-            }
-        } else if let Some(block_id) = db.find_block_membership(&xref_obj.as_source()) {
-            let block = db.block(block_id).unwrap();
-            let offset = AR::Offset::try_from(
-                xref_obj.as_source().as_pointer().clone() - block.as_start().as_pointer().clone(),
-            );
+        if let Some(source) = xref_obj.as_source() {
+            let xref_str = if let Some(sym_id) = db.pointer_symbol(&source) {
+                let symbol = db.symbol(sym_id).unwrap().as_label();
+                if let Some(parent) = symbol.parent_name() {
+                    format!("{}.{} ({})", parent, symbol.name(), kind)
+                } else {
+                    format!("{} ({})", symbol.name(), kind)
+                }
+            } else if let Some(block_id) = db.find_block_membership(&source) {
+                let block = db.block(block_id).unwrap();
+                let offset = AR::Offset::try_from(
+                    source.as_pointer().clone() - block.as_start().as_pointer().clone(),
+                );
 
-            if let Ok(offset) = offset {
-                if let Some(sym_id) = db.pointer_symbol(block.as_start()) {
-                    let symbol = db.symbol(sym_id).unwrap().as_label();
-                    if let Some(parent) = symbol.parent_name() {
-                        format!("{}.{}+${:X} ({})", parent, symbol.name(), offset, kind)
+                if let Ok(offset) = offset {
+                    if let Some(sym_id) = db.pointer_symbol(block.as_start()) {
+                        let symbol = db.symbol(sym_id).unwrap().as_label();
+                        if let Some(parent) = symbol.parent_name() {
+                            format!("{}.{}+${:X} ({})", parent, symbol.name(), offset, kind)
+                        } else {
+                            format!("{}+${:X} ({})", symbol.name(), offset, kind)
+                        }
                     } else {
-                        format!("{}+${:X} ({})", symbol.name(), offset, kind)
+                        format!("${:X}+${:X} ({})", block.as_start(), offset, kind)
                     }
                 } else {
-                    format!("${:X}+${:X} ({})", block.as_start(), offset, kind)
+                    format!("${:X} ({})", source, kind)
                 }
             } else {
-                format!("${:X} ({})", xref_obj.as_source(), kind)
-            }
-        } else {
-            format!("${:X} ({})", xref_obj.as_source(), kind)
-        };
+                format!("${:X} ({})", source, kind)
+            };
 
-        inbound_xref_list.add_item(&source, inbound_xref);
+            inbound_xref_list.add_item(&xref_str, inbound_xref);
+        }
     }
 
     let mut ll = LinearLayout::vertical();

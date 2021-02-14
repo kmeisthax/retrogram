@@ -11,6 +11,7 @@ pub enum ReferenceKind {
     Data,
     Code,
     Subroutine,
+    Entrypoint,
 }
 
 impl Display for ReferenceKind {
@@ -21,6 +22,7 @@ impl Display for ReferenceKind {
             ReferenceKind::Data => write!(f, "DAT"),
             ReferenceKind::Code => write!(f, "LOC"),
             ReferenceKind::Subroutine => write!(f, "FUN"),
+            ReferenceKind::Entrypoint => write!(f, "ENTER"),
         }
     }
 }
@@ -32,6 +34,7 @@ impl ReferenceKind {
             ReferenceKind::Data => "Data",
             ReferenceKind::Code => "Code, branch",
             ReferenceKind::Subroutine => "Code, call",
+            ReferenceKind::Entrypoint => "Code, entrypoint",
         }
     }
 }
@@ -56,6 +59,9 @@ where
         at: memory::Pointer<P>,
         reftype: ReferenceKind,
     },
+
+    /// Represents an entry point into the program.
+    Entry { loc: memory::Pointer<P> },
 }
 
 impl<P> Reference<P>
@@ -78,14 +84,15 @@ where
         Reference::Dynamic { at, reftype }
     }
 
-    pub fn as_source(&self) -> &memory::Pointer<P> {
+    pub fn as_source(&self) -> Option<&memory::Pointer<P>> {
         match self {
             Reference::Static {
                 from,
                 to: _,
                 reftype: _,
-            } => &from,
-            Reference::Dynamic { at, reftype: _ } => &at,
+            } => Some(&from),
+            Reference::Dynamic { at, reftype: _ } => Some(&at),
+            Reference::Entry { .. } => None,
         }
     }
 
@@ -97,6 +104,7 @@ where
                 reftype: _,
             } => Some(&to),
             Reference::Dynamic { at: _, reftype: _ } => None,
+            Reference::Entry { loc } => Some(&loc),
         }
     }
 
@@ -108,6 +116,7 @@ where
                 reftype,
             } => *reftype,
             Reference::Dynamic { at: _, reftype } => *reftype,
+            Reference::Entry { .. } => ReferenceKind::Entrypoint,
         }
     }
 
@@ -117,14 +126,18 @@ where
 
     /// Convert a static reference to a dynamic one, discarding information
     /// about the target in the process.
-    pub fn into_dynamic(self) -> Self {
+    ///
+    /// Entrypoints cannot be turned into dynamic references as there is no
+    /// source referrent.
+    pub fn into_dynamic(self) -> Option<Self> {
         match self {
             Reference::Static {
                 from,
                 to: _,
                 reftype,
-            } => Reference::Dynamic { at: from, reftype },
-            Reference::Dynamic { .. } => self,
+            } => Some(Reference::Dynamic { at: from, reftype }),
+            Reference::Dynamic { .. } => Some(self),
+            Reference::Entry { .. } => None,
         }
     }
 }

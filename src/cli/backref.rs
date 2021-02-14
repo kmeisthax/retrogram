@@ -50,24 +50,20 @@ where
 
     for xref_id in db.find_xrefs_to(&start_pc, AR::Offset::one()) {
         if let Some(xref) = db.xref(xref_id) {
-            //let (instr_asm, _, _, _, _) = dis(xref.as_source(), bus);
+            if let Some(source) = xref.as_source() {
+                match arch.disassemble(source, bus) {
+                    Ok(disasm) => {
+                        let instr_asm = disasm.as_instr();
 
-            match arch.disassemble(xref.as_source(), bus) {
-                Ok(disasm) => {
-                    let instr_asm = disasm.as_instr();
+                        println!("{:X}: ", source);
 
-                    println!("{:X}: ", xref.as_source());
+                        asm.emit_instr(&mut io::stdout(), instr_asm)?;
 
-                    asm.emit_instr(&mut io::stdout(), instr_asm)?;
-
-                    println!(" ({})", xref.kind().friendly_name());
-                }
-                Err(_) => {
-                    println!(
-                        "{:X}: ??? ({})",
-                        xref.as_source(),
-                        xref.kind().friendly_name()
-                    );
+                        println!(" ({})", xref.kind().friendly_name());
+                    }
+                    Err(_) => {
+                        println!("{:X}: ??? ({})", source, xref.kind().friendly_name());
+                    }
                 }
             }
         }

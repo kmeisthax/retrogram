@@ -247,12 +247,14 @@ where
 
             for (id, xref) in self.xrefs.iter().enumerate() {
                 let source = xref.as_source();
-                let source_bukkit = self
-                    .xref_source_index
-                    .entry(source.clone())
-                    .or_insert_with(HashSet::new);
+                if let Some(source) = source {
+                    let source_bukkit = self
+                        .xref_source_index
+                        .entry(source.clone())
+                        .or_insert_with(HashSet::new);
 
-                source_bukkit.insert(id);
+                    source_bukkit.insert(id);
+                }
 
                 let target = xref.as_target();
                 if let Some(target) = target {
@@ -396,21 +398,25 @@ where
 
     pub fn insert_crossreference(&mut self, myref: analysis::Reference<AR::PtrVal>) {
         let id = self.xrefs.len();
-        let source_bucket = self
-            .xref_source_index
-            .entry(myref.as_source().clone())
-            .or_insert_with(HashSet::new);
+        if let Some(source) = myref.as_source() {
+            let source_bucket = self
+                .xref_source_index
+                .entry(source.clone())
+                .or_insert_with(HashSet::new);
 
-        for other_id in source_bucket.iter() {
-            if let Some(other) = self.xrefs.get(*other_id) {
-                if other.as_source() == myref.as_source() && other.as_target() == myref.as_target()
-                {
-                    return;
+            for other_id in source_bucket.iter() {
+                if let Some(other) = self.xrefs.get(*other_id) {
+                    if other.as_source() == myref.as_source()
+                        && other.as_target() == myref.as_target()
+                    {
+                        return;
+                    }
                 }
             }
+
+            source_bucket.insert(id);
         }
 
-        source_bucket.insert(id);
         if let Some(target) = myref.as_target() {
             self.xref_target_index
                 .entry(target.clone())

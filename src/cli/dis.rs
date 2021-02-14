@@ -123,17 +123,19 @@ where
                     .filter(|xref| matches!(xref.kind(), ReferenceKind::Code))
                     .map(|xref| xref.as_source())
                 {
-                    let source_block_id = db.find_block_membership(source).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The given memory location has not yet been successfully analyzed. Please scan it first."))?;
-                    let source_block = db.block(source_block_id).ok_or_else(|| {
-                        io::Error::new(
-                            io::ErrorKind::NotFound,
-                            "LOGIC ERROR: The given PC returned a block ID that doesn't exist.",
-                        )
-                    })?;
+                    if let Some(source) = source {
+                        let source_block_id = db.find_block_membership(source).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "The given memory location has not yet been successfully analyzed. Please scan it first."))?;
+                        let source_block = db.block(source_block_id).ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::NotFound,
+                                "LOGIC ERROR: The given PC returned a block ID that doesn't exist.",
+                            )
+                        })?;
 
-                    if !disassembly_blocks.contains(source_block) {
-                        found_targets = true;
-                        target_blocks.insert(source_block);
+                        if !disassembly_blocks.contains(source_block) {
+                            found_targets = true;
+                            target_blocks.insert(source_block);
+                        }
                     }
                 }
             }

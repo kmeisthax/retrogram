@@ -94,7 +94,9 @@ where
                         if plat.is_mapped(tptr.as_pointer().clone())
                             && !plat.is_decodable(tptr.clone())
                         {
-                            targets.insert(target.clone().into_dynamic());
+                            if let Some(dynref) = target.clone().into_dynamic() {
+                                targets.insert(dynref);
+                            }
                             continue;
                         }
                     }
