@@ -94,6 +94,10 @@ where
         db.insert_placeholder_label(loc.clone(), ReferenceKind::Unknown);
     }
 
+    if let Some(ref e) = terminating_error {
+        db.set_target_failed_analysis(start.clone(), format!("{}", e));
+    }
+
     Response::StaticScanCode {
         scan_start: start,
         scan_end_offset: pc_offset,
