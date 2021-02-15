@@ -5,79 +5,16 @@ use crate::asm::Assembler;
 use crate::cli::common::reg_parse;
 use crate::database::ProjectDatabase;
 use crate::maths::FromStrRadix;
-use crate::memory::{Memory, Offset};
+use crate::memory::Memory;
 use crate::platform::Platform;
 use crate::project::{Program, Project};
 use crate::queue::{start_analysis_queue, Command, Response};
 use crate::reg::{Bitwise, State};
-use crate::{analysis, ast, input, maths, memory, reg};
+use crate::{analysis, input, maths, reg};
 use clap::ArgMatches;
-use num_traits::{One, Zero};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 use std::{fs, io};
-
-/// Scan a specific starting PC and add the results of the analysis to the
-/// database.
-fn describe_scan_error<L, AR>(
-    bus: &memory::Memory<AR>,
-    start_pc: &memory::Pointer<AR::PtrVal>,
-    pc_offset: Option<AR::Offset>,
-    err: analysis::Error<AR>,
-) -> String
-where
-    L: CompatibleLiteral<AR>,
-    AR: Architecture,
-    AR::Offset: Offset<AR::PtrVal>, //I shouldn't have to do this.
-    reg::Symbolic<AR::Byte>: Default,
-    ast::Instruction<L>: Clone,
-{
-    match (pc_offset, err) {
-        (Some(pc_offset), analysis::Error::Misinterpretation(size, true)) => {
-            let mut values = String::new();
-            let bad_pc = start_pc.clone() + pc_offset.clone();
-            let mut iv_offset = start_pc.clone() + pc_offset;
-            let end_offset = iv_offset.clone() + size;
-
-            while iv_offset < end_offset {
-                //TODO: This generates incorrect results if MV::bound_width is not divisible by four
-                if let Some(nval) = bus.read_unit(&iv_offset).into_concrete() {
-                    values = format!("{}{:X}", &values, nval);
-                } else {
-                    //TODO: This assumes MV is always u8.
-                    values = format!("{}??", &values);
-                }
-
-                iv_offset = iv_offset + AR::Offset::one();
-            }
-
-            format!("Decoding error at {:X} (from {:X}) on value {}", bad_pc, start_pc, values)
-        },
-        (Some(pc_offset), analysis::Error::Misinterpretation(size, false)) => { //Little-endian
-            let mut values = String::new();
-            let bad_pc = start_pc.clone() + pc_offset.clone();
-            let mut iv_offset = start_pc.clone() + pc_offset;
-            let end_offset = iv_offset.clone() + size;
-
-            while iv_offset < end_offset {
-                //TODO: This generates incorrect results if MV::bound_width is not divisible by four
-                if let Some(nval) = bus.read_unit(&iv_offset).into_concrete() {
-                    values = format!("{:X}{}", nval, &values);
-                } else {
-                    //TODO: This assumes MV is always u8.
-                    values = format!("??{}", &values);
-                }
-
-                iv_offset = iv_offset + AR::Offset::one();
-            }
-
-            format!("Decoding error at {:X} (from {:X}) on value {}", bad_pc, start_pc, values)
-        },
-        (Some(ref s), ref e) if *s == AR::Offset::zero() => format!("There is no valid code at {:X} due to {}", start_pc, e),
-        (None, _) => format!("Disassembly size cannot be expressed in current type system, caused by analysis of {:X}", start_pc),
-        _ => format!("Improperly terminated block discovered in {:X}", start_pc)
-    }
-}
 
 fn read_shareable_db(
     project: &mut Project,
@@ -113,7 +50,7 @@ fn scan_for_arch<'a, AR, ASM>(
     start_spec: &str,
     bus: Arc<Memory<AR>>,
     arch: AR,
-    _asm: ASM,
+    asm: ASM,
     argv: &ArgMatches<'a>,
 ) -> io::Result<()>
 where
@@ -179,56 +116,11 @@ where
     drop(db_lock);
 
     loop {
-        match resp_recv.recv().unwrap() {
-            Response::DeclaredEntryPoint(p) => {
-                eprintln!("Marked ${:X} as an entry point", p);
-            }
-            Response::StaticScanCode {
-                scan_start,
-                scan_end_offset,
-                error,
-            } => {
-                if let Some(error) = error {
-                    eprintln!(
-                        "{}",
-                        describe_scan_error::<ASM::Literal, AR>(
-                            &bus,
-                            &scan_start,
-                            scan_end_offset,
-                            error
-                        )
-                    );
-                } else if let Some(scan_end_offset) = scan_end_offset {
-                    eprintln!(
-                        "Static scan at ${:X} got ${:X} bytes",
-                        scan_start, scan_end_offset
-                    );
-                } else {
-                    eprintln!("Static scan at ${:X}", scan_start);
-                }
-            }
-            Response::PowerOnStateSet => {}
-            Response::DynamicScanCode {
-                scan_start,
-                scan_end,
-                error,
-            } => {
-                if let Some(error) = error {
-                    eprintln!(
-                        "Dynamic scan at ${:X} failed at ${:X} due to {}",
-                        scan_start, scan_end, error
-                    );
-                } else {
-                    eprintln!(
-                        "Dynamic scan at ${:X} forked at ${:X}",
-                        scan_start, scan_end
-                    );
-                }
-            }
-            Response::ExtractScanCount(_with_dynamic, how_much) => {
-                eprintln!("Found {} more scans to complete...", how_much);
-                last_num_scans = Some(how_much)
-            }
+        let resp = resp_recv.recv().unwrap();
+        eprintln!("{}", resp.describe_response(bus.clone(), asm.clone()));
+
+        match resp {
+            Response::ExtractScanCount(_with_dynamic, how_much) => last_num_scans = Some(how_much),
             Response::Fence => {
                 if last_num_scans == Some(0) {
                     eprintln!("Finishing scan.");
@@ -241,6 +133,7 @@ where
                     .unwrap();
                 cmd_send.send(Command::Fence).unwrap();
             }
+            _ => {}
         }
     }
 

@@ -5,8 +5,8 @@ use crate::tui::context::SessionContext;
 use crate::tui::menu::repopulate_menu;
 use crate::tui::tabs::{repopulate_tabs, TabHandle};
 use backtrace::Backtrace;
-use cursive::view::Nameable;
-use cursive::views::{Dialog, ScrollView, TextView};
+use cursive::view::{Nameable, Resizable};
+use cursive::views::{Dialog, LinearLayout, ScrollView, TextView};
 use cursive_tabs::TabPanel;
 use std::io;
 use std::panic::set_hook;
@@ -19,7 +19,15 @@ pub fn main(project: Project) -> io::Result<()> {
 
     siv.set_user_data(session);
 
-    siv.add_fullscreen_layer(panel.with_name("tabs"));
+    siv.add_fullscreen_layer(
+        LinearLayout::vertical()
+            .child(panel.with_name("tabs"))
+            .child(
+                TextView::new("Welcome to Retrogram!")
+                    .with_name("status")
+                    .min_height(3),
+            ),
+    );
 
     siv.set_autohide_menu(false);
 

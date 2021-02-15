@@ -6,6 +6,7 @@ use crate::project::{Program, Project};
 use crate::queue::{Command, Response};
 use crate::tui::context::program::{AnyProgramContext, ProgramContext};
 use cursive::event::Event;
+use cursive::views::TextView;
 use cursive::CbSink;
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 use relative_path::{RelativePath, RelativePathBuf};
@@ -200,41 +201,55 @@ impl SessionContext {
                 child_project_ref,
                 prog_borrow.as_name().unwrap_or("").to_string(),
                 program_db,
-                bus,
+                bus.clone(),
             );
             let autoresp_channel = ctxt.command_sender().clone();
             let mut new_scans = 0;
 
-            spawn(move || loop {
-                match recv.recv() {
-                    Ok(Response::Fence) => {
-                        if new_scans > 0 {
-                            autoresp_channel
-                                .send(Command::ExtractAllScans(false))
-                                .unwrap();
-                            autoresp_channel.send(Command::Fence).unwrap();
-                            new_scans = 0;
-                        } else {
+            spawn(move || {
+                let bus = bus.clone();
+                loop {
+                    match recv.recv() {
+                        Ok(Response::Fence) => {
+                            if new_scans > 0 {
+                                autoresp_channel
+                                    .send(Command::ExtractAllScans(false))
+                                    .unwrap();
+                                autoresp_channel.send(Command::Fence).unwrap();
+                                new_scans = 0;
+                            } else {
+                                cb_sink
+                                    .send(Box::new(|siv| {
+                                        siv.on_event(Event::Refresh);
+                                    }))
+                                    .unwrap()
+                            }
+                        }
+
+                        // If we've extracted more scans, continue looking.
+                        // This will continue scanning until we run out of things
+                        // to scan.
+                        Ok(Response::ExtractScanCount(_, c)) => new_scans += c,
+
+                        // Silently ignore all other responses.
+                        Ok(r) => {
+                            let message = r.describe_response(bus.clone(), asm);
+
                             cb_sink
                                 .send(Box::new(|siv| {
+                                    siv.call_on_name("status", |v: &mut TextView| {
+                                        v.set_content(message);
+                                    });
                                     siv.on_event(Event::Refresh);
                                 }))
-                                .unwrap()
+                                .unwrap();
                         }
+
+                        // If the analysis loop has exited or paniced for whatever
+                        // reason, just silently close off our callback handler
+                        // thread.
+                        Err(_) => return,
                     }
-
-                    // If we've extracted more scans, continue looking.
-                    // This will continue scanning until we run out of things
-                    // to scan.
-                    Ok(Response::ExtractScanCount(_, c)) => new_scans += c,
-
-                    // Silently ignore all other responses.
-                    Ok(_) => continue,
-
-                    // If the analysis loop has exited or paniced for whatever
-                    // reason, just silently close off our callback handler
-                    // thread.
-                    Err(_) => return,
                 }
             });
 
