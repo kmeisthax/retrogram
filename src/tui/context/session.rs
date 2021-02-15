@@ -94,8 +94,18 @@ impl SessionContext {
             let pjdb: io::Result<ProjectDatabase> = if let Some(base_path) = project.path() {
                 //On-disk project, read database relative to the project
                 let database_path = db_path.to_path(base_path);
-                ProjectDatabase::read(&mut project, &mut fs::File::open(database_path)?)
-                    .map_err(|e| e.into())
+                let file = fs::File::open(database_path);
+
+                match file {
+                    Ok(mut file) => {
+                        ProjectDatabase::read(&mut project, &mut file).map_err(|e| e.into())
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                        //On-disk project, in-memory database, store database in memory
+                        Ok(ProjectDatabase::new())
+                    }
+                    Err(e) => Err(e),
+                }
             } else {
                 //In-memory project, store database in memory
                 Ok(ProjectDatabase::new())
