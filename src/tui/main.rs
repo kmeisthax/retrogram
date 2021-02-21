@@ -50,6 +50,11 @@ pub fn main(project: Project) -> io::Result<()> {
                 "Retrogram died due to an error: {}\n\n{}",
                 reason, backtrace
             )
+        } else if let Some(reason) = panic_info.payload().downcast_ref::<&str>() {
+            format!(
+                "Retrogram died due to an error: {}\n\n{}",
+                reason, backtrace
+            )
         } else {
             format!("Retrogram died due to an unknown error.\n\n{}", backtrace)
         };
