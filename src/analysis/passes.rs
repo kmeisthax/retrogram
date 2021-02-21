@@ -171,7 +171,7 @@ where
 {
     match src_operand {
         ast::Operand::Literal(l) if l.is_pointer() => {
-            let (pt, ctxt) = l.into_pointer().unwrap().into_ptrval_and_contexts();
+            let (pt, ctxt) = l.clone().into_pointer().unwrap().into_ptrval_and_contexts();
             let cpt = memory.minimize_context(Pointer::from_ptrval_and_contexts(pt.into(), ctxt));
 
             if let Some(sym_id) = db.pointer_symbol(&cpt) {
@@ -180,7 +180,7 @@ where
                     .expect("Database handed an invalid symbol back");
                 ast::Operand::Label(sym.as_label().clone())
             } else {
-                ast::Operand::Label(db.insert_placeholder_label(cpt, refkind))
+                ast::Operand::Literal(l)
             }
         }
         ast::Operand::DataReference(op) => ast::Operand::DataReference(Box::new(
