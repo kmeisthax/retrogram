@@ -1,7 +1,9 @@
 //! Types needed to analyze references
 
+use crate::arch::Architecture;
 use crate::cli::Nameable;
 use crate::memory;
+use crate::memory::Memory;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ord;
 use std::fmt::{Display, Formatter, Result};
@@ -148,6 +150,32 @@ where
             } => Some(Reference::Dynamic { at: from, reftype }),
             Reference::Dynamic { .. } => Some(self),
             Reference::Entry { .. } => None,
+        }
+    }
+
+    /// Minimize the context of this reference.
+    ///
+    /// During normal program analysis it is not uncommon to see contexts
+    /// accumulate on pointers. This can prohibit determining if two pointers
+    /// (or things that contain pointers) are actually identical. Minimizing
+    /// the contexts fixes that.
+    pub fn into_minimized_context<AR>(self, bus: &Memory<AR>) -> Self
+    where
+        AR: Architecture<PtrVal = P>,
+    {
+        match self {
+            Reference::Static { from, to, reftype } => Reference::Static {
+                from: bus.minimize_context(from),
+                to: bus.minimize_context(to),
+                reftype,
+            },
+            Reference::Dynamic { at, reftype } => Reference::Dynamic {
+                at: bus.minimize_context(at),
+                reftype,
+            },
+            Reference::Entry { loc } => Reference::Entry {
+                loc: bus.minimize_context(loc),
+            },
         }
     }
 }
