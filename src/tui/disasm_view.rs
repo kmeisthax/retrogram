@@ -8,6 +8,7 @@ use crate::database::Database;
 use crate::memory::{Memory, Pointer, Tumbler};
 use crate::queue::Command;
 use crate::tui::dialog::{error_dialog, jump_dialog, label_dialog, xrefs_dialog};
+use crate::tui::tabs::TabHandle;
 use crate::tui::ProgramContext;
 use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
@@ -521,7 +522,7 @@ where
                 s.select_menubar();
             }))),
             Event::Key(Key::Tab) => EventResult::Consumed(Some(Callback::from_fn(|s| {
-                s.find_name::<TabPanel<String>>("tabs").unwrap().next()
+                s.find_name::<TabPanel<TabHandle>>("tabs").unwrap().next()
             }))),
             Event::Char('c') => {
                 self.declare_code();
