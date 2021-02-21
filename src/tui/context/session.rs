@@ -229,7 +229,21 @@ impl SessionContext {
                         // If we've extracted more scans, continue looking.
                         // This will continue scanning until we run out of things
                         // to scan.
-                        Ok(Response::ExtractScanCount(_, c)) => new_scans += c,
+                        Ok(Response::ExtractScanCount(d, c)) => {
+                            new_scans += c;
+
+                            let message = Response::ExtractScanCount(d, c)
+                                .describe_response(bus.clone(), asm);
+
+                            cb_sink
+                                .send(Box::new(|siv| {
+                                    siv.call_on_name("status", |v: &mut TextView| {
+                                        v.set_content(message);
+                                    });
+                                    siv.on_event(Event::Refresh);
+                                }))
+                                .unwrap();
+                        }
 
                         // Silently ignore all other responses.
                         Ok(r) => {
@@ -248,7 +262,20 @@ impl SessionContext {
                         // If the analysis loop has exited or paniced for whatever
                         // reason, just silently close off our callback handler
                         // thread.
-                        Err(_) => return,
+                        Err(e) => {
+                            let message = format!("Error in analysis thread group: {}", e);
+
+                            cb_sink
+                                .send(Box::new(|siv| {
+                                    siv.call_on_name("status", |v: &mut TextView| {
+                                        v.set_content(message);
+                                    });
+                                    siv.on_event(Event::Refresh);
+                                }))
+                                .unwrap();
+
+                            return;
+                        }
                     }
                 }
             });
