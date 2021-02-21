@@ -91,7 +91,8 @@ where
     pub fn is_replaceable_by(&self, rhs: &Self) -> bool {
         let is_same_location = self.loc == rhs.loc;
         let is_replaceable = !rhs.is_placeholder()
-            || rhs.placeholder_of.unwrap() >= self.placeholder_of.unwrap_or(ReferenceKind::Unknown);
+            || (self.is_placeholder()
+                && self.placeholder_of.unwrap() <= rhs.placeholder_of.unwrap());
 
         is_same_location && is_replaceable
     }
@@ -487,6 +488,10 @@ where
             matches!(kind, ReferenceKind::Subroutine | ReferenceKind::Entrypoint);
         let existing_symbol = self.pointer_symbol(&ptr);
 
+        // TODO: This gets called repeatedly to find operand labels.
+        // By `replace_operand_with_label` and others.
+        // It winds up repeatedly cycling various parts of the graph between
+        // states with spurious updates.
         if !is_always_global && existing_symbol.is_none() {
             for (sym_ptr, sym_id) in self.pointer_symbols.range(..ptr.clone()).rev() {
                 if !sym_ptr.is_context_eq(&ptr) {
