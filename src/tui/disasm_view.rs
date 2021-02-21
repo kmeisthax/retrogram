@@ -71,7 +71,7 @@ where
             loc
         )?;
 
-        if let Some(sym) = db.pointer_symbol(loc).and_then(|id| db.symbol(id)) {
+        if let Some(sym) = db.pointer_symbol(loc).map(|id| db.symbol(id).unwrap()) {
             at.emit_label_decl(self.asm.clone(), sym.as_label())?;
         }
 
