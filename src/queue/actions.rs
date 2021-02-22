@@ -155,8 +155,6 @@ where
                 };
             }
 
-            db_mut.insert_trace_counts(traced_blocks.unwrap(), 1);
-
             drop(db_lock);
 
             let mut extra_branch_bits = 0.0;
@@ -253,7 +251,10 @@ where
                 block.as_start().as_pointer().clone(),
                 context.poweron_state.clone(),
             );
-            vcommands.push(Command::DynamicScanCode(initial_fork));
+
+            if !db.has_already_been_traced(initial_fork.as_pre_state()) {
+                vcommands.push(Command::DynamicScanCode(initial_fork));
+            }
         }
     }
 

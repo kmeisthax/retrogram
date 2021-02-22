@@ -106,6 +106,10 @@ where
     pub fn into_parts(self) -> (f64, AR::PtrVal, State<AR>, Trace<AR>) {
         (self.num_branches, self.pc, self.pre_state, self.trace)
     }
+
+    pub fn as_pre_state(&self) -> &State<AR> {
+        &self.pre_state
+    }
 }
 
 impl<AR> PartialEq for Fork<AR>

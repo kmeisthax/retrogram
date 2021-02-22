@@ -39,9 +39,6 @@ where
     /// deriving `Ord`. In practice, it should never come into play when
     /// ordering blocks.
     instr_offsets: BTreeSet<AR::Offset>,
-
-    /// The number of traces that have been executed within this block.
-    traces: u32,
 }
 
 impl<AR> Block<AR>
@@ -54,7 +51,6 @@ where
             start,
             length,
             instr_offsets: BTreeSet::new(),
-            traces: 0,
         }
     }
 
@@ -64,16 +60,6 @@ where
 
     pub fn as_length(&self) -> &AR::Offset {
         &self.length
-    }
-
-    /// Return how many traces have been executed within this block.
-    pub fn traces(&self) -> u32 {
-        self.traces
-    }
-
-    /// Increase the trace count for this block.
-    pub fn add_traces(&mut self, new_traces: u32) {
-        self.traces = self.traces.saturating_add(new_traces);
     }
 
     pub fn is_ptr_within_block(&self, ptr: &memory::Pointer<AR::PtrVal>) -> bool {
@@ -257,7 +243,6 @@ where
             start: first_start,
             length: self.length + other.length,
             instr_offsets,
-            traces: self.traces + other.traces,
         }
     }
 
@@ -296,7 +281,6 @@ where
                 .contextualize(self.as_start().as_pointer().clone() + new_size.clone());
 
             let mut new_block = Block::from_parts(new_block_start, remaining_size);
-            new_block.traces = self.traces;
             new_block.instr_offsets = self
                 .instr_offsets
                 .iter()

@@ -452,8 +452,6 @@ where
         action = action.step();
     }
 
-    db.insert_trace_counts(traced_blocks, 1);
-
     Ok(())
 }
 
