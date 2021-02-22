@@ -55,7 +55,8 @@ where
         + Send
         + Sync
         + Default,
-    Self::Register: Mappable + Debug + Display + FromStr + Send + Sync,
+    Self::Register:
+        Mappable + Debug + Display + FromStr + Send + Sync + Serialize + for<'dw> Deserialize<'dw>,
     Self::Word: Bitwise
         + Numerical
         + Popcount<Output = Self::Word>

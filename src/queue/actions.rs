@@ -123,6 +123,18 @@ where
     let (branches, start, pre_state, pre_trace) = fork.into_parts();
     let start_ptr = pre_state.contextualize_pointer(start.clone());
 
+    {
+        let db_lock = context.project_db.read().unwrap();
+        let db: &Database<AR> = db_lock.get_database(&context.program_name).unwrap();
+        if db.has_already_been_traced(&pre_state) {
+            return Response::DynamicScanCode {
+                scan_start: start_ptr.clone(),
+                scan_end: start_ptr,
+                error: Some(Error::TraceRecurrence),
+            };
+        }
+    }
+
     match trace_until_fork(&start, pre_trace, &context.bus, &pre_state, context.arch) {
         Ok((end, post_trace, post_state, prerequisites)) => {
             let end_ptr = post_state.contextualize_pointer(end.clone());
@@ -130,6 +142,8 @@ where
             let mut db_lock = context.project_db.write().unwrap();
             let db_mut: &mut Database<AR> =
                 db_lock.get_database_mut(&context.program_name).unwrap();
+
+            db_mut.set_traced(pre_state);
 
             let traced_blocks =
                 analyze_trace_log::<L, AR>(&post_trace, &context.bus, db_mut, context.arch);

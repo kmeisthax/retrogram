@@ -55,6 +55,10 @@ where
         extra_branches: f64,
     },
 
+    /// Tracing terminated as we have already traced the same state once
+    /// before.
+    TraceRecurrence,
+
     /// Instruction decoding failed due to an internal issue.
     ///
     /// In general, a `Misinterpretation` indicates a programming error in
@@ -90,6 +94,7 @@ where
                 "Trace too deep: would add {} on top of {} existing",
                 extra_branches, branches
             ),
+            TraceRecurrence => write!(f, "Block already traced"),
             Error::Misinterpretation(_, _) => {
                 write!(f, "Ostensibly valid instruction failed to disassemble")
             }

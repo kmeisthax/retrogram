@@ -15,7 +15,7 @@ use std::{fmt, result, str};
 ///  * We don't consider register pairs (e.g. BC, DE, HL)
 ///  * F isn't considered special here
 ///  * SP has been treated as a register pair and split into S and P.
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Register {
     A,
     B,

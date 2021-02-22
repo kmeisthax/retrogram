@@ -6,6 +6,7 @@ use crate::ast::Label;
 use crate::cli::Nameable;
 use crate::database::AnyDatabase;
 use crate::memory::Pointer;
+use crate::reg::State;
 use crate::{analysis, ast, memory};
 use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
@@ -119,6 +120,9 @@ where
     /// as well as the string form of the error(s) that resulted from the
     /// analysis
     failed_analysis: HashMap<Pointer<AR::PtrVal>, String>,
+
+    /// A list of all executed traces and their result.
+    traces: HashSet<State<AR>>,
 
     /// A list of all labels in the program.
     #[serde(skip)]
@@ -286,6 +290,7 @@ where
             blocks: Vec::new(),
             xrefs: Vec::new(),
             failed_analysis: HashMap::new(),
+            traces: HashSet::new(),
             label_symbols: HashMap::new(),
             pointer_symbols: BTreeMap::new(),
             xref_source_index: BTreeMap::new(),
@@ -705,5 +710,15 @@ where
     /// Mark a target as having failed analysis.
     pub fn set_target_failed_analysis(&mut self, target_pc: Pointer<AR::PtrVal>, reason: String) {
         self.failed_analysis.insert(target_pc, reason);
+    }
+
+    /// Determine if a particular state has already been traced.
+    pub fn has_already_been_traced(&self, state: &State<AR>) -> bool {
+        self.traces.contains(state)
+    }
+
+    /// Mark a particular state as having been traced.
+    pub fn set_traced(&mut self, state: State<AR>) {
+        self.traces.insert(state);
     }
 }

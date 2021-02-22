@@ -3,6 +3,7 @@
 use crate::arch::Architecture;
 use crate::memory::{Contexts, Pointer};
 use crate::reg::Symbolic;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::hash::{Hash, Hasher};
@@ -32,7 +33,7 @@ use std::hash::{Hash, Hasher};
 /// memory do exist.
 ///
 /// # Interaction with
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct State<AR>
 where
     AR: Architecture,
