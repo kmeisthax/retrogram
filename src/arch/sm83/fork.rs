@@ -3,13 +3,13 @@
 use crate::analysis;
 use crate::arch::sm83;
 use crate::arch::sm83::dis::{AbstractOperand, ALU_TARGET_MEM, ALU_TARGET_REGS};
-use crate::arch::sm83::{Bus, Prerequisite, PtrVal, Register, State};
+use crate::arch::sm83::{Bus, PtrVal, Register, Requisite, State};
 use std::collections::HashSet;
 
 /// Return a prerequisite list for an instruction that reads or writes the
 /// address situated in the opcode of this instruction.
-fn memlist_rw_op16(p: PtrVal) -> sm83::Result<(Vec<Prerequisite>, bool)> {
-    Ok((vec![Prerequisite::memory(p, 2)], true))
+fn memlist_rw_op16(p: PtrVal) -> sm83::Result<(Vec<Requisite>, bool)> {
+    Ok((vec![Requisite::memory(p, 2)], true))
 }
 
 /// Return a prerequisite list for an instruction that jumps to or calls the
@@ -18,45 +18,45 @@ fn memlist_rw_op16(p: PtrVal) -> sm83::Result<(Vec<Prerequisite>, bool)> {
 /// The pointer handed to this function is the operand address, *not* the PC
 /// address (i.e. it is already +1'd).
 fn memlist_call_op16(
-    mut preq: Vec<Prerequisite>,
+    mut preq: Vec<Requisite>,
     p: PtrVal,
     mem: &Bus,
     state: &State,
-) -> sm83::Result<(Vec<Prerequisite>, bool)> {
+) -> sm83::Result<(Vec<Requisite>, bool)> {
     if let Some(val) = mem.read_leword_stateful::<u16>(p, state).into_concrete() {
-        preq.push(Prerequisite::memory(val, 1));
+        preq.push(Requisite::memory(val, 1));
         return Ok((preq, true));
     }
 
-    preq.push(Prerequisite::memory(p, 2));
+    preq.push(Requisite::memory(p, 2));
 
     Ok((preq, false))
 }
 
 /// Return a prerequisite list for an instruction that reads or writes the
 /// high memory address situated in the opcode of this instruction.
-fn memlist_rw_hi8(p: PtrVal) -> sm83::Result<(Vec<Prerequisite>, bool)> {
-    Ok((vec![Prerequisite::memory(p, 1)], true))
+fn memlist_rw_hi8(p: PtrVal) -> sm83::Result<(Vec<Requisite>, bool)> {
+    Ok((vec![Requisite::memory(p, 1)], true))
 }
 
 /// Return a prerequisite list for a PC-relative jump.
 fn memlist_pc8(
-    mut preq: Vec<Prerequisite>,
+    mut preq: Vec<Requisite>,
     p: PtrVal,
     mem: &Bus,
     state: &State,
-) -> sm83::Result<(Vec<Prerequisite>, bool)> {
+) -> sm83::Result<(Vec<Requisite>, bool)> {
     let is_complete = match mem
         .read_unit_stateful(p, state)
         .into_concrete()
         .map(|target| ((p + 1) as i16 + (target as i8) as i16) as u16)
     {
         Some(val) => {
-            preq.push(Prerequisite::memory(val, 1));
+            preq.push(Requisite::memory(val, 1));
             true
         }
         None => {
-            preq.push(Prerequisite::memory(p, 1));
+            preq.push(Requisite::memory(p, 1));
             false
         }
     };
@@ -73,13 +73,10 @@ fn memlist_call_indir16(
     regs: Vec<Register>,
     include_flags: bool,
     state: &State,
-) -> sm83::Result<(Vec<Prerequisite>, bool)> {
-    let mut preqs: Vec<Prerequisite> = regs
-        .iter()
-        .map(|r| Prerequisite::register(*r, 0xFF))
-        .collect();
+) -> sm83::Result<(Vec<Requisite>, bool)> {
+    let mut preqs: Vec<Requisite> = regs.iter().map(|r| Requisite::register(*r, 0xFF)).collect();
     if include_flags {
-        preqs.push(Prerequisite::register(Register::F, 0x90));
+        preqs.push(Requisite::register(Register::F, 0x90));
     }
 
     match (regs.get(0), regs.get(1)) {
@@ -88,7 +85,7 @@ fn memlist_call_indir16(
             state.get_register(r1).into_concrete(),
         ) {
             (Some(h), Some(l)) => {
-                preqs.push(Prerequisite::memory((h as PtrVal) << 8 | l as PtrVal, 1));
+                preqs.push(Requisite::memory((h as PtrVal) << 8 | l as PtrVal, 1));
                 Ok((preqs, true))
             }
             _ => Ok((preqs, false)),
@@ -121,7 +118,7 @@ fn memlist_call_indir16(
 /// registers or memory locations, the tracing routine must consider how many
 /// forks will be created and if such forking is "worth it". This is a heuristic
 /// policy not covered by the tracing implementation of this architecture.
-pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(HashSet<Prerequisite>, bool)> {
+pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(HashSet<Requisite>, bool)> {
     let ret = match mem.read_unit_stateful(p, state).into_concrete() {
         Some(0xCB) => match mem.read_unit_stateful(p + 1, state).into_concrete() {
             Some(subop) => match ALU_TARGET_REGS[(subop & 0x07) as usize] {
@@ -129,7 +126,7 @@ pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(HashSet<Prer
                 AbstractOperand::Indirect("hl") => Ok((Register::prereqs_from_sym("hl"), true)),
                 _ => Ok((vec![], false)),
             },
-            _ => Ok((vec![Prerequisite::memory(p + 1, 1)], false)),
+            _ => Ok((vec![Requisite::memory(p + 1, 1)], false)),
         },
 
         //Z80 instructions that don't fit the pattern decoder below
@@ -152,10 +149,10 @@ pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(HashSet<Prer
         Some(0xF0) => memlist_rw_hi8(p + 1), //ldh a, [u8]
         Some(0xF8) => Ok((vec![], true)),    //ld hl, sp+r8
 
-        Some(0xE2) => Ok((vec![Prerequisite::register(Register::C, 0xFF)], true)), //ldh [c], a
-        Some(0xEA) => memlist_rw_op16(p + 1),                                      //ld [u16], a
-        Some(0xF2) => Ok((vec![Prerequisite::register(Register::C, 0xFF)], true)), //ldh a, [c]
-        Some(0xFA) => memlist_rw_op16(p + 1),                                      //ld a, [u16]
+        Some(0xE2) => Ok((vec![Requisite::register(Register::C, 0xFF)], true)), //ldh [c], a
+        Some(0xEA) => memlist_rw_op16(p + 1),                                   //ld [u16], a
+        Some(0xF2) => Ok((vec![Requisite::register(Register::C, 0xFF)], true)), //ldh a, [c]
+        Some(0xFA) => memlist_rw_op16(p + 1),                                   //ld a, [u16]
         //TODO: Memory reads should prereq on the target of the read so that
         //we can fork on contexts and busses that change contexts on read get
         //the correct execution.
@@ -176,7 +173,7 @@ pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(HashSet<Prer
             ) {
                 (0, 0, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* 00, 08, 10, 18 */
                 (0, 1, _, 0) => memlist_pc8(
-                    vec![Prerequisite::register(Register::F, 0x90)],
+                    vec![Requisite::register(Register::F, 0x90)],
                     p + 1,
                     mem,
                     state,
@@ -212,7 +209,7 @@ pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(HashSet<Prer
                 (3, _, 0, 1) => Ok((Register::prereqs_from_sym("sp"), true)),      //pop r16
                 (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
                 (3, 0, _, 2) => memlist_call_op16(
-                    vec![Prerequisite::register(Register::F, 0x90)],
+                    vec![Requisite::register(Register::F, 0x90)],
                     p + 1,
                     mem,
                     state,
@@ -220,7 +217,7 @@ pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(HashSet<Prer
                 (3, 1, _, 2) => Err(analysis::Error::Misinterpretation(1, false)), /* E2, EA, F2, FA */
                 (3, _, _, 3) => Err(analysis::Error::InvalidInstruction),          //invalid
                 (3, 0, _, 4) => memlist_call_op16(
-                    vec![Prerequisite::register(Register::F, 0x90)],
+                    vec![Requisite::register(Register::F, 0x90)],
                     p + 1,
                     mem,
                     state,
@@ -234,7 +231,7 @@ pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(HashSet<Prer
                 _ => Err(analysis::Error::Misinterpretation(1, false)), //invalid
             }
         }
-        _ => Ok((vec![Prerequisite::memory(p, 1)], false)),
+        _ => Ok((vec![Requisite::memory(p, 1)], false)),
     };
 
     match ret {

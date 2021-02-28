@@ -1,6 +1,6 @@
 //! Architecture trait
 
-use crate::analysis::{Disasm, Mappable, Requisite, Result, Trace};
+use crate::analysis::{Disasm, Mappable, RequisiteSet, Result, Trace};
 use crate::arch::ArchName;
 use crate::ast::Literal;
 use crate::cli::Nameable;
@@ -9,7 +9,6 @@ use crate::memory::{Memory, Offset, Pointer, PtrNum};
 use crate::reg::{Bitwise, State};
 use num::Bounded;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt::{Debug, Display};
 use std::str::FromStr;
@@ -190,6 +189,18 @@ where
             + From<Self::Offset>
             + From<Pointer<Self::PtrVal>>;
 
+    /// Statically determine the input and output requisites of a given
+    /// instruction.
+    ///
+    /// This method allows building a dependency graph of a given block by
+    /// matching output requisites of a given instruction to input requisites
+    /// of future instructions.
+    fn dataflow(
+        &self,
+        at: &Pointer<Self::PtrVal>,
+        bus: &Memory<Self>,
+    ) -> Result<(RequisiteSet<Self>, RequisiteSet<Self>), Self>;
+
     /// Determine what register values or memory addresses are required to be
     /// resolved in order for symbolic execution to continue at a given PC.
     ///
@@ -221,7 +232,7 @@ where
         at: Self::PtrVal,
         bus: &Memory<Self>,
         state: &State<Self>,
-    ) -> Result<(HashSet<Requisite<Self>>, bool), Self>;
+    ) -> Result<(RequisiteSet<Self>, bool), Self>;
 
     /// Advance the state of program execution by one instruction, producing a
     /// new state and program counter to continue from.

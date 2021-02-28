@@ -9,6 +9,8 @@ use std::collections::HashSet;
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 
+pub type RequisiteSet<AR> = HashSet<Requisite<AR>>;
+
 /// Indicates a memory or register value that needs to be a concrete value
 /// before execution can continue.
 ///

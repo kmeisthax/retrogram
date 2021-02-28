@@ -25,6 +25,6 @@ pub use passes::inject_orgs;
 pub use passes::replace_labels;
 pub use reference::Reference;
 pub use reference::ReferenceKind;
-pub use requisite::Requisite;
+pub use requisite::{Requisite, RequisiteSet};
 pub use trace::{Trace, TraceEvent};
 pub use traits::*;

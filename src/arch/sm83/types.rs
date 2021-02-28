@@ -1,6 +1,6 @@
 //! Types used in modeling the SM83
 
-use crate::arch::sm83::{disassemble, prereq, trace};
+use crate::arch::sm83::{dataflow, disassemble, prereq, trace};
 use crate::arch::{ArchName, Architecture};
 use crate::memory::{Memory, Pointer};
 use crate::{analysis, ast, memory, reg};
@@ -30,7 +30,7 @@ pub enum Register {
 }
 
 impl Register {
-    pub fn prereqs_from_sym(s: &str) -> Vec<Prerequisite> {
+    pub fn prereqs_from_sym(s: &str) -> Vec<Requisite> {
         match s.to_ascii_lowercase().as_str() {
             "a" => vec![Register::A],
             "b" => vec![Register::B],
@@ -49,7 +49,7 @@ impl Register {
             _ => vec![],
         }
         .iter()
-        .map(|r| Prerequisite::register(*r, 0xFF))
+        .map(|r| Requisite::register(*r, 0xFF))
         .collect()
     }
 }
@@ -113,6 +113,9 @@ pub type Data = u8;
 /// The compatible memory model type necessary to analyze GBz80 programs.
 pub type Bus = memory::Memory<SM83>;
 
+/// The pointer type necessary to model GBz80 pointers.
+pub type BusAddress = memory::Pointer<PtrVal>;
+
 /// A trait which defines what assembler literals we need support for.
 pub trait Literal:
     ast::Literal + From<Value> + From<Offset> + From<memory::Pointer<PtrVal>>
@@ -135,7 +138,7 @@ pub type Section<L> = ast::Section<L, PtrVal, Data, Offset>;
 pub type State = reg::State<SM83>;
 
 /// The prerequisites necessary to execute a given SM83 program.
-pub type Prerequisite = analysis::Requisite<SM83>;
+pub type Requisite = analysis::Requisite<SM83>;
 
 /// The trace log type which represents the past execution of a given SM83
 /// program.
@@ -179,12 +182,20 @@ impl Architecture for SM83 {
         disassemble(at, bus)
     }
 
+    fn dataflow(
+        &self,
+        at: &BusAddress,
+        bus: &Bus,
+    ) -> Result<(HashSet<Requisite>, HashSet<Requisite>)> {
+        dataflow(at, bus)
+    }
+
     fn prerequisites(
         &self,
         at: Self::PtrVal,
         bus: &Memory<Self>,
         state: &State,
-    ) -> Result<(HashSet<Prerequisite>, bool)> {
+    ) -> Result<(HashSet<Requisite>, bool)> {
         prereq(at, bus, state)
     }
 

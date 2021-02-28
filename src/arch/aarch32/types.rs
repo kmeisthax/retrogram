@@ -1,6 +1,6 @@
 //! Types used by aarch32
 
-use crate::arch::aarch32::{architectural_ctxt_parse, disassemble, prereq, trace};
+use crate::arch::aarch32::{architectural_ctxt_parse, dataflow, disassemble, prereq, trace};
 use crate::arch::{ArchName, Architecture};
 use crate::memory::Pointer;
 use crate::{analysis, ast, memory, reg};
@@ -166,7 +166,7 @@ pub type State = reg::State<AArch32>;
 
 /// The type which represents an execution prerequisite of a given AArch32
 /// program.
-pub type Prerequisite = analysis::Requisite<AArch32>;
+pub type Requisite = analysis::Requisite<AArch32>;
 
 /// The trace log type which represents the past execution of a given AArch32
 /// program.
@@ -214,12 +214,20 @@ impl Architecture for AArch32 {
         disassemble(at, bus)
     }
 
+    fn dataflow(
+        &self,
+        at: &BusAddress,
+        bus: &Bus,
+    ) -> Result<(HashSet<Requisite>, HashSet<Requisite>)> {
+        dataflow(at, bus)
+    }
+
     fn prerequisites(
         &self,
         at: Self::PtrVal,
         bus: &Bus,
         state: &State,
-    ) -> Result<(HashSet<Prerequisite>, bool)> {
+    ) -> Result<(HashSet<Requisite>, bool)> {
         prereq(at, bus, state)
     }
 

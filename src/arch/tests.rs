@@ -1,12 +1,11 @@
 //! Architectural tests
 
-use crate::analysis::{Disasm, Error, Requisite, Result, Trace};
+use crate::analysis::{Disasm, Error, RequisiteSet, Result, Trace};
 use crate::arch::{ArchName, Architecture};
 use crate::ast::Literal;
 use crate::memory::{Memory, Pointer};
 use crate::reg::State;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 /// Test architecture for use when testing things that are generic over an
 /// entire architecture.
@@ -46,12 +45,20 @@ impl Architecture for TestArchitecture {
         Err(Error::NotYetImplemented)
     }
 
+    fn dataflow(
+        &self,
+        _at: &Pointer<Self::PtrVal>,
+        _bus: &Memory<Self>,
+    ) -> Result<(RequisiteSet<Self>, RequisiteSet<Self>), Self> {
+        Err(Error::NotYetImplemented)
+    }
+
     fn prerequisites(
         &self,
         _at: Self::PtrVal,
         _bus: &Memory<Self>,
         _state: &State<Self>,
-    ) -> Result<(HashSet<Requisite<Self>>, bool), Self> {
+    ) -> Result<(RequisiteSet<Self>, bool), Self> {
         Err(Error::NotYetImplemented)
     }
 
