@@ -1,6 +1,6 @@
 //! Architecture trait
 
-use crate::analysis::{Disasm, Mappable, Prerequisite, Result, Trace};
+use crate::analysis::{Disasm, Mappable, Requisite, Result, Trace};
 use crate::arch::ArchName;
 use crate::ast::Literal;
 use crate::cli::Nameable;
@@ -221,7 +221,7 @@ where
         at: Self::PtrVal,
         bus: &Memory<Self>,
         state: &State<Self>,
-    ) -> Result<(HashSet<Prerequisite<Self>>, bool), Self>;
+    ) -> Result<(HashSet<Requisite<Self>>, bool), Self>;
 
     /// Advance the state of program execution by one instruction, producing a
     /// new state and program counter to continue from.

@@ -1,6 +1,6 @@
 //! Platform implementation for Game Boy and it's attendant memory mapper chips
 
-use crate::analysis::Prerequisite;
+use crate::analysis::Requisite;
 use crate::arch::sm83;
 use crate::memory::Pointer;
 use crate::platform::Platform;
@@ -364,8 +364,8 @@ where
         &self,
         _ptr: sm83::PtrVal,
         _base: sm83::PtrVal,
-    ) -> Vec<Prerequisite<sm83::SM83>> {
-        vec![Prerequisite::platform_context(
+    ) -> Vec<Requisite<sm83::SM83>> {
+        vec![Requisite::platform_context(
             "R".to_string(),
             self.mapper.context_mask(),
         )]

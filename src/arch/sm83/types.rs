@@ -135,7 +135,7 @@ pub type Section<L> = ast::Section<L, PtrVal, Data, Offset>;
 pub type State = reg::State<SM83>;
 
 /// The prerequisites necessary to execute a given SM83 program.
-pub type Prerequisite = analysis::Prerequisite<SM83>;
+pub type Prerequisite = analysis::Requisite<SM83>;
 
 /// The trace log type which represents the past execution of a given SM83
 /// program.

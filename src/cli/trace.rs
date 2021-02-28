@@ -1,6 +1,6 @@
 //! Single-run tracing command
 
-use crate::analysis::{analyze_trace_log, trace_until_fork, Prerequisite, Trace, TraceEvent};
+use crate::analysis::{analyze_trace_log, trace_until_fork, Requisite, Trace, TraceEvent};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::asm::Assembler;
 use crate::cli::common::reg_parse;
@@ -134,7 +134,7 @@ where
 /// Print out the prerequisites that a trace operation stopped on.
 fn print_prereqs<'a, AR>(
     halt_pc: Pointer<AR::PtrVal>,
-    missing: impl Iterator<Item = &'a Prerequisite<AR>>,
+    missing: impl Iterator<Item = &'a Requisite<AR>>,
 ) where
     AR: 'static + Architecture,
 {
@@ -147,20 +147,20 @@ fn print_prereqs<'a, AR>(
 
     for p in missing {
         match p {
-            Prerequisite::Register {
+            Requisite::Register {
                 register,
                 mask: _mask,
             } => missing_reg.push(format!("{}", register)),
-            Prerequisite::Memory {
+            Requisite::Memory {
                 ptr,
                 length: _length,
                 mask: _mask,
             } => missing_mem.push(format!("${:X}", ptr)),
-            Prerequisite::ArchitecturalContext {
+            Requisite::ArchitecturalContext {
                 context,
                 mask: _mask,
             } => missing_actxt.push(context.clone()),
-            Prerequisite::PlatformContext {
+            Requisite::PlatformContext {
                 context,
                 mask: _mask,
             } => missing_pctxt.push(context.clone()),
@@ -218,7 +218,7 @@ fn get_next_action() -> io::Result<NextAction> {
 /// that value in the state.
 fn set_register<'a, AR>(
     state: &mut State<AR>,
-    missing: impl Iterator<Item = &'a Prerequisite<AR>>,
+    missing: impl Iterator<Item = &'a Requisite<AR>>,
 ) -> io::Result<()>
 where
     AR: 'static + Architecture,
@@ -226,7 +226,7 @@ where
 {
     let options = missing
         .filter_map(|m| match m {
-            Prerequisite::Register {
+            Requisite::Register {
                 register,
                 mask: _mask,
             } => Some(format!("{}", register)),
@@ -280,7 +280,7 @@ where
 /// that value in the state memory.
 fn set_memory<'a, AR>(
     state: &mut State<AR>,
-    missing: impl Iterator<Item = &'a Prerequisite<AR>>,
+    missing: impl Iterator<Item = &'a Requisite<AR>>,
 ) -> io::Result<()>
 where
     AR: 'static + Architecture,
@@ -289,7 +289,7 @@ where
 {
     let options = missing
         .filter_map(|m| match m {
-            Prerequisite::Memory {
+            Requisite::Memory {
                 ptr,
                 mask: _mask,
                 length: _length,

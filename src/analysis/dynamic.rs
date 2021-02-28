@@ -1,6 +1,6 @@
 //! Dynamic analysis passes
 
-use crate::analysis::{Disasm, Prerequisite, Reference, ReferenceKind, Trace, TraceEvent};
+use crate::analysis::{Disasm, Reference, ReferenceKind, Requisite, Trace, TraceEvent};
 use crate::arch::{Architecture, CompatibleLiteral};
 use crate::database::Database;
 use crate::memory::{Memory, Pointer};
@@ -19,7 +19,7 @@ where
         AR::PtrVal,
         analysis::Trace<AR>,
         reg::State<AR>,
-        HashSet<Prerequisite<AR>>,
+        HashSet<Requisite<AR>>,
     ),
     AR,
 >;

@@ -1,7 +1,7 @@
 //! A generic Image type for modeling memory that is either uninitialized or
 //! unknown.
 
-use crate::analysis::Prerequisite;
+use crate::analysis::Requisite;
 use crate::arch::Architecture;
 use crate::maths::CheckedSub;
 use crate::memory::{Image, Offset, Pointer};
@@ -58,7 +58,7 @@ where
         self.size
     }
 
-    fn decode_prerequisites(&self, _ptr: AR::PtrVal, _base: AR::PtrVal) -> Vec<Prerequisite<AR>> {
+    fn decode_prerequisites(&self, _ptr: AR::PtrVal, _base: AR::PtrVal) -> Vec<Requisite<AR>> {
         Vec::new()
     }
 
@@ -120,8 +120,8 @@ where
         stripped_ptr
     }
 
-    fn decode_prerequisites(&self, _ptr: AR::PtrVal, _base: AR::PtrVal) -> Vec<Prerequisite<AR>> {
-        vec![Prerequisite::platform_context(
+    fn decode_prerequisites(&self, _ptr: AR::PtrVal, _base: AR::PtrVal) -> Vec<Requisite<AR>> {
+        vec![Requisite::platform_context(
             self.banking_ctxt.to_string(),
             self.mask,
         )]

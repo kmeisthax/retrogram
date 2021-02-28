@@ -1,6 +1,6 @@
 //! Architectural tests
 
-use crate::analysis::{Disasm, Error, Prerequisite, Result, Trace};
+use crate::analysis::{Disasm, Error, Requisite, Result, Trace};
 use crate::arch::{ArchName, Architecture};
 use crate::ast::Literal;
 use crate::memory::{Memory, Pointer};
@@ -51,7 +51,7 @@ impl Architecture for TestArchitecture {
         _at: Self::PtrVal,
         _bus: &Memory<Self>,
         _state: &State<Self>,
-    ) -> Result<(HashSet<Prerequisite<Self>>, bool), Self> {
+    ) -> Result<(HashSet<Requisite<Self>>, bool), Self> {
         Err(Error::NotYetImplemented)
     }
 

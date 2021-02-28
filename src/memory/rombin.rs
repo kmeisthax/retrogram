@@ -1,6 +1,6 @@
 //! ROM binary dump image types
 
-use crate::analysis::Prerequisite;
+use crate::analysis::Requisite;
 use crate::arch::Architecture;
 use crate::maths::CheckedSub;
 use crate::memory::{Image, Offset, Pointer};
@@ -71,7 +71,7 @@ where
         self.data.len()
     }
 
-    fn decode_prerequisites(&self, _ptr: AR::PtrVal, _base: AR::PtrVal) -> Vec<Prerequisite<AR>> {
+    fn decode_prerequisites(&self, _ptr: AR::PtrVal, _base: AR::PtrVal) -> Vec<Requisite<AR>> {
         Vec::new()
     }
 

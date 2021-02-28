@@ -1,7 +1,7 @@
 //! A special-purpose type for modeling the address decoding of a particular
 //! platform.
 
-use crate::analysis::{Prerequisite, Trace};
+use crate::analysis::{Requisite, Trace};
 use crate::arch::Architecture;
 use crate::maths::CheckedSub;
 use crate::memory::bss::UnknownImage;
@@ -599,7 +599,7 @@ where
 
     /// Determine prerequisites necessary to read or write to a bare address
     /// without context.
-    pub fn prerequisites(&self, ptr: AR::PtrVal) -> Vec<Prerequisite<AR>> {
+    pub fn prerequisites(&self, ptr: AR::PtrVal) -> Vec<Requisite<AR>> {
         for view in &self.views {
             if view.is_bare_ptr_within(ptr.clone()) {
                 return view.image.decode_prerequisites(ptr, view.start.clone());

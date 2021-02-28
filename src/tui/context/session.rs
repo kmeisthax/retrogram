@@ -213,7 +213,7 @@ impl SessionContext {
                         Ok(Response::Fence) => {
                             if new_scans > 0 {
                                 autoresp_channel
-                                    .send(Command::ExtractAllScans(false))
+                                    .send(Command::ExtractAllScans(true))
                                     .unwrap();
                                 autoresp_channel.send(Command::Fence).unwrap();
                                 new_scans = 0;

@@ -1,6 +1,6 @@
 //! Types that feed data from program images, such as executable files or ROM dumps, into the memory model.
 
-use crate::analysis::Prerequisite;
+use crate::analysis::Requisite;
 use crate::arch::Architecture;
 use crate::memory::Pointer;
 use crate::reg::{State, Symbolic};
@@ -55,7 +55,7 @@ where
 
     /// Produce a list of prerequisites necessary to fully decode a particular
     /// address.
-    fn decode_prerequisites(&self, ptr: AR::PtrVal, base: AR::PtrVal) -> Vec<Prerequisite<AR>>;
+    fn decode_prerequisites(&self, ptr: AR::PtrVal, base: AR::PtrVal) -> Vec<Requisite<AR>>;
 
     /// Given a pointer, remove all contexts from the pointer that are not
     /// necessary to decode it to an image offset.

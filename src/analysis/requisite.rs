@@ -1,4 +1,4 @@
-//! Prerequisite list type
+//! Requisite list type
 
 use crate::arch::Architecture;
 use crate::maths::Popcount;
@@ -11,8 +11,13 @@ use std::hash::{Hash, Hasher};
 
 /// Indicates a memory or register value that needs to be a concrete value
 /// before execution can continue.
+///
+/// Requisites may be specified in a number of situations, including:
+///
+///  * To indicate the prerequisites required to execute an instruction
+///  * To determine the input or output sets of an instruction
 #[derive(Debug)]
-pub enum Prerequisite<AR>
+pub enum Requisite<AR>
 where
     AR: Architecture,
 {
@@ -67,26 +72,26 @@ where
     },
 }
 
-impl<AR> Hash for Prerequisite<AR>
+impl<AR> Hash for Requisite<AR>
 where
     AR: Architecture,
 {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Prerequisite::Register { register, mask } => {
+            Requisite::Register { register, mask } => {
                 register.hash(state);
                 mask.hash(state);
             }
-            Prerequisite::Memory { ptr, length, mask } => {
+            Requisite::Memory { ptr, length, mask } => {
                 ptr.hash(state);
                 length.hash(state);
                 mask.hash(state);
             }
-            Prerequisite::ArchitecturalContext { context, mask } => {
+            Requisite::ArchitecturalContext { context, mask } => {
                 context.hash(state);
                 mask.hash(state);
             }
-            Prerequisite::PlatformContext { context, mask } => {
+            Requisite::PlatformContext { context, mask } => {
                 context.hash(state);
                 mask.hash(state);
             }
@@ -94,37 +99,37 @@ where
     }
 }
 
-impl<AR> PartialEq for Prerequisite<AR>
+impl<AR> PartialEq for Requisite<AR>
 where
     AR: Architecture,
 {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
-                Prerequisite::Register { register, mask },
-                Prerequisite::Register {
+                Requisite::Register { register, mask },
+                Requisite::Register {
                     register: register_other,
                     mask: mask_other,
                 },
             ) => register.eq(register_other) && mask.eq(mask_other),
             (
-                Prerequisite::Memory { ptr, length, mask },
-                Prerequisite::Memory {
+                Requisite::Memory { ptr, length, mask },
+                Requisite::Memory {
                     ptr: ptr_other,
                     length: length_other,
                     mask: mask_other,
                 },
             ) => ptr.eq(ptr_other) && length.eq(length_other) && mask.eq(mask_other),
             (
-                Prerequisite::ArchitecturalContext { context, mask },
-                Prerequisite::ArchitecturalContext {
+                Requisite::ArchitecturalContext { context, mask },
+                Requisite::ArchitecturalContext {
                     context: context_other,
                     mask: mask_other,
                 },
             ) => context.eq(context_other) && mask.eq(mask_other),
             (
-                Prerequisite::PlatformContext { context, mask },
-                Prerequisite::PlatformContext {
+                Requisite::PlatformContext { context, mask },
+                Requisite::PlatformContext {
                     context: context_other,
                     mask: mask_other,
                 },
@@ -134,41 +139,41 @@ where
     }
 }
 
-impl<AR> Eq for Prerequisite<AR> where AR: Architecture {}
+impl<AR> Eq for Requisite<AR> where AR: Architecture {}
 
-impl<AR> Prerequisite<AR>
+impl<AR> Requisite<AR>
 where
     AR: Architecture,
 {
-    /// Construct a new memory prerequisite.
+    /// Construct a new memory requisite.
     pub fn memory(ptr: AR::PtrVal, length: AR::Offset) -> Self {
-        Prerequisite::Memory {
+        Requisite::Memory {
             ptr,
             length,
             mask: vec![],
         }
     }
 
-    /// Construct a new register prerequisite.
+    /// Construct a new register requisite.
     pub fn register(register: AR::Register, mask: AR::Word) -> Self {
-        Prerequisite::Register { register, mask }
+        Requisite::Register { register, mask }
     }
 
-    /// Construct a new architectural context prerequisite.
+    /// Construct a new architectural context requisite.
     pub fn arch_context(context: String, mask: u64) -> Self {
-        Prerequisite::ArchitecturalContext { context, mask }
+        Requisite::ArchitecturalContext { context, mask }
     }
 
-    /// Construct a new platform context prerequisite.
+    /// Construct a new platform context requisite.
     pub fn platform_context(context: String, mask: u64) -> Self {
-        Prerequisite::PlatformContext { context, mask }
+        Requisite::PlatformContext { context, mask }
     }
 
-    /// Given a particular prerequisite, check if it has any contexts that
+    /// Given a particular requisite, check if it has any contexts that
     /// need to be resolved before we can start talking about memory.
     pub fn check_for_missing_contexts(&self, state: &State<AR>, bus: &Memory<AR>) -> HashSet<Self> {
         match self {
-            Prerequisite::Memory {
+            Requisite::Memory {
                 ptr,
                 length,
                 mask: _mask,
@@ -194,21 +199,21 @@ where
     }
 
     /// Compute the number of forks needed to explore every branch implied by a
-    /// given set of prerequisites, with the current execution state and memory
-    /// bus.
+    /// given set of prerequisites, with the current execution state and
+    /// memory bus.
     ///
     /// The returned state count will be in bits (log-2). If considering
-    /// multiple prerequisites or otherwise accumulating a branch count, you
+    /// multiple requisites or otherwise accumulating a branch count, you
     /// cannot add fork counts directly. Adding actually multiplies the number
     /// of forks. To add two unrelated numbers of forks, you must first raise
     /// 2 to the power of the fork count, then add.
     ///
-    /// Memory prerequisites on improperly contextualized states will generate
+    /// Memory requisites on improperly contextualized states will generate
     /// forks as if the underlying memory was undefined. This is the worst-case
     /// scenario. If the contexts needed are forked on beforehand, then you may
     /// get a more accurate result.
     ///
-    /// A fork count of zero indicates that the prerequisite is already
+    /// A fork count of zero indicates that the Requisite is already
     /// satisfied by the current state.
     pub fn necessary_forks(&self, state: &State<AR>, bus: &Memory<AR>) -> u64
     where
@@ -217,13 +222,13 @@ where
         AR::Offset: TryInto<usize>,
     {
         match self {
-            Prerequisite::Register { register, mask } => {
+            Requisite::Register { register, mask } => {
                 let rv = state.get_register(register);
                 let needs = rv.not_cares() & mask.clone();
 
                 needs.pop_count().try_into().unwrap_or(0)
             }
-            Prerequisite::Memory { ptr, length, mask } => {
+            Requisite::Memory { ptr, length, mask } => {
                 let mut needs = 0;
                 let data = bus.read_memory_stateful(ptr.clone(), length.clone(), state);
 
@@ -239,13 +244,13 @@ where
 
                 needs
             }
-            Prerequisite::ArchitecturalContext { context, mask } => {
+            Requisite::ArchitecturalContext { context, mask } => {
                 let cval = state.get_arch_context(context);
                 let needs = cval.not_cares() & mask;
 
                 needs.pop_count()
             }
-            Prerequisite::PlatformContext { context, mask } => {
+            Requisite::PlatformContext { context, mask } => {
                 let cval = state.get_platform_context(context);
                 let needs = cval.not_cares() & mask;
 
@@ -262,7 +267,7 @@ where
         bus: &Memory<AR>,
     ) -> HashSet<State<AR>> {
         match self {
-            Prerequisite::Register { register, mask } => {
+            Requisite::Register { register, mask } => {
                 let mut new_state_list = HashSet::new();
 
                 for state in state_list {
@@ -281,7 +286,7 @@ where
 
                 new_state_list
             }
-            Prerequisite::Memory { ptr, length, mask } => {
+            Requisite::Memory { ptr, length, mask } => {
                 let mut count = AR::Offset::zero();
                 let mut state_list = state_list.clone();
 
@@ -306,7 +311,7 @@ where
 
                         // Whoops, looks like we need to resolve this recursively!
                         for pr in context_prerequisites {
-                            if matches!(pr, Prerequisite::Memory { .. }) {
+                            if matches!(pr, Requisite::Memory { .. }) {
                                 continue;
                             }
 
@@ -337,7 +342,7 @@ where
 
                 state_list
             }
-            Prerequisite::ArchitecturalContext { context, mask } => {
+            Requisite::ArchitecturalContext { context, mask } => {
                 let mut new_state_list = HashSet::new();
 
                 for state in state_list {
@@ -356,7 +361,7 @@ where
 
                 new_state_list
             }
-            Prerequisite::PlatformContext { context, mask } => {
+            Requisite::PlatformContext { context, mask } => {
                 let mut new_state_list = HashSet::new();
 
                 for state in state_list {

@@ -1,6 +1,6 @@
 //! Dynamic analysis passes
 
-use crate::analysis::{Prerequisite, Trace};
+use crate::analysis::{Requisite, Trace};
 use crate::arch::Architecture;
 use crate::memory::Memory;
 use crate::reg::State;
@@ -58,7 +58,7 @@ where
         post_state: State<AR>,
         bus: &Memory<AR>,
         trace: Trace<AR>,
-        prerequisites: impl Iterator<Item = Prerequisite<AR>>,
+        prerequisites: impl Iterator<Item = Requisite<AR>>,
     ) -> Vec<Self>
     where
         AR::Offset: TryInto<usize>,
