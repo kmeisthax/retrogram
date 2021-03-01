@@ -4,6 +4,7 @@ mod context;
 mod dataflow;
 mod dis;
 mod fork;
+mod instr;
 mod trace;
 mod types;
 
