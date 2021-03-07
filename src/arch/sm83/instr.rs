@@ -2,12 +2,25 @@
 
 use crate::analysis::Error;
 use crate::arch::sm83::{Bus, BusAddress, Offset, PtrVal, Register, Result};
+use crate::ast::{Literal, Operand};
 
 /// A target location for an 8-bit value.
 #[derive(Copy, Clone, Debug)]
 pub enum Target8 {
     Register(Register),
     IndirectHL,
+}
+
+impl Target8 {
+    pub fn into_operand<L>(self) -> Operand<L>
+    where
+        L: Literal,
+    {
+        match self {
+            Target8::Register(reg) => reg.into_operand(),
+            Target8::IndirectHL => Operand::indir(Operand::sym("hl")),
+        }
+    }
 }
 
 /// Decoding aid for targets of 8-bit ALU instructions
@@ -32,6 +45,23 @@ pub enum RegisterPair {
     SP,
     HLIncrement,
     HLDecrement,
+}
+
+impl RegisterPair {
+    pub fn into_operand<L>(self) -> Operand<L>
+    where
+        L: Literal,
+    {
+        match self {
+            Self::BC => Operand::sym("bc"),
+            Self::DE => Operand::sym("de"),
+            Self::HL => Operand::sym("hl"),
+            Self::AF => Operand::sym("af"),
+            Self::SP => Operand::sym("sp"),
+            Self::HLIncrement => Operand::sym("hli"),
+            Self::HLDecrement => Operand::sym("hld"),
+        }
+    }
 }
 
 /// Enumeration of all of the ways that ALU instructions that load constants
@@ -74,6 +104,20 @@ pub enum Condition {
     NC,
 }
 
+impl Condition {
+    pub fn into_operand<L>(self) -> Operand<L>
+    where
+        L: Literal,
+    {
+        match self {
+            Self::Z => Operand::sym("z"),
+            Self::C => Operand::sym("c"),
+            Self::NZ => Operand::sym("nz"),
+            Self::NC => Operand::sym("nc"),
+        }
+    }
+}
+
 pub static ALU_CONDCODE: [Condition; 4] =
     [Condition::NZ, Condition::Z, Condition::NC, Condition::C];
 
@@ -83,6 +127,8 @@ pub enum Instruction {
     Nop,
 
     /// LD instructions of the form LD (target8), (target8)
+    ///
+    /// First target8 is the target of the copy, second is the source.
     LdReg8(Target8, Target8),
 
     /// LD HL, SP+(u8)
@@ -290,7 +336,7 @@ impl Instruction {
     /// Read the next instruction from a static stream.
     ///
     /// If successful, returns the decoded instruction and it's size.
-    fn from_static_stream(p: &BusAddress, mem: &Bus) -> Result<(Self, Offset)> {
+    pub fn from_static_stream(p: &BusAddress, mem: &Bus) -> Result<(Self, Offset)> {
         match mem.read_unit(p).into_concrete() {
             Some(0xCB) => match mem.read_unit(&(p.clone() + 1)).into_concrete() {
                 Some(subop) => match (
@@ -475,7 +521,7 @@ impl Instruction {
                     )), //ld (targetreg), u8
                     (0, _, _, 7) => Ok((bitop, 1)),                          //legacy bitops
                     (1, _, _, _) => Ok((Self::LdReg8(targetreg2, targetreg), 1)), //ld (reg2), (reg)
-                    (2, _, _, _) => match ((op >> 3) & 0x07) {
+                    (2, _, _, _) => match (op >> 3) & 0x07 {
                         0 => Ok((Self::Add8(targetreg2), 1)),
                         1 => Ok((Self::AddCarry8(targetreg2), 1)),
                         2 => Ok((Self::Sub8(targetreg2), 1)),
@@ -516,7 +562,7 @@ impl Instruction {
                     (3, 1, _, 4) => Err(Error::InvalidInstruction),
                     (3, _, 0, 5) => Ok((Self::Push(stackpair), 1)),
                     (3, _, 1, 5) => Err(Error::InvalidInstruction),
-                    (3, _, _, 6) => match ((op >> 3) & 0x07) {
+                    (3, _, _, 6) => match (op >> 3) & 0x07 {
                         0 => Ok((
                             Self::Add8Const(
                                 match mem.read_unit(&(p.clone() + 1)).into_concrete() {

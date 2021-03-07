@@ -52,6 +52,24 @@ impl Register {
         .map(|r| Requisite::register(*r, 0xFF))
         .collect()
     }
+
+    pub fn into_operand<L>(self) -> ast::Operand<L>
+    where
+        L: ast::Literal,
+    {
+        match self {
+            Self::A => ast::Operand::sym("a"),
+            Self::B => ast::Operand::sym("b"),
+            Self::C => ast::Operand::sym("c"),
+            Self::D => ast::Operand::sym("d"),
+            Self::E => ast::Operand::sym("e"),
+            Self::H => ast::Operand::sym("h"),
+            Self::L => ast::Operand::sym("l"),
+            Self::F => ast::Operand::sym("f"),
+            Self::S => ast::Operand::sym("s"),
+            Self::P => ast::Operand::sym("p"),
+        }
+    }
 }
 
 impl fmt::Display for Register {
