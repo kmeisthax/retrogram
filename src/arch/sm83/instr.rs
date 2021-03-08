@@ -1,7 +1,7 @@
 //! Instruction enumeration
 
-use crate::analysis::Error;
-use crate::arch::sm83::{Bus, BusAddress, Offset, PtrVal, Register, Result};
+use crate::analysis::{Error, Requisite};
+use crate::arch::sm83::{Bus, BusAddress, Offset, PtrVal, Register, Result, SM83};
 use crate::ast::{Literal, Operand};
 
 /// A target location for an 8-bit value.
@@ -19,6 +19,17 @@ impl Target8 {
         match self {
             Target8::Register(reg) => reg.into_operand(),
             Target8::IndirectHL => Operand::indir(Operand::sym("hl")),
+        }
+    }
+
+    /// Turn the target into a list of memory requisites.
+    pub fn into_memory_requisites(self) -> Vec<Requisite<SM83>> {
+        match self {
+            Target8::Register(_) => vec![],
+            Target8::IndirectHL => vec![
+                Requisite::register(Register::H, 0xFF),
+                Requisite::register(Register::L, 0xFF),
+            ],
         }
     }
 }
@@ -60,6 +71,39 @@ impl RegisterPair {
             Self::SP => Operand::sym("sp"),
             Self::HLIncrement => Operand::sym("hli"),
             Self::HLDecrement => Operand::sym("hld"),
+        }
+    }
+
+    pub fn into_requisites(self) -> Vec<Requisite<SM83>> {
+        match self {
+            Self::BC => vec![
+                Requisite::register(Register::B, 0xFF),
+                Requisite::register(Register::C, 0xFF),
+            ],
+            Self::DE => vec![
+                Requisite::register(Register::D, 0xFF),
+                Requisite::register(Register::E, 0xFF),
+            ],
+            Self::HL => vec![
+                Requisite::register(Register::H, 0xFF),
+                Requisite::register(Register::L, 0xFF),
+            ],
+            Self::AF => vec![
+                Requisite::register(Register::A, 0xFF),
+                Requisite::register(Register::F, 0xFF),
+            ],
+            Self::SP => vec![
+                Requisite::register(Register::S, 0xFF),
+                Requisite::register(Register::P, 0xFF),
+            ],
+            Self::HLIncrement => vec![
+                Requisite::register(Register::H, 0xFF),
+                Requisite::register(Register::L, 0xFF),
+            ],
+            Self::HLDecrement => vec![
+                Requisite::register(Register::H, 0xFF),
+                Requisite::register(Register::L, 0xFF),
+            ],
         }
     }
 }
@@ -114,6 +158,13 @@ impl Condition {
             Self::C => Operand::sym("c"),
             Self::NZ => Operand::sym("nz"),
             Self::NC => Operand::sym("nc"),
+        }
+    }
+
+    pub fn into_requisite(self) -> Requisite<SM83> {
+        match self {
+            Self::Z | Self::NZ => Requisite::register(Register::F, 0x80),
+            Self::C | Self::NC => Requisite::register(Register::F, 0x10),
         }
     }
 }

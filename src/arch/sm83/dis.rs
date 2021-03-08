@@ -46,9 +46,6 @@ lazy_static! {
     pub static ref ALU_TARGET_REGS: [AbstractOperand; 8] = [AbstractOperand::Symbol("b"), AbstractOperand::Symbol("c"), AbstractOperand::Symbol("d"), AbstractOperand::Symbol("e"), AbstractOperand::Symbol("h"), AbstractOperand::Symbol("l"), AbstractOperand::Indirect("hl"), AbstractOperand::Symbol("a")];
 }
 
-/// z80 instruction encoding uses this 2-bit enumeration for memory pointers.
-pub static ALU_TARGET_MEM: [&str; 4] = ["bc", "de", "hli", "hld"];
-
 /// Disassemble the instruction at `p` in `mem`.
 ///
 /// This function returns a `Disasm` if the memory location points to a valid

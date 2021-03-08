@@ -70,6 +70,10 @@ impl Register {
             Self::P => ast::Operand::sym("p"),
         }
     }
+
+    pub fn into_requisite(self) -> Requisite {
+        Requisite::register(self, 0xFF)
+    }
 }
 
 impl fmt::Display for Register {

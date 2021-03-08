@@ -1,98 +1,10 @@
 //! Symbolic fork analysis for SM83
 
-use crate::analysis;
-use crate::arch::sm83;
-use crate::arch::sm83::dis::{AbstractOperand, ALU_TARGET_MEM, ALU_TARGET_REGS};
-use crate::arch::sm83::{Bus, PtrVal, Register, Requisite, State};
+use crate::analysis::Error;
+use crate::arch::sm83::{
+    Bus, Instruction, PtrVal, Register, RegisterPair, Requisite, Result, State,
+};
 use std::collections::HashSet;
-
-/// Return a prerequisite list for an instruction that reads or writes the
-/// address situated in the opcode of this instruction.
-fn memlist_rw_op16(p: PtrVal) -> sm83::Result<(Vec<Requisite>, bool)> {
-    Ok((vec![Requisite::memory(p, 2)], true))
-}
-
-/// Return a prerequisite list for an instruction that jumps to or calls the
-/// address situated in the opcode of this instruction.
-///
-/// The pointer handed to this function is the operand address, *not* the PC
-/// address (i.e. it is already +1'd).
-fn memlist_call_op16(
-    mut preq: Vec<Requisite>,
-    p: PtrVal,
-    mem: &Bus,
-    state: &State,
-) -> sm83::Result<(Vec<Requisite>, bool)> {
-    if let Some(val) = mem.read_leword_stateful::<u16>(p, state).into_concrete() {
-        preq.push(Requisite::memory(val, 1));
-        return Ok((preq, true));
-    }
-
-    preq.push(Requisite::memory(p, 2));
-
-    Ok((preq, false))
-}
-
-/// Return a prerequisite list for an instruction that reads or writes the
-/// high memory address situated in the opcode of this instruction.
-fn memlist_rw_hi8(p: PtrVal) -> sm83::Result<(Vec<Requisite>, bool)> {
-    Ok((vec![Requisite::memory(p, 1)], true))
-}
-
-/// Return a prerequisite list for a PC-relative jump.
-fn memlist_pc8(
-    mut preq: Vec<Requisite>,
-    p: PtrVal,
-    mem: &Bus,
-    state: &State,
-) -> sm83::Result<(Vec<Requisite>, bool)> {
-    let is_complete = match mem
-        .read_unit_stateful(p, state)
-        .into_concrete()
-        .map(|target| ((p + 1) as i16 + (target as i8) as i16) as u16)
-    {
-        Some(val) => {
-            preq.push(Requisite::memory(val, 1));
-            true
-        }
-        None => {
-            preq.push(Requisite::memory(p, 1));
-            false
-        }
-    };
-
-    Ok((preq, is_complete))
-}
-
-/// Return a prerequisite list for an instruction that jumps to or calls the
-/// address at a particular 16-bit register pair (e.g. jp [hl] or ret).
-///
-/// Flags should be indicated with `include_flags` rather than `Register::F` so
-/// that only the `z` and `c` flags are actually counted as prerequisites.
-fn memlist_call_indir16(
-    regs: Vec<Register>,
-    include_flags: bool,
-    state: &State,
-) -> sm83::Result<(Vec<Requisite>, bool)> {
-    let mut preqs: Vec<Requisite> = regs.iter().map(|r| Requisite::register(*r, 0xFF)).collect();
-    if include_flags {
-        preqs.push(Requisite::register(Register::F, 0x90));
-    }
-
-    match (regs.get(0), regs.get(1)) {
-        (Some(r0), Some(r1)) => match (
-            state.get_register(r0).into_concrete(),
-            state.get_register(r1).into_concrete(),
-        ) {
-            (Some(h), Some(l)) => {
-                preqs.push(Requisite::memory((h as PtrVal) << 8 | l as PtrVal, 1));
-                Ok((preqs, true))
-            }
-            _ => Ok((preqs, false)),
-        },
-        _ => Ok((preqs, false)),
-    }
-}
 
 /// Determine what registers need to be known in order to execute an
 /// instruction at a given address.
@@ -118,124 +30,104 @@ fn memlist_call_indir16(
 /// registers or memory locations, the tracing routine must consider how many
 /// forks will be created and if such forking is "worth it". This is a heuristic
 /// policy not covered by the tracing implementation of this architecture.
-pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> sm83::Result<(HashSet<Requisite>, bool)> {
-    let ret = match mem.read_unit_stateful(p, state).into_concrete() {
-        Some(0xCB) => match mem.read_unit_stateful(p + 1, state).into_concrete() {
-            Some(subop) => match ALU_TARGET_REGS[(subop & 0x07) as usize] {
-                AbstractOperand::Symbol(_) => Ok((vec![], true)),
-                AbstractOperand::Indirect("hl") => Ok((Register::prereqs_from_sym("hl"), true)),
-                _ => Ok((vec![], false)),
-            },
-            _ => Ok((vec![Requisite::memory(p + 1, 1)], false)),
-        },
+pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> Result<(HashSet<Requisite>, bool)> {
+    let (preqs, is_complete) =
+        match Instruction::from_static_stream(&state.contextualize_pointer(p), mem) {
+            Ok((Instruction::Nop, _)) => (vec![], true),
+            Ok((Instruction::LdReg8(tgt, src), _)) => {
+                let mut prereq_list = src.into_memory_requisites();
+                prereq_list.append(&mut tgt.into_memory_requisites());
 
-        //Z80 instructions that don't fit the pattern decoder below
-        Some(0x00) => Ok((vec![], true)),                     //nop
-        Some(0x08) => memlist_rw_op16(p + 1),                 //ld [u16], sp
-        Some(0x10) => Ok((vec![], true)),                     //stop
-        Some(0x18) => memlist_pc8(vec![], p + 1, mem, state), //jr u8
-        Some(0x76) => Ok((vec![], true)),                     //halt
-
-        Some(0xC3) => memlist_call_op16(vec![], p + 1, mem, state), //jp u16
-        Some(0xCD) => memlist_call_op16(Register::prereqs_from_sym("sp"), p + 1, mem, state), //call u16
-
-        Some(0xC9) => memlist_call_indir16(vec![Register::S, Register::P], false, state), //ret
-        Some(0xD9) => memlist_call_indir16(vec![Register::S, Register::P], false, state), //reti
-        Some(0xE9) => memlist_call_indir16(vec![Register::H, Register::L], false, state), //jp [hl]
-        Some(0xF9) => Ok((vec![], true)), //ld sp, hl
-
-        Some(0xE0) => memlist_rw_hi8(p + 1), //ldh [u8], a
-        Some(0xE8) => Ok((vec![], true)),    //add sp, reg
-        Some(0xF0) => memlist_rw_hi8(p + 1), //ldh a, [u8]
-        Some(0xF8) => Ok((vec![], true)),    //ld hl, sp+r8
-
-        Some(0xE2) => Ok((vec![Requisite::register(Register::C, 0xFF)], true)), //ldh [c], a
-        Some(0xEA) => memlist_rw_op16(p + 1),                                   //ld [u16], a
-        Some(0xF2) => Ok((vec![Requisite::register(Register::C, 0xFF)], true)), //ldh a, [c]
-        Some(0xFA) => memlist_rw_op16(p + 1),                                   //ld a, [u16]
-        //TODO: Memory reads should prereq on the target of the read so that
-        //we can fork on contexts and busses that change contexts on read get
-        //the correct execution.
-        Some(0xF3) => Ok((vec![], true)),
-        Some(0xFB) => Ok((vec![], true)),
-
-        //Z80 instructions that follow a particular pattern
-        Some(op) => {
-            let targetmem = ALU_TARGET_MEM[((op >> 4) & 0x03) as usize];
-
-            //decode `op` into aab?cddd. This creates a nice visual table for
-            //the Z80's semiperiodic instruction encoding
-            match (
-                (op >> 6) & 0x03,
-                (op >> 5) & 0x01,
-                (op >> 3) & 0x01,
-                op & 0x07,
-            ) {
-                (0, 0, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* 00, 08, 10, 18 */
-                (0, 1, _, 0) => memlist_pc8(
-                    vec![Requisite::register(Register::F, 0x90)],
-                    p + 1,
-                    mem,
-                    state,
-                ), //jr cond, pc8
-                (0, _, 0, 1) => Ok((vec![], true)),                                //ld r16, u16
-                (0, _, 1, 1) => Ok((vec![], true)),                                //add hl, r16
-                (0, _, 0, 2) => Ok((Register::prereqs_from_sym(targetmem), true)), //ld [r16], a
-                (0, _, 1, 2) => Ok((Register::prereqs_from_sym(targetmem), true)), //ld a, [r16]
-                (0, _, 0, 3) => Ok((vec![], true)),                                //inc r16
-                (0, _, 1, 3) => Ok((vec![], true)),                                //dec r16
-                (0, _, _, 4) if ((op >> 3) & 0x07) == 6 => {
-                    Ok((Register::prereqs_from_sym("hl"), true))
-                } //inc [hl]
-                (0, _, _, 4) => Ok((vec![], true)),                                //inc r8
-                (0, _, _, 5) if ((op >> 3) & 0x07) == 6 => {
-                    Ok((Register::prereqs_from_sym("hl"), true))
-                } //dec [hl]
-                (0, _, _, 5) => Ok((vec![], true)),                                //dec r8
-                (0, _, _, 6) if ((op >> 3) & 0x07) == 6 => {
-                    Ok((Register::prereqs_from_sym("hl"), true))
-                } //ld [hl], d8
-                (0, _, _, 6) => Ok((vec![], true)),                                //ld r8, d8
-                (0, _, _, 7) => Ok((vec![], true)), //8080 bitwise ops
-                (1, _, _, _) if ((op >> 3) & 0x07) == 6 => {
-                    Ok((Register::prereqs_from_sym("hl"), true))
-                } //ld [hl], r8
-                (1, _, _, _) if (op & 0x07) == 6 => Ok((Register::prereqs_from_sym("hl"), true)), //ld r8, [hl]
-                (1, _, _, _) => Ok((vec![], true)), //ld r8, r8
-                (2, _, _, _) if (op & 0x07) == 6 => Ok((Register::prereqs_from_sym("hl"), true)), //aluops r8, [hl]
-                (2, _, _, _) => Ok((vec![], true)), //aluops a, r8
-                (3, 0, _, 0) => memlist_call_indir16(vec![Register::S, Register::P], true, state), //ret cond... TODO: Can we specify which bit of F we want?
-                (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
-                (3, _, 0, 1) => Ok((Register::prereqs_from_sym("sp"), true)),      //pop r16
-                (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
-                (3, 0, _, 2) => memlist_call_op16(
-                    vec![Requisite::register(Register::F, 0x90)],
-                    p + 1,
-                    mem,
-                    state,
-                ), //jp cond, d16
-                (3, 1, _, 2) => Err(analysis::Error::Misinterpretation(1, false)), /* E2, EA, F2, FA */
-                (3, _, _, 3) => Err(analysis::Error::InvalidInstruction),          //invalid
-                (3, 0, _, 4) => memlist_call_op16(
-                    vec![Requisite::register(Register::F, 0x90)],
-                    p + 1,
-                    mem,
-                    state,
-                ), //call cond, d16
-                (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction),          //invalid
-                (3, _, 0, 5) => Ok((Register::prereqs_from_sym("sp"), true)),      //push r16
-                (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction),          //invalid
-                (3, _, _, 6) => Ok((vec![], true)),                                //aluops a, d8
-                (3, _, _, 7) => Ok((Register::prereqs_from_sym("sp"), true)),      //rst nn
-
-                _ => Err(analysis::Error::Misinterpretation(1, false)), //invalid
+                (prereq_list, true)
             }
-        }
-        _ => Ok((vec![Requisite::memory(p, 1)], false)),
-    };
+            Ok((Instruction::LdHLSP(_), _)) => (vec![], true),
+            Ok((Instruction::LdSPHL, _)) => (vec![], true),
+            Ok((Instruction::LdWriteStatic(_), _)) => (vec![], true),
+            Ok((Instruction::LdWritePtr(ptr_regpair), _)) => (ptr_regpair.into_requisites(), true),
+            Ok((Instruction::LdWriteHiStatic(_), _)) => (vec![], true),
+            Ok((Instruction::LdWriteHiPtr, _)) => (vec![Register::C.into_requisite()], true),
+            Ok((Instruction::LdReadStatic(_), _)) => (vec![], true),
+            Ok((Instruction::LdReadPtr(ptr_regpair), _)) => (ptr_regpair.into_requisites(), true),
+            Ok((Instruction::LdReadHiStatic(_), _)) => (vec![], true),
+            Ok((Instruction::LdReadHiPtr, _)) => (vec![], true),
+            Ok((Instruction::LdConst8(tgt, _), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::LdConst16(_regpair, _), _)) => (vec![], true),
+            Ok((Instruction::LdWriteStaticSP(_), _)) => (vec![], true),
+            Ok((Instruction::Inc16(_), _)) => (vec![], true),
+            Ok((Instruction::Inc8(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::Dec16(_), _)) => (vec![], true),
+            Ok((Instruction::Dec8(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::Jump(_, cond), _)) => {
+                (cond.map(|c| c.into_requisite()).into_iter().collect(), true)
+            }
+            Ok((Instruction::JumpRelative(_, cond), _)) => {
+                (cond.map(|c| c.into_requisite()).into_iter().collect(), true)
+            }
+            Ok((Instruction::JumpDynamic, _)) => (RegisterPair::HL.into_requisites(), true),
+            Ok((Instruction::Call(_, cond), _)) => (
+                cond.map(|c| c.into_requisite())
+                    .into_iter()
+                    .chain(RegisterPair::SP.into_requisites().into_iter())
+                    .collect(),
+                true,
+            ),
+            Ok((Instruction::CallRst(_), _)) => (RegisterPair::SP.into_requisites(), true),
+            Ok((Instruction::Push(_), _)) => (RegisterPair::SP.into_requisites(), true),
+            Ok((Instruction::Pop(_), _)) => (RegisterPair::SP.into_requisites(), true),
+            Ok((Instruction::Return(cond), _)) => (
+                cond.map(|c| c.into_requisite())
+                    .into_iter()
+                    .chain(RegisterPair::SP.into_requisites().into_iter())
+                    .collect(),
+                true,
+            ),
+            Ok((Instruction::ReturnFromInterrupt, _)) => (RegisterPair::SP.into_requisites(), true),
+            Ok((Instruction::Add16(_), _)) => (vec![], true),
+            Ok((Instruction::AddSpConst(_), _)) => (vec![], true),
+            Ok((Instruction::Add8(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::Add8Const(_), _)) => (vec![], true),
+            Ok((Instruction::AddCarry8(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::AddCarry8Const(_), _)) => (vec![], true),
+            Ok((Instruction::Sub8(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::Sub8Const(_), _)) => (vec![], true),
+            Ok((Instruction::SubCarry8(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::SubCarry8Const(_), _)) => (vec![], true),
+            Ok((Instruction::And8(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::And8Const(_), _)) => (vec![], true),
+            Ok((Instruction::Xor8(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::Xor8Const(_), _)) => (vec![], true),
+            Ok((Instruction::Or8(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::Or8Const(_), _)) => (vec![], true),
+            Ok((Instruction::Cp(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::CpConst(_), _)) => (vec![], true),
+            Ok((Instruction::RotateLeftCarry(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::RotateLeftCarryAccum, _)) => (vec![], true),
+            Ok((Instruction::RotateLeft(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::RotateLeftAccum, _)) => (vec![], true),
+            Ok((Instruction::RotateRightCarry(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::RotateRightCarryAccum, _)) => (vec![], true),
+            Ok((Instruction::RotateRight(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::RotateRightAccum, _)) => (vec![], true),
+            Ok((Instruction::ShiftLeftArithmetic(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::ShiftRightArithmetic(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::NybbleSwap(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::ShiftRightLogical(tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::BitTest(_, tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::BitReset(_, tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::BitSet(_, tgt), _)) => (tgt.into_memory_requisites(), true),
+            Ok((Instruction::Compliment, _)) => (vec![], true),
+            Ok((Instruction::DecimalAdjust, _)) => (vec![], true),
+            Ok((Instruction::SetCarry, _)) => (vec![], true),
+            Ok((Instruction::ClearCarry, _)) => (vec![], true),
+            Ok((Instruction::DisableInterrupt, _)) => (vec![], true),
+            Ok((Instruction::EnableInterrupt, _)) => (vec![], true),
+            Ok((Instruction::Halt, _)) => (vec![], true),
+            Ok((Instruction::Stop, _)) => (vec![], true),
+            Err(Error::UnconstrainedMemory(p)) => {
+                (vec![Requisite::memory(*p.as_pointer(), 0xFF)], false)
+            }
+            Err(e) => return Err(e),
+        };
 
-    match ret {
-        Ok((preqs, is_complete)) => Ok((preqs.into_iter().collect(), is_complete)),
-        Err(e) => Err(e),
-    }
+    Ok((preqs.into_iter().collect(), is_complete))
 }
