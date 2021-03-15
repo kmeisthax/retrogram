@@ -186,3 +186,15 @@ macro_rules! wrap_from_str_radix_impl {
         }
     };
 }
+
+/// Wraps the `as` operator of a given type.
+macro_rules! wrap_existing_reinterpret {
+    ($from_type:ident, $to_type:ident) => {
+        impl Reinterpret<$to_type> for $from_type {
+            #[inline]
+            fn reinterpret(self) -> $to_type {
+                self as $to_type
+            }
+        }
+    };
+}

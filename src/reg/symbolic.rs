@@ -1,7 +1,7 @@
 //! A symbolic value type which allows placing bounds on values which have been
 //! mutated.
 
-use crate::maths::BoundWidth;
+use crate::maths::{BoundWidth, Reinterpret};
 use crate::memory::{Desegmentable, Endianness};
 use crate::reg::{Bitwise, Convertable, TryConvertable};
 use num::traits::{Bounded, CheckedShl, CheckedShr, One, Zero};
@@ -135,6 +135,18 @@ where
             bits_set: T::try_from(v.bits_set)?,
             bits_cleared: zero_extension | T::try_from(v.bits_cleared & mask)?,
         })
+    }
+}
+
+impl<T, R> Reinterpret<Symbolic<R>> for Symbolic<T>
+where
+    T: Reinterpret<R>,
+{
+    fn reinterpret(self) -> Symbolic<R> {
+        Symbolic {
+            bits_set: self.bits_set.reinterpret(),
+            bits_cleared: self.bits_cleared.reinterpret(),
+        }
     }
 }
 

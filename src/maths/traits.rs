@@ -260,3 +260,167 @@ impl<T> Numerical for T where
         + Sync
 {
 }
+
+/// Trait that represents reinterpret casts between two types.
+///
+/// A type is `Reinterpret<T>` if and only if every valid bit pattern it holds
+/// is also a valid bit pattern of T. This is a looser interpretation of
+/// something like `Into<T>`, which implies that the value is preserved within
+/// the new type. `Reinterpret<T>` only guarantees that a conversion exists,
+/// not that it makes sense.
+///
+/// Specifically, for primitive types, `Reinterpret<T>` is implemented on each
+/// primitive integer type `P` with `P as T`. For primitive types with a `From`
+/// or `Into` impl, `Reinterpret` should match those impls. Those which do not
+/// have such an impl instead map bit values without consideration for their
+/// values (e.g. `i32`'s `Reinterpret<u32>` impl gives you the two's compliment
+/// of negative numbers; `u32`'s `Reinterpret<u8>` masks high bits, etc).
+pub trait Reinterpret<T> {
+    /// Reinterpret this value as T.
+    fn reinterpret(self) -> T;
+}
+
+wrap_existing_reinterpret!(u8, u8);
+wrap_existing_reinterpret!(u8, u16);
+wrap_existing_reinterpret!(u8, u32);
+wrap_existing_reinterpret!(u8, u64);
+wrap_existing_reinterpret!(u8, u128);
+wrap_existing_reinterpret!(u8, usize);
+wrap_existing_reinterpret!(u8, i8);
+wrap_existing_reinterpret!(u8, i16);
+wrap_existing_reinterpret!(u8, i32);
+wrap_existing_reinterpret!(u8, i64);
+wrap_existing_reinterpret!(u8, i128);
+wrap_existing_reinterpret!(u8, isize);
+wrap_existing_reinterpret!(i8, u8);
+wrap_existing_reinterpret!(i8, u16);
+wrap_existing_reinterpret!(i8, u32);
+wrap_existing_reinterpret!(i8, u64);
+wrap_existing_reinterpret!(i8, u128);
+wrap_existing_reinterpret!(i8, usize);
+wrap_existing_reinterpret!(i8, i8);
+wrap_existing_reinterpret!(i8, i16);
+wrap_existing_reinterpret!(i8, i32);
+wrap_existing_reinterpret!(i8, i64);
+wrap_existing_reinterpret!(i8, i128);
+wrap_existing_reinterpret!(i8, isize);
+wrap_existing_reinterpret!(u16, u8);
+wrap_existing_reinterpret!(u16, u16);
+wrap_existing_reinterpret!(u16, u32);
+wrap_existing_reinterpret!(u16, u64);
+wrap_existing_reinterpret!(u16, u128);
+wrap_existing_reinterpret!(u16, usize);
+wrap_existing_reinterpret!(u16, i8);
+wrap_existing_reinterpret!(u16, i16);
+wrap_existing_reinterpret!(u16, i32);
+wrap_existing_reinterpret!(u16, i64);
+wrap_existing_reinterpret!(u16, i128);
+wrap_existing_reinterpret!(u16, isize);
+wrap_existing_reinterpret!(i16, u8);
+wrap_existing_reinterpret!(i16, u16);
+wrap_existing_reinterpret!(i16, u32);
+wrap_existing_reinterpret!(i16, u64);
+wrap_existing_reinterpret!(i16, u128);
+wrap_existing_reinterpret!(i16, usize);
+wrap_existing_reinterpret!(i16, i8);
+wrap_existing_reinterpret!(i16, i16);
+wrap_existing_reinterpret!(i16, i32);
+wrap_existing_reinterpret!(i16, i64);
+wrap_existing_reinterpret!(i16, i128);
+wrap_existing_reinterpret!(i16, isize);
+wrap_existing_reinterpret!(u32, u8);
+wrap_existing_reinterpret!(u32, u16);
+wrap_existing_reinterpret!(u32, u32);
+wrap_existing_reinterpret!(u32, u64);
+wrap_existing_reinterpret!(u32, u128);
+wrap_existing_reinterpret!(u32, usize);
+wrap_existing_reinterpret!(u32, i8);
+wrap_existing_reinterpret!(u32, i16);
+wrap_existing_reinterpret!(u32, i32);
+wrap_existing_reinterpret!(u32, i64);
+wrap_existing_reinterpret!(u32, i128);
+wrap_existing_reinterpret!(u32, isize);
+wrap_existing_reinterpret!(i32, u8);
+wrap_existing_reinterpret!(i32, u16);
+wrap_existing_reinterpret!(i32, u32);
+wrap_existing_reinterpret!(i32, u64);
+wrap_existing_reinterpret!(i32, u128);
+wrap_existing_reinterpret!(i32, usize);
+wrap_existing_reinterpret!(i32, i8);
+wrap_existing_reinterpret!(i32, i16);
+wrap_existing_reinterpret!(i32, i32);
+wrap_existing_reinterpret!(i32, i64);
+wrap_existing_reinterpret!(i32, i128);
+wrap_existing_reinterpret!(i32, isize);
+wrap_existing_reinterpret!(u64, u8);
+wrap_existing_reinterpret!(u64, u16);
+wrap_existing_reinterpret!(u64, u32);
+wrap_existing_reinterpret!(u64, u64);
+wrap_existing_reinterpret!(u64, u128);
+wrap_existing_reinterpret!(u64, usize);
+wrap_existing_reinterpret!(u64, i8);
+wrap_existing_reinterpret!(u64, i16);
+wrap_existing_reinterpret!(u64, i32);
+wrap_existing_reinterpret!(u64, i64);
+wrap_existing_reinterpret!(u64, i128);
+wrap_existing_reinterpret!(u64, isize);
+wrap_existing_reinterpret!(i64, u8);
+wrap_existing_reinterpret!(i64, u16);
+wrap_existing_reinterpret!(i64, u32);
+wrap_existing_reinterpret!(i64, u64);
+wrap_existing_reinterpret!(i64, u128);
+wrap_existing_reinterpret!(i64, usize);
+wrap_existing_reinterpret!(i64, i8);
+wrap_existing_reinterpret!(i64, i16);
+wrap_existing_reinterpret!(i64, i32);
+wrap_existing_reinterpret!(i64, i64);
+wrap_existing_reinterpret!(i64, i128);
+wrap_existing_reinterpret!(i64, isize);
+wrap_existing_reinterpret!(u128, u8);
+wrap_existing_reinterpret!(u128, u16);
+wrap_existing_reinterpret!(u128, u32);
+wrap_existing_reinterpret!(u128, u64);
+wrap_existing_reinterpret!(u128, u128);
+wrap_existing_reinterpret!(u128, usize);
+wrap_existing_reinterpret!(u128, i8);
+wrap_existing_reinterpret!(u128, i16);
+wrap_existing_reinterpret!(u128, i32);
+wrap_existing_reinterpret!(u128, i64);
+wrap_existing_reinterpret!(u128, i128);
+wrap_existing_reinterpret!(u128, isize);
+wrap_existing_reinterpret!(i128, u8);
+wrap_existing_reinterpret!(i128, u16);
+wrap_existing_reinterpret!(i128, u32);
+wrap_existing_reinterpret!(i128, u64);
+wrap_existing_reinterpret!(i128, u128);
+wrap_existing_reinterpret!(i128, usize);
+wrap_existing_reinterpret!(i128, i8);
+wrap_existing_reinterpret!(i128, i16);
+wrap_existing_reinterpret!(i128, i32);
+wrap_existing_reinterpret!(i128, i64);
+wrap_existing_reinterpret!(i128, i128);
+wrap_existing_reinterpret!(i128, isize);
+wrap_existing_reinterpret!(usize, u8);
+wrap_existing_reinterpret!(usize, u16);
+wrap_existing_reinterpret!(usize, u32);
+wrap_existing_reinterpret!(usize, u64);
+wrap_existing_reinterpret!(usize, u128);
+wrap_existing_reinterpret!(usize, usize);
+wrap_existing_reinterpret!(usize, i8);
+wrap_existing_reinterpret!(usize, i16);
+wrap_existing_reinterpret!(usize, i32);
+wrap_existing_reinterpret!(usize, i64);
+wrap_existing_reinterpret!(usize, i128);
+wrap_existing_reinterpret!(usize, isize);
+wrap_existing_reinterpret!(isize, u8);
+wrap_existing_reinterpret!(isize, u16);
+wrap_existing_reinterpret!(isize, u32);
+wrap_existing_reinterpret!(isize, u64);
+wrap_existing_reinterpret!(isize, u128);
+wrap_existing_reinterpret!(isize, usize);
+wrap_existing_reinterpret!(isize, i8);
+wrap_existing_reinterpret!(isize, i16);
+wrap_existing_reinterpret!(isize, i32);
+wrap_existing_reinterpret!(isize, i64);
+wrap_existing_reinterpret!(isize, i128);
+wrap_existing_reinterpret!(isize, isize);
