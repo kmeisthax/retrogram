@@ -21,6 +21,7 @@ pub trait CompatibleLiteral<AR>:
     + From<AR::Byte>
     + From<AR::Offset>
     + From<AR::PtrVal>
+    + From<AR::SignedWord>
     + From<Pointer<AR::PtrVal>>
 where
     AR: Architecture,
@@ -35,6 +36,7 @@ where
         + From<AR::Byte>
         + From<AR::Offset>
         + From<AR::PtrVal>
+        + From<AR::SignedWord>
         + From<Pointer<AR::PtrVal>>,
 {
 }
@@ -110,6 +112,13 @@ where
     /// This type is customarily referred to as `I` in other trait bounds.
     type Word;
 
+    /// The type which represents a signed register value.
+    ///
+    /// Assembler syntaxes that accept this particular architecture must
+    /// allow both signed and unsigned representations of the word type. It is
+    /// implied that the regular `Word` type is unsigned.
+    type SignedWord;
+
     /// The type which represents a byte as addressed by memory.
     ///
     /// In most modern architectures, bytes are 8 bits wide, and this should be
@@ -183,11 +192,7 @@ where
         bus: &Memory<Self>,
     ) -> Result<Disasm<L, Self::PtrVal, Self::Offset>, Self>
     where
-        L: Literal
-            + From<Self::Word>
-            + From<Self::Byte>
-            + From<Self::Offset>
-            + From<Pointer<Self::PtrVal>>;
+        L: CompatibleLiteral<Self>;
 
     /// Statically determine the input and output requisites of a given
     /// instruction.

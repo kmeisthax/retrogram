@@ -15,6 +15,7 @@ pub struct TestArchitecture;
 impl Architecture for TestArchitecture {
     type Register = String;
     type Word = u32;
+    type SignedWord = i32;
     type Byte = u8;
     type PtrVal = u32;
     type Offset = u32;

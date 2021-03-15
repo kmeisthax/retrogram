@@ -43,6 +43,12 @@ impl From<u16> for Literal {
     }
 }
 
+impl From<i8> for Literal {
+    fn from(v: i8) -> Self {
+        Self::SignedInteger(v.into())
+    }
+}
+
 impl From<i16> for Literal {
     fn from(v: i16) -> Self {
         Self::SignedInteger(v)

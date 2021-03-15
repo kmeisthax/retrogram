@@ -1,7 +1,7 @@
 //! Types used by aarch32
 
 use crate::arch::aarch32::{architectural_ctxt_parse, dataflow, disassemble, prereq, trace};
-use crate::arch::{ArchName, Architecture};
+use crate::arch::{ArchName, Architecture, CompatibleLiteral};
 use crate::memory::Pointer;
 use crate::{analysis, ast, memory, reg};
 use serde::{Deserialize, Serialize};
@@ -132,7 +132,10 @@ impl str::FromStr for Aarch32Register {
 }
 
 /// The type which represents a value contained in an ARM AArch32 register.
-pub type Value = i32;
+pub type Value = u32;
+
+/// The type which represents a signed value contained in an ARM AArch32 register.
+pub type SignedValue = i32;
 
 /// The type which represents an ARM AArch32 memory address.
 pub type PtrVal = u32;
@@ -150,9 +153,15 @@ pub type BusAddress = memory::Pointer<PtrVal>;
 pub type Bus = memory::Memory<AArch32>;
 
 /// A trait which defines what assembler literals we need support for.
-pub trait Literal: ast::Literal + From<Value> + From<Offset> + From<BusAddress> {}
+pub trait Literal:
+    ast::Literal + From<Value> + From<Offset> + From<BusAddress> + From<SignedValue>
+{
+}
 
-impl<L> Literal for L where L: ast::Literal + From<Value> + From<Offset> + From<BusAddress> {}
+impl<L> Literal for L where
+    L: ast::Literal + From<Value> + From<Offset> + From<BusAddress> + From<SignedValue>
+{
+}
 
 /// The AST type which represents disassembled code.
 ///
@@ -188,6 +197,7 @@ pub struct AArch32();
 impl Architecture for AArch32 {
     type Register = Aarch32Register;
     type Word = Value;
+    type SignedWord = SignedValue;
     type Byte = Data;
     type PtrVal = PtrVal;
     type Offset = Offset;
@@ -205,11 +215,7 @@ impl Architecture for AArch32 {
 
     fn disassemble<L>(&self, at: &Pointer<Self::PtrVal>, bus: &Bus) -> Result<Disasm<L>>
     where
-        L: Literal
-            + From<Self::Word>
-            + From<Self::Byte>
-            + From<Self::Offset>
-            + From<Pointer<Self::PtrVal>>,
+        L: CompatibleLiteral<Self>,
     {
         disassemble(at, bus)
     }

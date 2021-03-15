@@ -126,8 +126,8 @@ pub type PtrVal = u16;
 /// The type which represents a positive memory offset.
 pub type Offset = u16;
 
-/// The type which represents a signed value contained in an SM83 register or register pair.
-pub type SignedValue = i16;
+/// The type which represents a signed value contained in an SM83 register.
+pub type SignedValue = i8;
 
 /// The type which represents data stored in memory as seen by the processor.
 pub type Data = u8;
@@ -140,12 +140,12 @@ pub type BusAddress = memory::Pointer<PtrVal>;
 
 /// A trait which defines what assembler literals we need support for.
 pub trait Literal:
-    ast::Literal + From<Value> + From<Offset> + From<memory::Pointer<PtrVal>>
+    ast::Literal + From<Value> + From<Offset> + From<memory::Pointer<PtrVal>> + From<i8>
 {
 }
 
 impl<L> Literal for L where
-    L: ast::Literal + From<Value> + From<Offset> + From<memory::Pointer<PtrVal>>
+    L: ast::Literal + From<Value> + From<Offset> + From<memory::Pointer<PtrVal>> + From<i8>
 {
 }
 
@@ -182,6 +182,7 @@ pub struct SM83();
 impl Architecture for SM83 {
     type Register = Register;
     type Word = Value;
+    type SignedWord = SignedValue;
     type Byte = Data;
     type PtrVal = PtrVal;
     type Offset = Offset;

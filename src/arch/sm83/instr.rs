@@ -182,8 +182,8 @@ pub enum Instruction {
     /// First target8 is the target of the copy, second is the source.
     LdReg8(Target8, Target8),
 
-    /// LD HL, SP+(u8)
-    LdHLSP(u8),
+    /// LD HL, SP+(i8)
+    LdHLSP(i8),
 
     /// LD SP, HL
     LdSPHL,
@@ -265,8 +265,8 @@ pub enum Instruction {
     /// Add instructions of the form ADD HL, (regpair).
     Add16(RegisterPair),
 
-    /// ADD SP, (u8)
-    AddSpConst(u8),
+    /// ADD SP, (i8)
+    AddSpConst(i8),
 
     /// Add instructions of the form ADD A, (target8)
     Add8(Target8),
@@ -470,7 +470,7 @@ impl Instruction {
             )), //ldh [u8], a
             Some(0xE8) => Ok((
                 Self::AddSpConst(match mem.read_unit(&(p.clone() + 1)).into_concrete() {
-                    Some(r8) => r8,
+                    Some(r8) => r8 as i8,
                     None => return Err(Error::UnconstrainedMemory(p.clone() + 1)),
                 }),
                 2,
@@ -484,7 +484,7 @@ impl Instruction {
             )), //ldh a, [u8]
             Some(0xF8) => Ok((
                 Self::LdHLSP(match mem.read_unit(&(p.clone() + 1)).into_concrete() {
-                    Some(r8) => r8,
+                    Some(r8) => r8 as i8,
                     None => return Err(Error::UnconstrainedMemory(p.clone() + 1)),
                 }),
                 2,
