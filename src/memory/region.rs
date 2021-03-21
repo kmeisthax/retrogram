@@ -140,6 +140,24 @@ where
         Memory { views: Vec::new() }
     }
 
+    /// Construct a test memory bus.
+    ///
+    /// This function exists purely for testing: it will panic if you, say,
+    /// send data longer than your offset type is wide.
+    #[cfg(test)]
+    pub fn test_rom(at: AR::PtrVal, data: Vec<AR::Byte>) -> Self {
+        let mut self_mem = Self::new();
+
+        let offset = match AR::Offset::try_from(data.len()) {
+            Ok(offset) => offset,
+            Err(_) => panic!("Data is too long for offset"),
+        };
+
+        self_mem.install_rom_image(at, offset, Box::new(ROMBinaryImage::from_data(data)));
+
+        self_mem
+    }
+
     pub fn install_mem_image(
         &mut self,
         start: AR::PtrVal,

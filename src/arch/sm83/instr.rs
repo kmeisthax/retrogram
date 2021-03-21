@@ -6,7 +6,7 @@ use crate::ast::{Literal, Operand};
 use crate::reg::Symbolic;
 
 /// A target location for an 8-bit value.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Target8 {
     Register(Register),
     IndirectHL,
@@ -48,7 +48,7 @@ pub static TARGET8_ALU_REG: [Target8; 8] = [
 ];
 
 /// A target location for a 16-bit value.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RegisterPair {
     BC,
     DE,
@@ -141,7 +141,7 @@ pub static TARGET16_STACK_REG: [RegisterPair; 4] = [
 ];
 
 /// A condition code for a conditional instruction.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Condition {
     Z,
     C,
@@ -203,7 +203,7 @@ pub static ALU_CONDCODE: [Condition; 4] =
     [Condition::NZ, Condition::Z, Condition::NC, Condition::C];
 
 /// A decoded SM83 instruction.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Instruction {
     Nop,
 

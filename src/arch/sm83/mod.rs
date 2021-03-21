@@ -8,6 +8,9 @@ mod instr;
 mod trace;
 mod types;
 
+#[cfg(test)]
+mod tests;
+
 pub use context::architectural_ctxt_parse;
 pub use dataflow::dataflow;
 pub use dis::disassemble;

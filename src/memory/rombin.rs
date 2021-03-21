@@ -40,6 +40,12 @@ where
 
         Ok(Self { data: conv_data })
     }
+
+    /// Construct a ROM image from a data stream.
+    #[cfg(test)]
+    pub fn from_data(data: Vec<AR::Byte>) -> Self {
+        Self { data }
+    }
 }
 
 impl<AR> Image<AR> for ROMBinaryImage<AR>
