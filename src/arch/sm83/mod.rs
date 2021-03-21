@@ -12,6 +12,6 @@ pub use context::architectural_ctxt_parse;
 pub use dataflow::dataflow;
 pub use dis::disassemble;
 pub use fork::prereq;
-pub use instr::{Condition, Instruction, RegisterPair};
+pub use instr::{Condition, Instruction, RegisterPair, Target8};
 pub use trace::trace;
 pub use types::*;

@@ -3,6 +3,7 @@
 use crate::analysis::{Error, Requisite};
 use crate::arch::sm83::{Bus, BusAddress, Offset, PtrVal, Register, Result, SM83};
 use crate::ast::{Literal, Operand};
+use crate::reg::Symbolic;
 
 /// A target location for an 8-bit value.
 #[derive(Copy, Clone, Debug)]
@@ -166,6 +167,35 @@ impl Condition {
             Self::Z | Self::NZ => Requisite::register(Register::F, 0x80),
             Self::C | Self::NC => Requisite::register(Register::F, 0x10),
         }
+    }
+
+    pub fn test(self, flags: Symbolic<u8>) -> Result<bool> {
+        Ok(match self {
+            Self::Z => {
+                (flags & Symbolic::from(0x80))
+                    .into_concrete()
+                    .ok_or(Error::UnconstrainedRegister)?
+                    != 0
+            }
+            Self::C => {
+                (flags & Symbolic::from(0x10))
+                    .into_concrete()
+                    .ok_or(Error::UnconstrainedRegister)?
+                    != 0
+            }
+            Self::NZ => {
+                (flags & Symbolic::from(0x80))
+                    .into_concrete()
+                    .ok_or(Error::UnconstrainedRegister)?
+                    == 0
+            }
+            Self::NC => {
+                (flags & Symbolic::from(0x10))
+                    .into_concrete()
+                    .ok_or(Error::UnconstrainedRegister)?
+                    == 0
+            }
+        })
     }
 }
 

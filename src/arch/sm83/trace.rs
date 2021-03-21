@@ -1,1037 +1,328 @@
 //! Facilities for tracing SM83 code
 
+use crate::analysis::Error;
 use crate::arch::sm83;
-use crate::reg::{Convertable, TryConvertable};
-use crate::{analysis, reg};
-use std::cmp::PartialEq;
-//use crate::arch::sm83::dis::{ALU_BITOPS, ALU_CONDCODE, ALU_OPS, ALU_TARGET_MEM, ALU_TARGET_PAIRS, ALU_TARGET_REGS, STACK_TARGET_PAIRS};
-use crate::arch::sm83::{Bus, PtrVal, Register, State, Trace, Value};
+use crate::arch::sm83::{
+    Bus, Instruction, PtrVal, Register, RegisterPair, Result, State, Target8, Trace,
+};
+use crate::maths::Reinterpret;
+use crate::reg::{Convertable, Symbolic, TryConvertable};
 
-/// Given a targetreg operand, produce a symbolic value of what that target reg
-/// would be given the current state.
-fn read_value_from_targetreg(
-    mem: &Bus,
-    state: &State,
-    targetreg: u8,
-) -> sm83::Result<reg::Symbolic<Value>> {
-    match targetreg {
-        0 => Ok(state.get_register(&Register::B)),
-        1 => Ok(state.get_register(&Register::C)),
-        2 => Ok(state.get_register(&Register::D)),
-        3 => Ok(state.get_register(&Register::E)),
-        4 => Ok(state.get_register(&Register::H)),
-        5 => Ok(state.get_register(&Register::L)),
-        6 => {
-            let hl = reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::H)) << 8
-                | reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::L));
-            if let Some(hl) = hl.into_concrete() {
-                Ok(mem.read_unit_stateful(hl, &state))
-            } else {
-                Ok(reg::Symbolic::default())
-            }
+fn read_value8_from_target(target: Target8, mem: &Bus, state: &State) -> Result<Symbolic<u8>> {
+    match target {
+        Target8::Register(r) => Ok(state.get_register(&r)),
+        Target8::IndirectHL => {
+            let h: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::H));
+            let l: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::L));
+            let hl = h << 8 | l;
+            let hl = hl.into_concrete().ok_or(Error::UnconstrainedRegister)?;
+
+            Ok(mem.read_unit_stateful(hl, state))
         }
-        7 => Ok(state.get_register(&Register::A)),
-        _ => Err(analysis::Error::Misinterpretation(1, false)), //TODO: Get correct instruction offset
     }
 }
 
-/// Given a targetreg operand, manipulate the given state to incorporate the
-/// effect of writing a given value to that operand.
-fn write_value_to_targetreg(
+fn write_value8_to_target(
+    value: Symbolic<u8>,
+    target: Target8,
     mem: &Bus,
     state: &mut State,
     trace: &mut Trace,
-    targetreg: u8,
-    value: reg::Symbolic<Value>,
-) -> sm83::Result<()> {
-    match targetreg {
-        0 => trace.register_set(Register::B, value, state),
-        1 => trace.register_set(Register::C, value, state),
-        2 => trace.register_set(Register::D, value, state),
-        3 => trace.register_set(Register::E, value, state),
-        4 => trace.register_set(Register::H, value, state),
-        5 => trace.register_set(Register::L, value, state),
-        6 => {
-            let hl = reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::H)) << 8
-                | reg::Symbolic::<PtrVal>::convert_from(state.get_register(&Register::L));
-            if let Some(hl) = hl.into_concrete() {
-                mem.write_memory(hl, &[value], state, Some(trace));
-                return Ok(());
-            }
-
-            return Err(analysis::Error::UnconstrainedRegister);
+) -> Result<()> {
+    match target {
+        Target8::Register(r) => {
+            state.set_register(r, value);
         }
-        7 => trace.register_set(Register::A, value, state),
-        _ => return Err(analysis::Error::Misinterpretation(1, false)), //TODO: Get correct instruction offset
+        Target8::IndirectHL => {
+            let h: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::H));
+            let l: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::L));
+            let hl = h << 8 | l;
+            let hl = hl.into_concrete().ok_or(Error::UnconstrainedRegister)?;
+
+            mem.write_memory(hl, &[value], state, Some(trace));
+        }
     };
 
     Ok(())
 }
 
-fn read_value_from_targetpair(
-    state: &State,
-    targetpair: u8,
-    is_stackpair: bool,
-) -> sm83::Result<reg::Symbolic<PtrVal>> {
-    let hival: reg::Symbolic<u16> = reg::Symbolic::convert_from(match (targetpair, is_stackpair) {
-        (0, _) => state.get_register(&Register::B),
-        (1, _) => state.get_register(&Register::D),
-        (2, _) => state.get_register(&Register::H),
-        (3, false) => state.get_register(&Register::S),
-        (3, true) => state.get_register(&Register::A),
-        _ => return Err(analysis::Error::Misinterpretation(1, false)),
-    });
-    let loval: reg::Symbolic<u16> = reg::Symbolic::convert_from(match (targetpair, is_stackpair) {
-        (0, _) => state.get_register(&Register::C),
-        (1, _) => state.get_register(&Register::E),
-        (2, _) => state.get_register(&Register::L),
-        (3, false) => state.get_register(&Register::P),
-        (3, true) => state.get_register(&Register::F),
-        _ => return Err(analysis::Error::Misinterpretation(1, false)),
-    });
+/// Read a register pair value.
+///
+/// If the register pair is an autoincrement or autodecrement, then the pair
+/// will be incremented or decremented, but you will get the pre-increment
+/// or pre-decrement value.
+fn read_value16_from_regpair(pair: RegisterPair, state: &mut State) -> Symbolic<u16> {
+    let (hi, lo) = match pair {
+        RegisterPair::AF => {
+            let a: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::A));
+            let f: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::F));
+            (a, f)
+        }
+        RegisterPair::BC => {
+            let b: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::B));
+            let c: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::C));
+            (b, c)
+        }
+        RegisterPair::DE => {
+            let d: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::D));
+            let e: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::E));
+            (d, e)
+        }
+        RegisterPair::HL => {
+            let h: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::H));
+            let l: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::L));
+            (h, l)
+        }
+        RegisterPair::HLIncrement => {
+            let h: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::H));
+            let l: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::L));
 
-    Ok(hival << 8 | loval)
+            let hl = h << 8 | l;
+            let hli = hl + Symbolic::<u16>::from(1);
+
+            let hli_hi: Symbolic<u8> = Symbolic::try_convert_from(hli >> 8).unwrap();
+            let hli_lo: Symbolic<u8> =
+                Symbolic::try_convert_from(hli & Symbolic::<u16>::from(0xFF)).unwrap();
+
+            state.set_register(Register::H, hli_hi);
+            state.set_register(Register::L, hli_lo);
+
+            (h, l)
+        }
+        RegisterPair::HLDecrement => {
+            let h: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::H));
+            let l: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::L));
+
+            let hl = h << 8 | l;
+            let hld = hl - Symbolic::<u16>::from(1);
+
+            let hld_hi: Symbolic<u8> = Symbolic::try_convert_from(hld >> 8).unwrap();
+            let hld_lo: Symbolic<u8> =
+                Symbolic::try_convert_from(hld & Symbolic::<u16>::from(0xFF)).unwrap();
+
+            state.set_register(Register::H, hld_hi);
+            state.set_register(Register::L, hld_lo);
+
+            (h, l)
+        }
+        RegisterPair::SP => {
+            let s: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::S));
+            let p: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::P));
+            (s, p)
+        }
+    };
+
+    hi << 8 | lo
 }
 
-/// Given a targetpair operand, manipulate the given state to incorporate the
-/// effect of writing values to those operands.
-fn write_value_to_targetpair(
+/// Write a register pair value.
+///
+/// If the register pair is an autoincrement or autodecrement, this function
+/// does nothing (as that only makes sense as a memory offset)
+fn write_value16_to_regpair(pair: RegisterPair, value: Symbolic<u16>, state: &mut State) {
+    let hi = Symbolic::try_convert_from(value >> 8).unwrap();
+    let lo = Symbolic::try_convert_from(value & Symbolic::from(0xFF)).unwrap();
+
+    match pair {
+        RegisterPair::AF => {
+            state.set_register(Register::A, hi);
+            state.set_register(Register::F, lo);
+        }
+        RegisterPair::BC => {
+            state.set_register(Register::B, hi);
+            state.set_register(Register::C, lo);
+        }
+        RegisterPair::DE => {
+            state.set_register(Register::D, hi);
+            state.set_register(Register::E, lo);
+        }
+        RegisterPair::HL => {
+            state.set_register(Register::H, hi);
+            state.set_register(Register::L, lo);
+        }
+        RegisterPair::HLIncrement => {}
+        RegisterPair::HLDecrement => {}
+        RegisterPair::SP => {
+            state.set_register(Register::S, hi);
+            state.set_register(Register::P, lo);
+        }
+    }
+}
+
+/// Calculate flags with a given carry.
+fn flags_with_carry(flags: Symbolic<u8>, carry: Option<bool>) -> Symbolic<u8> {
+    match carry {
+        None => {
+            let undef_carry: Symbolic<u8> = Symbolic::<u8>::default() & Symbolic::from(0x10);
+            (flags & !Symbolic::<u8>::from(0x10)) | undef_carry
+        }
+        Some(true) => flags | Symbolic::from(0x10),
+        Some(false) => flags & !Symbolic::<u8>::from(0x10),
+    }
+}
+
+/// Calculate flags with a given zero state derived from an accumulator value.
+fn flags_with_zero(flags: Symbolic<u8>, a: Symbolic<u8>) -> Symbolic<u8> {
+    match a.into_concrete() {
+        Some(0) => flags | Symbolic::from(0x80),
+        None if a.is_valid(0) => {
+            let undef_zero: Symbolic<u8> = Symbolic::<u8>::default() & Symbolic::from(0x80);
+            flags | undef_zero
+        }
+        _ => flags & !Symbolic::<u8>::from(0x80),
+    }
+}
+
+/// Add a u8 to a u8 and calculate updated flags.
+///
+/// If `with_carry` is enabled, the carry flag in `flags` will be fed into the
+/// add operation.
+///
+/// The first return parameter is the addition result (usually to be stored in
+/// A) and the second return parameter is the new set of flags.
+///
+/// The flags set correspond to an `add A, r` instruction; with Z, H, and C set
+/// appropriately and N cleared.
+fn add_u8_u8(
+    lhs: Symbolic<u8>,
+    rhs: Symbolic<u8>,
+    flags: Symbolic<u8>,
+    with_carry: bool,
+) -> (Symbolic<u8>, Symbolic<u8>) {
+    let old_carry = if with_carry {
+        (flags & Symbolic::from(0x10))
+            .into_concrete()
+            .map(|v| v != 0)
+    } else {
+        Some(false)
+    };
+    let (new_a, new_carry) = lhs.add_with_carry(rhs, old_carry);
+
+    let flags_with_carry = flags_with_carry(flags, new_carry);
+    let flags_with_zero = flags_with_zero(flags_with_carry, new_a);
+    let flags_with_neg = flags_with_zero & !Symbolic::<u8>::from(0x40);
+
+    (new_a, flags_with_neg)
+}
+
+/// Subtract a u8 from a u8 and calculate updated flags.
+///
+/// If `with_carry` is enabled, the carry flag in `flags` will be fed into the
+/// subtract operation.
+///
+/// The first parameter is the addition result (usually to be stored in A) and
+/// the second parameter is the new set of flags.
+///
+/// The flags set correspond to an `add A, r` instruction; with Z, H, and C set
+/// appropriately and N set.
+fn sub_u8_u8(
+    lhs: Symbolic<u8>,
+    rhs: Symbolic<u8>,
+    flags: Symbolic<u8>,
+    with_carry: bool,
+) -> (Symbolic<u8>, Symbolic<u8>) {
+    let old_carry = if with_carry {
+        (flags & Symbolic::from(0x10))
+            .into_concrete()
+            .map(|v| v != 0)
+    } else {
+        Some(false)
+    };
+    let (new_a, new_carry) = lhs.sub_with_borrow(rhs, old_carry);
+
+    let flags_with_carry = flags_with_carry(flags, new_carry);
+    let flags_with_zero = flags_with_zero(flags_with_carry, new_a);
+    let flags_with_neg = flags_with_zero | Symbolic::<u8>::from(0x40);
+
+    (new_a, flags_with_neg)
+}
+
+/// Add an i8 to a u16 and calculate updated flags.
+///
+/// The returned value consists of the new 16 bit result (usually HL) and the
+/// updated flags register.
+///
+/// The returned flags set Z and N to zero, which is suitable for an `SP+i8`
+/// instruction.
+fn add_u16_i8(
+    lhs: Symbolic<u16>,
+    rhs: Symbolic<i8>,
+    flags: Symbolic<u8>,
+) -> (Symbolic<u16>, Symbolic<u8>) {
+    let rhs_i16: Symbolic<i16> = Symbolic::convert_from(rhs);
+    let rhs_u16: Symbolic<u16> = rhs_i16.reinterpret();
+
+    let (new_hls, carry) = lhs.add_with_carry(rhs_u16, Some(false));
+
+    let flags_with_carry = flags_with_carry(flags, carry);
+    let flags_without_zn = flags_with_carry & Symbolic::from(0x30);
+
+    (new_hls, flags_without_zn)
+}
+
+/// Add two u16s together and calculate updated carry flags.
+///
+/// The returned value consists of the new 16 bit result (usually HL) and the
+/// updated flags register.
+///
+/// The returned flags are suitable for `add HL, rr` instructions; other 16-bit
+/// adds do not update flags and thus you should discard the flags calculated
+/// here. The Z flag is unchanged, the N flag is zeroed, and the H and C flags
+/// are set appropriately.
+fn add_u16_u16(
+    lhs: Symbolic<u16>,
+    rhs: Symbolic<u16>,
+    flags: Symbolic<u8>,
+) -> (Symbolic<u16>, Symbolic<u8>) {
+    let (new_hls, carry) = lhs.add_with_carry(rhs, Some(false));
+    let flags_with_carry = flags_with_carry(flags, carry);
+    let flags_without_n = flags_with_carry & Symbolic::from(0xB0);
+
+    (new_hls, flags_without_n)
+}
+
+fn push_to_stack(
+    val: Symbolic<u16>,
+    mem: &Bus,
     state: &mut State,
     trace: &mut Trace,
-    targetpair: u8,
-    is_stackpair: bool,
-    value: reg::Symbolic<PtrVal>,
-) -> sm83::Result<()> {
-    //TODO: Some kind of "regsegment" method?
-    let loval: reg::Symbolic<u8> =
-        reg::Symbolic::try_convert_from(value & reg::Symbolic::from(0x00FF))
-            .map_err(|_| analysis::Error::BlockSizeOverflow)?;
-    let hival: reg::Symbolic<u8> = reg::Symbolic::try_convert_from(value >> 8)
-        .map_err(|_| analysis::Error::BlockSizeOverflow)?;
+) -> Result<()> {
+    let sp = read_value16_from_regpair(RegisterPair::SP, state)
+        .into_concrete()
+        .ok_or(Error::UnconstrainedRegister)?;
+    let val_hi = Symbolic::try_convert_from(val >> 8).unwrap();
+    let val_lo = Symbolic::try_convert_from(val & Symbolic::from(0xFF)).unwrap();
 
-    match (targetpair, is_stackpair) {
-        (0, _) => {
-            trace.register_set(Register::B, hival, state);
-            trace.register_set(Register::C, loval, state);
-        } //BC
-        (1, _) => {
-            trace.register_set(Register::D, hival, state);
-            trace.register_set(Register::E, loval, state);
-        } //DE
-        (2, _) => {
-            trace.register_set(Register::H, hival, state);
-            trace.register_set(Register::L, loval, state);
-        } //HL
-        (3, false) => {
-            trace.register_set(Register::S, hival, state);
-            trace.register_set(Register::P, loval, state);
-        } //SP
-        (3, true) => {
-            trace.register_set(Register::A, hival, state);
-            trace.register_set(Register::F, loval, state);
-        } //AF
-        _ => return Err(analysis::Error::Misinterpretation(1, false)), //TODO: Get correct instruction offset
-    }
+    mem.write_memory(sp, &[val_lo, val_hi], state, Some(trace));
+
+    write_value16_to_regpair(RegisterPair::SP, Symbolic::from(sp - 2), state);
 
     Ok(())
 }
 
-/// Trace a pop from the stack, yielding the new value.
-///
-/// This routine also writes back the new SP to the state. If your instruction
-/// is conditional, make sure to test the condition before retrieving [SP].
-///
-/// Will fail if SP isn't set. No support currently exists for tracing relative
-/// registers yet.
-fn pop_value_from_sp(
-    mem: &Bus,
-    state: &mut State,
-    trace: &mut Trace,
-) -> sm83::Result<reg::Symbolic<u16>> {
-    match read_value_from_targetpair(&state, 3, false)?.into_concrete() {
-        Some(sp) => {
-            let next_sp = sp + 2;
-            write_value_to_targetpair(state, trace, 3, false, reg::Symbolic::from(next_sp))?;
-
-            let val = mem.read_leword_stateful(sp, state);
-
-            Ok(val)
-        }
-        _ => Err(analysis::Error::UnconstrainedRegister),
-    }
-}
-
-/// Trace a push to the stack.
-///
-/// This routine writes both the value to the current stack and the new stack
-/// pointer. If your instruction is conditional, make sure to test the condition
-/// before writing [SP].
-///
-/// Will fail if SP isn't set. No support currently exists for tracing relative
-/// registers yet.
-fn push_value_to_sp(
-    mem: &Bus,
-    state: &mut State,
-    trace: &mut Trace,
-    value: reg::Symbolic<PtrVal>,
-) -> sm83::Result<()> {
-    match read_value_from_targetpair(&state, 3, false)?.into_concrete() {
-        Some(sp) => {
-            let lo_value = reg::Symbolic::try_convert_from(value & reg::Symbolic::from(0xFF))
-                .map_err(|_| analysis::Error::BlockSizeOverflow)?;
-            let hi_value = reg::Symbolic::try_convert_from(value >> 8)
-                .map_err(|_| analysis::Error::BlockSizeOverflow)?;
-
-            mem.write_memory(sp, &[lo_value, hi_value], state, Some(trace));
-
-            let next_sp = sp - 2;
-            write_value_to_targetpair(state, trace, 3, false, reg::Symbolic::from(next_sp))?;
-
-            Ok(())
-        }
-        _ => Err(analysis::Error::UnconstrainedRegister),
-    }
-}
-
-/// Given a symbolic value, compute the zero flag that it would generate in the
-/// F register if it were the result of a computation.
-///
-/// The resulting value is suitable for use as a new flags register with the
-/// format of Z000. You may OR in additional bits as necessary.
-fn zero_flag<T>(val: reg::Symbolic<T>) -> reg::Symbolic<T>
-where
-    T: Clone + From<u8> + reg::Bitwise + PartialEq,
-{
-    match (val.clone().into_concrete(), val.is_valid(T::from(0))) {
-        (Some(ref e), _) if *e == T::from(0) => reg::Symbolic::from(T::from(0x80)),
-        (Some(_), _) => reg::Symbolic::from(T::from(0)),
-        (None, true) => reg::Symbolic::from_cares(T::from(0), T::from(0x7F)),
-        (None, false) => reg::Symbolic::from(T::from(0)),
-    }
-}
-
-/// Given a symbolic value, compute the carry flag that it would generate in the
-/// F register if it were the result of a computation.
-///
-/// This operates under the assumption that the value was constructed by summing
-/// two zero-extended u8 values to produce a u9 result (represented as u16). For
-/// 16-bit math, you would need to sum u16 values into a u17 (represented as
-/// u32) and then use the appropriate function to extract a carry flag for it.
-///
-/// The resulting value is suitable for use as a new flags register with the
-/// format of Z000. You may OR in additional bits as necessary.
-fn carry_flag_u9(val: reg::Symbolic<u16>) -> reg::Symbolic<u8> {
-    let carry_bit = val & reg::Symbolic::from(0x100);
-    match (carry_bit.into_concrete(), carry_bit.is_valid(0x100)) {
-        (Some(0), _) => reg::Symbolic::from(0_u8),
-        (Some(_), _) => reg::Symbolic::from(0x10_u8),
-        (None, true) => reg::Symbolic::from_cares(0_u8, 0xEF_u8),
-        (None, false) => reg::Symbolic::from(0),
-    }
-}
-
-/// Given a condition code and flags, return true if the test would pass.
-///
-/// You may pass None as the condition code, which indicates an unconditional
-/// branch (and thus, always returns true).
-fn flag_test(condcode: Option<u8>, value: reg::Symbolic<Value>) -> sm83::Result<bool> {
-    match condcode {
-        Some(0) => Ok((value & reg::Symbolic::from(0x80))
-            .into_concrete()
-            .ok_or(analysis::Error::UnconstrainedRegister)?
-            != 0), //NZ
-        Some(1) => Ok((value & reg::Symbolic::from(0x80))
-            .into_concrete()
-            .ok_or(analysis::Error::UnconstrainedRegister)?
-            == 0), //Z
-        Some(2) => Ok((value & reg::Symbolic::from(0x10))
-            .into_concrete()
-            .ok_or(analysis::Error::UnconstrainedRegister)?
-            != 0), //NC
-        Some(3) => Ok((value & reg::Symbolic::from(0x10))
-            .into_concrete()
-            .ok_or(analysis::Error::UnconstrainedRegister)?
-            == 0), //C
-        None => Ok(true),
-        _ => Err(analysis::Error::Misinterpretation(2, false)),
-    }
-}
-
-/// Given an ALU opcode, accumulator, operand, and flags, compute the new
-/// accumulator and flag values.
-fn aluop(
-    aluop: u8,
-    a: reg::Symbolic<u8>,
-    operand: reg::Symbolic<u8>,
-    flags: reg::Symbolic<u8>,
-) -> sm83::Result<(reg::Symbolic<u8>, reg::Symbolic<u8>)> {
-    let old_carry: reg::Symbolic<u8> = flags & (reg::Symbolic::from(0x10_u8) >> 4);
-    let old_halfcarry: reg::Symbolic<u8> = flags & (reg::Symbolic::from(0x20_u8) >> 5);
-    let _old_nflag: reg::Symbolic<u8> = flags & (reg::Symbolic::from(0x40_u8) >> 6);
-    let wide_carry: reg::Symbolic<u16> = reg::Symbolic::convert_from(old_carry);
-    let wide_a: reg::Symbolic<u16> = reg::Symbolic::convert_from(a);
-    let wide_op: reg::Symbolic<u16> = reg::Symbolic::convert_from(operand);
-
-    let (new_halfcarry, new_nflag, wide_result) = match aluop {
-        0 => (reg::Symbolic::from(0_u8), old_halfcarry, wide_a + wide_op), //add
-        1 => (
-            reg::Symbolic::from(0_u8),
-            old_halfcarry,
-            wide_a + wide_op + wide_carry,
-        ), //adc
-        2 => (
-            reg::Symbolic::from(1_u8),
-            old_halfcarry,
-            wide_a + !(wide_op + reg::Symbolic::from(1)),
-        ), //sub
-        3 => (
-            reg::Symbolic::from(1_u8),
-            old_halfcarry,
-            wide_a + !((wide_op + wide_carry) + reg::Symbolic::from(1)),
-        ), //sbc
-        4 => (
-            reg::Symbolic::from(0_u8),
-            reg::Symbolic::from(1_u8),
-            wide_a & wide_op,
-        ), //and
-        5 => (
-            reg::Symbolic::from(0_u8),
-            reg::Symbolic::from(0_u8),
-            wide_a ^ wide_op,
-        ), //xor
-        6 => (
-            reg::Symbolic::from(0_u8),
-            reg::Symbolic::from(0_u8),
-            wide_a | wide_op,
-        ), //or
-        7 => (
-            reg::Symbolic::from(1_u8),
-            old_halfcarry,
-            wide_a + !(wide_op + reg::Symbolic::from(1)),
-        ), //cp
-        _ => return Err(analysis::Error::Misinterpretation(1, false)),
-    };
-
-    let new_a: reg::Symbolic<u8> =
-        reg::Symbolic::try_convert_from(wide_result & reg::Symbolic::from(0xFF))
-            .map_err(|_| analysis::Error::BlockSizeOverflow)?;
-    let new_flags =
-        zero_flag(new_a) | carry_flag_u9(wide_result) | new_nflag << 6 | new_halfcarry << 5;
-
-    if aluop != 7 {
-        Ok((new_a, new_flags))
-    } else {
-        Ok((a, new_flags))
-    }
-}
-
-/// Trace a CB-prefix bit rotate operation (RLC, RRC, RL, RR, SLA, SRA, SWAP,
-/// or SRL).
-fn trace_bitop(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    bitop: u8,
-    targetreg: u8,
-) -> sm83::Result<State> {
-    let flags = state.get_register(&Register::F);
-    let carry = flags & reg::Symbolic::from(0x10);
-    let val = read_value_from_targetreg(mem, &state, targetreg)?;
-
-    let (newval, newcarry) = match bitop {
-        0 => (val << 1 | val >> 7, carry),      //RLC
-        1 => (val << 1 | val >> 7, carry),      //RRC
-        2 => (val << 1 | carry >> 4, val >> 7), //RL
-        3 => (val >> 1 | carry << 3, val & reg::Symbolic::from(0x01)), //RR
-        4 => (val << 1, val >> 7),              //SLA
-        //This is a manual sign extension since we defined Value as unsigned
-        5 => (
-            val >> 1 | val & reg::Symbolic::from(0x80),
-            val & reg::Symbolic::from(0x01),
-        ), //SRA
-        6 => (val >> 4 | val << 4, reg::Symbolic::from(0)), //SWAP
-        7 => (val >> 1, val & reg::Symbolic::from(0x01)),   //SRL
-        _ => return Err(analysis::Error::Misinterpretation(2, false)),
-    };
-
-    trace.register_set(Register::F, newcarry << 4 | zero_flag(val), &mut state); //N and H flags are always zero
-    write_value_to_targetreg(mem, &mut state, trace, targetreg, newval)?;
-
-    Ok(state)
-}
-
-/// Trace a CB-prefix bit test instruction (e.g. BIT n, reg).
-fn trace_bittest(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    targetbit: u8,
-    targetreg: u8,
-) -> sm83::Result<State> {
-    let flags = state.get_register(&Register::F);
-    let val =
-        read_value_from_targetreg(mem, &state, targetreg)? >> targetbit & reg::Symbolic::from(0x01);
-
-    trace.register_set(
-        Register::F,
-        flags & reg::Symbolic::from(0x10) | reg::Symbolic::from(0x20) | zero_flag(val),
-        &mut state,
-    );
-
-    Ok(state)
-}
-
-/// Trace a CB-prefix bit reset instruction (e.g. RES n, reg).
-fn trace_bitreset(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    targetbit: u8,
-    targetreg: u8,
-) -> sm83::Result<State> {
-    let mask = reg::Symbolic::from(!(1 << targetbit));
-    let val = read_value_from_targetreg(mem, &state, targetreg)?;
-
-    write_value_to_targetreg(mem, &mut state, trace, targetreg, val & mask)?;
-
-    Ok(state)
-}
-
-/// Trace a CB-prefix bit set instruction (e.g. SET n, reg).
-fn trace_bitset(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    targetbit: u8,
-    targetreg: u8,
-) -> sm83::Result<State> {
-    let bit = reg::Symbolic::from(1 << targetbit);
-    let val = read_value_from_targetreg(mem, &state, targetreg)?;
-
-    write_value_to_targetreg(mem, &mut state, trace, targetreg, val | bit)?;
-
-    Ok(state)
-}
-
-/// Trace writing the stack pointer to a memory location
-fn trace_sp_storage(
-    p: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-) -> sm83::Result<State> {
-    let op_ptr = p + 1;
-    let memloc = mem
-        .read_leword_stateful::<PtrVal>(op_ptr, &state)
+fn pop_from_stack(mem: &Bus, state: &mut State) -> Result<Symbolic<u16>> {
+    let sp = read_value16_from_regpair(RegisterPair::SP, state)
         .into_concrete()
-        .ok_or_else(|| analysis::Error::UnconstrainedMemory(state.contextualize_pointer(op_ptr)))?;
+        .ok_or(Error::UnconstrainedRegister)?;
+    let val = mem.read_leword_stateful(sp, state);
 
-    mem.write_memory(
-        memloc,
-        &[
-            state.get_register(&Register::P),
-            state.get_register(&Register::S),
-        ],
-        &mut state,
-        Some(trace),
-    );
+    write_value16_to_regpair(RegisterPair::SP, Symbolic::from(sp + 2), state);
 
-    Ok(state)
+    Ok(val)
 }
 
-/// Trace full jumps
-fn trace_jump(
-    condcode: Option<u8>,
-    p: PtrVal,
-    mem: &Bus,
-    state: State,
-) -> sm83::Result<(State, PtrVal)> {
-    if flag_test(condcode, state.get_register(&Register::F))? {
-        let target = mem
-            .read_leword_stateful::<u16>(p + 1, &state)
-            .into_concrete()
-            .ok_or_else(|| {
-                analysis::Error::UnconstrainedMemory(state.contextualize_pointer(p + 1))
-            })?;
-
-        Ok((state, target))
-    } else {
-        Ok((state, p + 3))
-    }
-}
-
-/// Trace full calls
-fn trace_call(
-    condcode: Option<u8>,
-    ptr: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-) -> sm83::Result<(State, PtrVal)> {
-    if flag_test(condcode, state.get_register(&Register::F))? {
-        let target = mem
-            .read_leword_stateful::<u16>(ptr + 1, &state)
-            .into_concrete()
-            .ok_or_else(|| {
-                analysis::Error::UnconstrainedMemory(state.contextualize_pointer(ptr + 1))
-            })?;
-        let ret_pc = ptr + 3;
-
-        push_value_to_sp(mem, &mut state, trace, reg::Symbolic::from(ret_pc))?;
-
-        Ok((state, target))
-    } else {
-        Ok((state, ptr + 3))
-    }
-}
-
-/// Trace return
-fn trace_return(
-    condcode: Option<u8>,
-    ptr: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-) -> sm83::Result<(State, PtrVal)> {
-    if flag_test(condcode, state.get_register(&Register::F))? {
-        let old_spval = read_value_from_targetpair(&state, 3, false)?
-            .into_concrete()
-            .ok_or(analysis::Error::UnconstrainedRegister)?;
-        let new_pcval = pop_value_from_sp(mem, &mut state, trace)?
-            .into_concrete()
-            .ok_or_else(|| {
-                analysis::Error::UnconstrainedMemory(state.contextualize_pointer(old_spval))
-            })?;
-
-        Ok((state, new_pcval))
-    } else {
-        Ok((state, ptr + 1))
-    }
-}
-
-/// Trace relative jumps
-fn trace_jump_relative(
-    condcode: Option<u8>,
-    p: PtrVal,
-    mem: &Bus,
-    state: State,
-) -> sm83::Result<(State, PtrVal)> {
-    let offset = mem
-        .read_unit_stateful(p.overflowing_add(1).0, &state)
+fn pop_pc_from_stack(mem: &Bus, state: &mut State) -> Result<u16> {
+    let sp = read_value16_from_regpair(RegisterPair::SP, state)
         .into_concrete()
-        .ok_or_else(|| {
-            analysis::Error::UnconstrainedMemory(
-                state.contextualize_pointer(p.overflowing_add(1).0),
-            )
-        })? as i8 as i16 as u16;
-    let target = p.overflowing_add(2).0.overflowing_add(offset).0;
-
-    if flag_test(condcode, state.get_register(&Register::F))? {
-        Ok((state, target))
-    } else {
-        Ok((state, p + 2))
-    }
-}
-
-/// Trace dynamic jumps
-fn trace_jump_dynamic(state: State) -> sm83::Result<(State, PtrVal)> {
-    match read_value_from_targetpair(&state, 2, false)?.into_concrete() {
-        Some(hl) => Ok((state, hl)),
-        _ => Err(analysis::Error::UnconstrainedRegister),
-    }
-}
-
-/// Trace SP initialization
-fn trace_sp_set(mut state: State, trace: &mut Trace) -> State {
-    trace.register_set(Register::S, state.get_register(&Register::H), &mut state);
-    trace.register_set(Register::P, state.get_register(&Register::L), &mut state);
-
-    state
-}
-
-/// Trace high memory store
-fn trace_himem_store(
-    p: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-) -> sm83::Result<State> {
-    match mem.read_unit_stateful(p + 1, &state).into_concrete() {
-        Some(hi) => {
-            mem.write_memory(
-                0xFF00 | hi as u16,
-                &[state.get_register(&Register::A)],
-                &mut state,
-                Some(trace),
-            );
-
-            Ok(state)
-        }
-        _ => Err(analysis::Error::UnconstrainedMemory(
-            state.contextualize_pointer(p + 1),
-        )),
-    }
-}
-
-/// Trace SP adjustment
-fn trace_sp_adjust(p: PtrVal, mem: &Bus, mut state: State, trace: &mut Trace) -> State {
-    let adjust: reg::Symbolic<u16> =
-        reg::Symbolic::convert_from(mem.read_unit_stateful(p + 1, &state));
-    let hi_sp: reg::Symbolic<u16> = reg::Symbolic::convert_from(state.get_register(&Register::S));
-    let lo_sp: reg::Symbolic<u16> = reg::Symbolic::convert_from(state.get_register(&Register::P));
-    let new_sp = (hi_sp << 8 | lo_sp) + adjust;
-
-    let hi_new_sp: reg::Symbolic<u8> =
-        reg::Symbolic::try_convert_from(new_sp >> 8_u8).expect("Edit:");
-    let lo_new_sp: reg::Symbolic<u8> =
-        reg::Symbolic::try_convert_from(new_sp & reg::Symbolic::from(0xFF_u16))
-            .expect("Downvotes, really?");
-
-    trace.register_set(Register::S, hi_new_sp, &mut state);
-    trace.register_set(Register::P, lo_new_sp, &mut state);
-
-    state
-}
-
-/// Trace high memory load
-fn trace_himem_load(
-    p: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-) -> sm83::Result<State> {
-    match mem.read_unit_stateful(p + 1, &state).into_concrete() {
-        Some(hi) => {
-            let mv = mem.read_unit_stateful(0xFF00 | hi as u16, &state);
-            trace.register_set(Register::A, mv, &mut state);
-
-            Ok(state)
-        }
-        _ => Err(analysis::Error::UnconstrainedMemory(
-            state.contextualize_pointer(p + 1),
-        )),
-    }
-}
-
-/// Trace SP offset calculation
-fn trace_sp_offset_calc(
-    p: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-) -> sm83::Result<State> {
-    let r8: reg::Symbolic<u16> = reg::Symbolic::convert_from(mem.read_unit_stateful(p + 1, &state));
-    let sign = match (r8 & reg::Symbolic::from(0x0080_u16)).into_concrete() {
-        Some(0x80) => reg::Symbolic::from(0xFF80_u16),
-        Some(0x00) => reg::Symbolic::from(0x0000_u16),
-        _ => reg::Symbolic::from_cares(0_u16, 0x007F_u16),
-    };
-    let offset = sign | r8;
-    let s: reg::Symbolic<u16> = reg::Symbolic::convert_from(state.get_register(&Register::S));
-    let p: reg::Symbolic<u16> = reg::Symbolic::convert_from(state.get_register(&Register::P));
-    let sp = (s << 8) | p;
-    let hl = sp + offset;
-    let h: reg::Symbolic<u8> =
-        reg::Symbolic::try_convert_from(hl >> 8).map_err(|_| analysis::Error::BlockSizeOverflow)?;
-    let l: reg::Symbolic<u8> = reg::Symbolic::try_convert_from(hl & reg::Symbolic::from(0xFF_u16))
-        .map_err(|_| analysis::Error::BlockSizeOverflow)?;
-
-    trace.register_set(Register::H, h, &mut state);
-    trace.register_set(Register::L, l, &mut state);
-
-    Ok(state)
-}
-
-/// Trace himem indirect store
-fn trace_himem_indir_store(mem: &Bus, mut state: State, trace: &mut Trace) -> sm83::Result<State> {
-    match state.get_register(&Register::C).into_concrete() {
-        Some(c) => {
-            mem.write_memory(
-                0xFF00 | c as u16,
-                &[state.get_register(&Register::A)],
-                &mut state,
-                Some(trace),
-            );
-            Ok(state)
-        }
-        None => Err(analysis::Error::UnconstrainedRegister),
-    }
-}
-
-/// Trace writing the accumulator to a memory location
-fn trace_mem_store(
-    p: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-) -> sm83::Result<State> {
-    let op_ptr = p.saturating_add(1);
-    let memloc = mem
-        .read_leword_stateful::<PtrVal>(op_ptr, &state)
+        .ok_or(Error::UnconstrainedRegister)?;
+    let val = mem
+        .read_leword_stateful(sp, state)
         .into_concrete()
-        .ok_or_else(|| analysis::Error::UnconstrainedMemory(state.contextualize_pointer(op_ptr)))?;
+        .ok_or_else(|| Error::UnconstrainedMemory(state.contextualize_pointer(sp)))?;
 
-    mem.write_memory(
-        memloc,
-        &[state.get_register(&Register::A)],
-        &mut state,
-        Some(trace),
-    );
+    write_value16_to_regpair(RegisterPair::SP, Symbolic::from(sp + 2), state);
 
-    Ok(state)
-}
-
-/// Trace himem indirect load
-fn trace_himem_indir_load(mem: &Bus, mut state: State, trace: &mut Trace) -> sm83::Result<State> {
-    match state.get_register(&Register::C).into_concrete() {
-        Some(c) => {
-            let op_ptr = 0xFF00 | c as u16;
-            trace.register_set(
-                Register::A,
-                mem.read_unit_stateful(op_ptr, &state),
-                &mut state,
-            );
-            Ok(state)
-        }
-        None => Err(analysis::Error::UnconstrainedRegister),
-    }
-}
-
-/// Trace loading the accumulator from a memory location
-fn trace_mem_load(
-    p: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-) -> sm83::Result<State> {
-    let op_ptr = p + 1;
-    let memloc = mem
-        .read_leword_stateful::<PtrVal>(op_ptr, &state)
-        .into_concrete()
-        .ok_or_else(|| analysis::Error::UnconstrainedMemory(state.contextualize_pointer(op_ptr)))?;
-
-    trace.register_set(
-        Register::A,
-        mem.read_unit_stateful(memloc, &state),
-        &mut state,
-    );
-
-    Ok(state)
-}
-
-fn trace_regpair_set(
-    p: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    targetpair: u8,
-) -> sm83::Result<State> {
-    let value: reg::Symbolic<PtrVal> = mem.read_leword_stateful(p + 1, &state);
-
-    write_value_to_targetpair(&mut state, trace, targetpair, false, value)?;
-
-    Ok(state)
-}
-
-fn trace_wide_add(mut state: State, trace: &mut Trace, targetpair: u8) -> sm83::Result<State> {
-    let hl = read_value_from_targetpair(&state, 2, false)?;
-    let other_val = read_value_from_targetpair(&state, targetpair, false)?;
-
-    let new_hl = hl + other_val;
-
-    write_value_to_targetpair(&mut state, trace, 2, false, new_hl)?;
-
-    Ok(state)
-}
-
-fn trace_targetmem_store(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    targetmem: u8,
-) -> sm83::Result<State> {
-    let ptr = match targetmem {
-        2 => {
-            let ptr = read_value_from_targetpair(&state, 2, false)?;
-            let writeback = ptr + reg::Symbolic::from(1);
-
-            write_value_to_targetpair(&mut state, trace, 2, false, writeback)?;
-            ptr
-        }
-        3 => {
-            let ptr = read_value_from_targetpair(&state, 2, false)?;
-            let writeback = ptr - reg::Symbolic::from(1);
-
-            write_value_to_targetpair(&mut state, trace, 2, false, writeback)?;
-            ptr
-        }
-        _ => read_value_from_targetpair(&state, targetmem, false)?,
-    };
-
-    let a = state.get_register(&Register::A);
-    let hl = match ptr.into_concrete() {
-        Some(ptr) => ptr,
-        None => return Err(analysis::Error::UnconstrainedRegister),
-    };
-
-    mem.write_memory(hl, &[a], &mut state, Some(trace));
-
-    match targetmem {
-        2 => {
-            let writeback = ptr + reg::Symbolic::from(1);
-            write_value_to_targetpair(&mut state, trace, 2, false, writeback)?;
-        }
-        3 => {
-            let writeback = ptr - reg::Symbolic::from(1);
-            write_value_to_targetpair(&mut state, trace, 2, false, writeback)?;
-        }
-        _ => {}
-    };
-
-    Ok(state)
-}
-
-fn trace_targetmem_load(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    targetmem: u8,
-) -> sm83::Result<State> {
-    let ptr = match targetmem {
-        2 => {
-            let ptr = read_value_from_targetpair(&state, 2, false)?;
-            let writeback = ptr + reg::Symbolic::from(1);
-
-            write_value_to_targetpair(&mut state, trace, 2, false, writeback)?;
-            ptr
-        }
-        3 => {
-            let ptr = read_value_from_targetpair(&state, 2, false)?;
-            let writeback = ptr - reg::Symbolic::from(1);
-
-            write_value_to_targetpair(&mut state, trace, 2, false, writeback)?;
-            ptr
-        }
-        _ => read_value_from_targetpair(&state, targetmem, false)?,
-    };
-
-    let hl = match ptr.into_concrete() {
-        Some(ptr) => ptr,
-        None => return Err(analysis::Error::UnconstrainedRegister),
-    };
-    let a = mem.read_unit_stateful(hl, &state);
-
-    trace.register_set(Register::A, a, &mut state);
-
-    match targetmem {
-        2 => {
-            let writeback = ptr + reg::Symbolic::from(1);
-            write_value_to_targetpair(&mut state, trace, 2, false, writeback)?;
-        }
-        3 => {
-            let writeback = ptr - reg::Symbolic::from(1);
-            write_value_to_targetpair(&mut state, trace, 2, false, writeback)?;
-        }
-        _ => {}
-    };
-
-    Ok(state)
-}
-
-fn trace_targetpair_inc(
-    mut state: State,
-    trace: &mut Trace,
-    targetpair: u8,
-) -> sm83::Result<State> {
-    let pairval = read_value_from_targetpair(&state, targetpair, false)?;
-    let newval = pairval + reg::Symbolic::from(1);
-    write_value_to_targetpair(&mut state, trace, targetpair, false, newval)?;
-
-    Ok(state)
-}
-
-fn trace_targetpair_dec(
-    mut state: State,
-    trace: &mut Trace,
-    targetpair: u8,
-) -> sm83::Result<State> {
-    let pairval = read_value_from_targetpair(&state, targetpair, false)?;
-    let newval = pairval - reg::Symbolic::from(1);
-    write_value_to_targetpair(&mut state, trace, targetpair, false, newval)?;
-
-    Ok(state)
-}
-
-fn trace_targetreg_inc(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    targetreg: u8,
-) -> sm83::Result<State> {
-    let pairval = read_value_from_targetreg(mem, &state, targetreg)?;
-    let newval = pairval + reg::Symbolic::from(1);
-    write_value_to_targetreg(mem, &mut state, trace, targetreg, newval)?;
-
-    Ok(state)
-}
-
-fn trace_targetreg_dec(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    targetreg: u8,
-) -> sm83::Result<State> {
-    let pairval = read_value_from_targetreg(mem, &state, targetreg)?;
-    let newval = pairval - reg::Symbolic::from(1);
-    write_value_to_targetreg(mem, &mut state, trace, targetreg, newval)?;
-
-    Ok(state)
-}
-
-fn trace_targetreg_set(
-    p: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    targetreg: u8,
-) -> sm83::Result<State> {
-    let op_ptr = p + 1;
-    let operand = mem.read_unit_stateful(op_ptr, &state);
-    write_value_to_targetreg(mem, &mut state, trace, targetreg, operand)?;
-
-    Ok(state)
-}
-
-fn trace_targetreg_copy(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    targetreg_src: u8,
-    targetreg_dst: u8,
-) -> sm83::Result<State> {
-    let value = read_value_from_targetreg(mem, &state, targetreg_src)?;
-    write_value_to_targetreg(mem, &mut state, trace, targetreg_dst, value)?;
-
-    Ok(state)
-}
-
-fn trace_stackpair_push(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    stackpair: u8,
-) -> sm83::Result<State> {
-    let value = read_value_from_targetpair(&state, stackpair, true)?;
-    push_value_to_sp(mem, &mut state, trace, value)?;
-
-    Ok(state)
-}
-
-fn trace_stackpair_pop(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    stackpair: u8,
-) -> sm83::Result<State> {
-    let value = pop_value_from_sp(mem, &mut state, trace)?;
-    write_value_to_targetpair(&mut state, trace, stackpair, true, value)?;
-
-    Ok(state)
-}
-
-fn trace_aluop_register(
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    the_aluop: u8,
-    targetreg: u8,
-) -> sm83::Result<State> {
-    let operand = read_value_from_targetreg(mem, &state, targetreg)?;
-    let (new_accum, new_flags) = aluop(
-        the_aluop,
-        state.get_register(&Register::A),
-        operand,
-        state.get_register(&Register::F),
-    )?;
-
-    trace.register_set(Register::A, new_accum, &mut state);
-    trace.register_set(Register::F, new_flags, &mut state);
-
-    Ok(state)
-}
-
-fn trace_aluop_immediate(
-    p: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    the_aluop: u8,
-) -> sm83::Result<State> {
-    let op_ptr = p + 1;
-    let operand = mem.read_unit_stateful(op_ptr, &state);
-    let (new_accum, new_flags) = aluop(
-        the_aluop,
-        state.get_register(&Register::A),
-        operand,
-        state.get_register(&Register::F),
-    )?;
-
-    trace.register_set(Register::A, new_accum, &mut state);
-    trace.register_set(Register::F, new_flags, &mut state);
-
-    Ok(state)
-}
-
-fn trace_oldbitops(mut state: State, trace: &mut Trace, op: u8) -> sm83::Result<State> {
-    let old_carry = (state.get_register(&Register::F) & reg::Symbolic::from(0x10)) >> 4;
-    let old_a = state.get_register(&Register::A);
-
-    let (new_a, new_carry) = match op {
-        0 => (
-            (old_a << 1 | (old_a & reg::Symbolic::from(0x80)) >> 7),
-            (old_a & reg::Symbolic::from(0x80)) >> 7,
-        ), //RLCA
-        1 => (
-            (old_a >> 1 | (old_a & reg::Symbolic::from(0x01)) << 7),
-            (old_a & reg::Symbolic::from(0x01)),
-        ), //RRCA
-        2 => (
-            (old_a << 1 | old_carry),
-            (old_a & reg::Symbolic::from(0x80)) >> 7,
-        ), //RLA
-        3 => (
-            (old_a >> 1 | old_carry),
-            (old_a & reg::Symbolic::from(0x01)),
-        ), //RRA
-        4 => return Err(analysis::Error::NotYetImplemented), //DAA
-        5 => (!old_a, old_carry),                            //CPL
-        6 => (old_a, reg::Symbolic::from(0x01)),             //SCF
-        7 => (old_a, reg::Symbolic::from(0x00)),             //CCF
-        _ => return Err(analysis::Error::Misinterpretation(1, false)),
-    };
-
-    let new_flags =
-        ((state.get_register(&Register::F)) & reg::Symbolic::from(0xEF)) | new_carry << 4;
-
-    trace.register_set(Register::F, new_flags, &mut state);
-    trace.register_set(Register::A, new_a, &mut state);
-
-    Ok(state)
-}
-
-fn trace_rst(
-    ptr: PtrVal,
-    mem: &Bus,
-    mut state: State,
-    trace: &mut Trace,
-    op: u8,
-) -> sm83::Result<(State, PtrVal)> {
-    let target = (op & 0x38) as u16;
-    let ret_pc = ptr + 3;
-
-    push_value_to_sp(mem, &mut state, trace, reg::Symbolic::from(ret_pc))?;
-
-    Ok((state, target))
+    Ok(val)
 }
 
 /// Trace the current instruction state into a new one.
@@ -1052,119 +343,547 @@ fn trace_rst(
 pub fn trace(
     p: PtrVal,
     mem: &Bus,
-    state: State,
+    mut state: State,
     trace: &mut Trace,
 ) -> sm83::Result<(State, PtrVal)> {
-    match mem.read_unit_stateful(p, &state).into_concrete() {
-        Some(0xCB) => match mem.read_unit_stateful(p + 1, &state).into_concrete() {
-            Some(subop) => {
-                let targetreg = subop & 0x07;
-                let new_bitop = (subop >> 3) & 0x07;
+    let (instr, offset) = Instruction::from_static_stream(&state.contextualize_pointer(p), mem)?;
 
-                match ((subop >> 6) & 0x03, (subop >> 3) & 0x07, subop & 0x07) {
-                    (0, _, _) => Ok((
-                        trace_bitop(mem, state, trace, new_bitop, targetreg)?,
-                        (p + 2),
-                    )),
-                    (1, bit, _) => Ok((trace_bittest(mem, state, trace, bit, targetreg)?, (p + 2))),
-                    (2, bit, _) => {
-                        Ok((trace_bitreset(mem, state, trace, bit, targetreg)?, (p + 2)))
-                    }
-                    (3, bit, _) => Ok((trace_bitset(mem, state, trace, bit, targetreg)?, (p + 2))),
-                    _ => Err(analysis::Error::Misinterpretation(2, false)),
-                }
-            }
-            _ => Err(analysis::Error::UnconstrainedMemory(
-                state.contextualize_pointer(p + 1),
-            )),
-        },
+    match instr {
+        Instruction::Nop => {}
+        Instruction::LdReg8(tgt, src) => {
+            let value8 = read_value8_from_target(src, mem, &state)?;
+            write_value8_to_target(value8, tgt, mem, &mut state, trace)?;
+        }
+        Instruction::LdHLSP(offset) => {
+            let sp = read_value16_from_regpair(RegisterPair::SP, &mut state);
+            let (new_sp, new_flags) =
+                add_u16_i8(sp, Symbolic::from(offset), state.get_register(&Register::F));
+            write_value16_to_regpair(RegisterPair::HL, new_sp, &mut state);
+            state.set_register(Register::F, new_flags & Symbolic::from(0x30));
+        }
+        Instruction::LdSPHL => {
+            let hl = read_value16_from_regpair(RegisterPair::HL, &mut state);
+            write_value16_to_regpair(RegisterPair::SP, hl, &mut state);
+        }
+        Instruction::LdWriteStatic(addr) => {
+            let a = state.get_register(&Register::A);
+            mem.write_memory(addr, &[a], &mut state, Some(trace));
+        }
+        Instruction::LdWritePtr(ptr_regpair) => {
+            let addr = read_value16_from_regpair(ptr_regpair, &mut state)
+                .into_concrete()
+                .ok_or(Error::UnconstrainedRegister)?;
+            let a = state.get_register(&Register::A);
+            mem.write_memory(addr, &[a], &mut state, Some(trace));
+        }
+        Instruction::LdWriteHiStatic(hiaddr) => {
+            let addr = 0xFF00 + hiaddr as u16;
+            let a = state.get_register(&Register::A);
+            mem.write_memory(addr, &[a], &mut state, Some(trace));
+        }
+        Instruction::LdWriteHiPtr => {
+            let hiaddr = state
+                .get_register(&Register::C)
+                .into_concrete()
+                .ok_or(Error::UnconstrainedRegister)?;
+            let addr = 0xFF00 + hiaddr as u16;
+            let a = state.get_register(&Register::A);
+            mem.write_memory(addr, &[a], &mut state, Some(trace));
+        }
+        Instruction::LdReadStatic(addr) => {
+            let a = mem.read_unit_stateful(addr, &state);
+            state.set_register(Register::A, a);
+        }
+        Instruction::LdReadPtr(ptr_regpair) => {
+            let addr = read_value16_from_regpair(ptr_regpair, &mut state)
+                .into_concrete()
+                .ok_or(Error::UnconstrainedRegister)?;
+            let a = mem.read_unit_stateful(addr, &state);
+            state.set_register(Register::A, a);
+        }
+        Instruction::LdReadHiStatic(hiaddr) => {
+            let addr = 0xFF00 + hiaddr as u16;
+            let a = mem.read_unit_stateful(addr, &state);
+            state.set_register(Register::A, a);
+        }
+        Instruction::LdReadHiPtr => {
+            let hiaddr = state
+                .get_register(&Register::C)
+                .into_concrete()
+                .ok_or(Error::UnconstrainedRegister)?;
+            let addr = 0xFF00 + hiaddr as u16;
+            let a = mem.read_unit_stateful(addr, &state);
+            state.set_register(Register::A, a);
+        }
+        Instruction::LdConst8(tgt, constu8) => {
+            write_value8_to_target(Symbolic::from(constu8), tgt, mem, &mut state, trace)?;
+        }
+        Instruction::LdConst16(regpair, constu16) => {
+            write_value16_to_regpair(regpair, Symbolic::from(constu16), &mut state);
+        }
+        Instruction::LdWriteStaticSP(addr) => {
+            let s = state.get_register(&Register::S);
+            let p = state.get_register(&Register::P);
 
-        //Z80 instructions that don't fit the pattern decoder below
-        Some(0x00) => Ok((state, p + 1)), //nop
-        Some(0x08) => Ok((trace_sp_storage(p, mem, state, trace)?, p + 3)), //ld [u16], SP
-        Some(0x10) => Ok((state, p + 1)), //stop
-        Some(0x18) => trace_jump_relative(None, p, mem, state), //jr u8
-        Some(0x76) => Ok((state, p + 1)), //halt
+            mem.write_memory(addr, &[p, s], &mut state, Some(trace));
+        }
+        Instruction::Inc16(regpair) => {
+            let rpval = read_value16_from_regpair(regpair, &mut state);
+            write_value16_to_regpair(regpair, rpval + Symbolic::from(1), &mut state);
+        }
+        Instruction::Inc8(tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+            let f = state.get_register(&Register::F);
+            let (new_val, new_f) = add_u8_u8(val, Symbolic::from(1), f, false);
+            let new_f_without_c = new_f & Symbolic::from(0xE0) | f & Symbolic::from(0x10);
 
-        Some(0xC3) => trace_jump(None, p, mem, state), //jp u16
-        Some(0xCD) => trace_call(None, p, mem, state, trace),
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+            state.set_register(Register::F, new_f_without_c);
+        }
+        Instruction::Dec16(regpair) => {
+            let rpval = read_value16_from_regpair(regpair, &mut state);
+            write_value16_to_regpair(regpair, rpval - Symbolic::from(1), &mut state);
+        }
+        Instruction::Dec8(tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+            let f = state.get_register(&Register::F);
+            let (new_val, new_f) = sub_u8_u8(val, Symbolic::from(1), f, false);
+            let new_f_without_c = new_f & Symbolic::from(0xE0) | f & Symbolic::from(0x10);
 
-        Some(0xC9) => trace_return(None, p, mem, state, trace), //ret
-        Some(0xD9) => trace_return(None, p, mem, state, trace), //reti
-        Some(0xE9) => trace_jump_dynamic(state),                //jp hl
-        Some(0xF9) => Ok((trace_sp_set(state, trace), p + 1)),  //ld sp, hl
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+            state.set_register(Register::F, new_f_without_c);
+        }
+        Instruction::Jump(target, cond) => {
+            let f = state.get_register(&Register::F);
+            let cond_passed = if let Some(cond) = cond {
+                cond.test(f)?
+            } else {
+                true
+            };
 
-        Some(0xE0) => Ok((trace_himem_store(p, mem, state, trace)?, p + 2)), //ldh [u8], a
-        Some(0xE8) => Ok((trace_sp_adjust(p, mem, state, trace), p + 2)),    //add sp, u8
-        Some(0xF0) => Ok((trace_himem_load(p, mem, state, trace)?, p + 2)),  //ldh a, [u8]
-        Some(0xF8) => Ok((trace_sp_offset_calc(p, mem, state, trace)?, p + 2)), //ld hl, sp+u8
-
-        Some(0xE2) => Ok((trace_himem_indir_store(mem, state, trace)?, p + 1)), //ld [c], a
-        Some(0xEA) => Ok((trace_mem_store(p, mem, state, trace)?, p + 3)),      //ld [u16], a
-        Some(0xF2) => Ok((trace_himem_indir_load(mem, state, trace)?, p + 1)),  //ld a, [c]
-        Some(0xFA) => Ok((trace_mem_load(p, mem, state, trace)?, p + 3)),       //ld a, [u16]
-
-        Some(0xF3) => Ok((state, p + 1)), //di
-        Some(0xFB) => Ok((state, p + 1)), //ei
-
-        //Z80 instructions that follow a particular pattern
-        Some(op) => {
-            let condcode = (op >> 3) & 0x03;
-            let targetpair = (op >> 4) & 0x03;
-            let targetreg = (op >> 3) & 0x07;
-            let targetmem = (op >> 4) & 0x03;
-            let bitop = (op >> 3) & 0x07;
-            let targetreg2 = op & 0x07;
-            let aluop = (op >> 3) & 0x07;
-            let stackpair = (op >> 4) & 0x03;
-
-            //decode `op` into aab?cddd. This creates a nice visual table for
-            //the Z80's semiperiodic instruction encoding
-            match (
-                (op >> 6) & 0x03,
-                (op >> 5) & 0x01,
-                (op >> 3) & 0x01,
-                op & 0x07,
-            ) {
-                (0, 0, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* 00, 08, 10, 18 */
-                (0, 1, _, 0) => trace_jump_relative(Some(condcode), p, mem, state), //jr cond, u8
-                (0, _, 0, 1) => Ok((trace_regpair_set(p, mem, state, trace, targetpair)?, p + 3)), //ld targetpair, u16
-                (0, _, 1, 1) => Ok((trace_wide_add(state, trace, targetpair)?, p + 1)), //add hl, targetpair
-                (0, _, 0, 2) => Ok((trace_targetmem_store(mem, state, trace, targetmem)?, p + 1)), //ld [targetmem], a
-                (0, _, 1, 2) => Ok((trace_targetmem_load(mem, state, trace, targetmem)?, p + 1)), //ld a, [targetmem]
-                (0, _, 0, 3) => Ok((trace_targetpair_inc(state, trace, targetpair)?, p + 1)), //inc targetpair
-                (0, _, 1, 3) => Ok((trace_targetpair_dec(state, trace, targetpair)?, p + 1)), //dec targetpair
-                (0, _, _, 4) => Ok((trace_targetreg_inc(mem, state, trace, targetreg)?, p + 1)), //inc targetreg
-                (0, _, _, 5) => Ok((trace_targetreg_dec(mem, state, trace, targetreg)?, p + 1)), //dec targetreg
-                (0, _, _, 6) => Ok((trace_targetreg_set(p, mem, state, trace, targetreg)?, p + 2)), //ld targetreg, u8
-                (0, _, _, 7) => Ok((trace_oldbitops(state, trace, bitop)?, p + 1)), //old bitops
-                (1, _, _, _) => Ok((
-                    trace_targetreg_copy(mem, state, trace, targetreg, targetreg2)?,
-                    p + 1,
-                )), //ld targetreg2, targetreg
-                (2, _, _, _) => Ok((
-                    trace_aluop_register(mem, state, trace, aluop, targetreg2)?,
-                    p + 1,
-                )), //(aluop) a, targetreg2
-                (3, 0, _, 0) => trace_return(Some(condcode), p, mem, state, trace), //ret cond
-                (3, 1, _, 0) => Err(analysis::Error::Misinterpretation(1, false)), /* E0, E8, F0, F8 */
-                (3, _, 0, 1) => Ok((trace_stackpair_pop(mem, state, trace, stackpair)?, p + 1)), //pop stackpair
-                (3, _, 1, 1) => Err(analysis::Error::Misinterpretation(1, false)), /* C9, D9, E9, F9 */
-                (3, 0, _, 2) => trace_jump(Some(condcode), p, mem, state),         //jp cond, u16
-                (3, 1, _, 2) => Err(analysis::Error::Misinterpretation(1, false)), /* E2, EA, F2, FA */
-                (3, _, _, 3) => Err(analysis::Error::InvalidInstruction),
-                (3, 0, _, 4) => trace_call(Some(condcode), p, mem, state, trace), //call cond, u16
-                (3, 1, _, 4) => Err(analysis::Error::InvalidInstruction),
-                (3, _, 0, 5) => Ok((trace_stackpair_push(mem, state, trace, stackpair)?, p + 1)), //push stackpair
-                (3, _, 1, 5) => Err(analysis::Error::InvalidInstruction),
-                (3, _, _, 6) => Ok((trace_aluop_immediate(p, mem, state, trace, aluop)?, p + 2)), //(aluop) a, u8
-                (3, _, _, 7) => trace_rst(p, mem, state, trace, op), //rst op& 0x38
-
-                _ => Err(analysis::Error::InvalidInstruction),
+            if cond_passed {
+                return Ok((state, target));
             }
         }
-        _ => Err(analysis::Error::UnconstrainedMemory(
-            state.contextualize_pointer(p),
-        )),
-    }
+        Instruction::JumpRelative(offset, cond) => {
+            let target = (p as i16 + offset as i16) as u16;
+            let f = state.get_register(&Register::F);
+            let cond_passed = if let Some(cond) = cond {
+                cond.test(f)?
+            } else {
+                true
+            };
+
+            if cond_passed {
+                return Ok((state, target));
+            }
+        }
+        Instruction::JumpDynamic => {
+            let hl = read_value16_from_regpair(RegisterPair::HL, &mut state)
+                .into_concrete()
+                .ok_or(Error::UnconstrainedRegister)?;
+            return Ok((state, hl));
+        }
+        Instruction::Call(target, cond) => {
+            let f = state.get_register(&Register::F);
+            let cond_passed = if let Some(cond) = cond {
+                cond.test(f)?
+            } else {
+                true
+            };
+
+            if cond_passed {
+                push_to_stack(Symbolic::from(p), mem, &mut state, trace)?;
+                return Ok((state, target));
+            }
+        }
+        Instruction::CallRst(rst) => {
+            let target = rst as u16;
+            push_to_stack(Symbolic::from(p), mem, &mut state, trace)?;
+            return Ok((state, target));
+        }
+        Instruction::Push(regpair) => {
+            let val = read_value16_from_regpair(regpair, &mut state);
+            push_to_stack(val, mem, &mut state, trace)?;
+        }
+        Instruction::Pop(regpair) => {
+            let val = pop_from_stack(mem, &mut state)?;
+            write_value16_to_regpair(regpair, val, &mut state);
+        }
+        Instruction::Return(cond) => {
+            let f = state.get_register(&Register::F);
+            let cond_passed = if let Some(cond) = cond {
+                cond.test(f)?
+            } else {
+                true
+            };
+
+            if cond_passed {
+                let new_pc = pop_pc_from_stack(mem, &mut state)?;
+                return Ok((state, new_pc));
+            }
+        }
+        Instruction::ReturnFromInterrupt => {
+            let new_pc = pop_pc_from_stack(mem, &mut state)?;
+            return Ok((state, new_pc));
+        }
+        Instruction::Add16(regpair) => {
+            let hl = read_value16_from_regpair(RegisterPair::HL, &mut state);
+            let addend = read_value16_from_regpair(regpair, &mut state);
+            let f = state.get_register(&Register::F);
+
+            let (new_hl, new_f) = add_u16_u16(hl, addend, f);
+
+            write_value16_to_regpair(RegisterPair::HL, new_hl, &mut state);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::AddSpConst(offset) => {
+            let sp = read_value16_from_regpair(RegisterPair::SP, &mut state);
+            let f = state.get_register(&Register::F);
+
+            let (new_sp, new_f) = add_u16_i8(sp, Symbolic::from(offset), f);
+            let new_f = new_f & Symbolic::from(0x70);
+
+            write_value16_to_regpair(RegisterPair::SP, new_sp, &mut state);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::Add8(tgt) => {
+            let a = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+            let addend = read_value8_from_target(tgt, mem, &state)?;
+
+            let (new_a, new_f) = add_u8_u8(a, addend, f, false);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::Add8Const(constu8) => {
+            let a = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+
+            let (new_a, new_f) = add_u8_u8(a, Symbolic::from(constu8), f, false);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::AddCarry8(tgt) => {
+            let a = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+            let addend = read_value8_from_target(tgt, mem, &state)?;
+
+            let (new_a, new_f) = add_u8_u8(a, addend, f, true);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::AddCarry8Const(constu8) => {
+            let a = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+
+            let (new_a, new_f) = add_u8_u8(a, Symbolic::from(constu8), f, true);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::Sub8(tgt) => {
+            let a = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+            let addend = read_value8_from_target(tgt, mem, &state)?;
+
+            let (new_a, new_f) = sub_u8_u8(a, addend, f, false);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::Sub8Const(constu8) => {
+            let a = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+
+            let (new_a, new_f) = sub_u8_u8(a, Symbolic::from(constu8), f, false);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::SubCarry8(tgt) => {
+            let a = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+            let subtrahend = read_value8_from_target(tgt, mem, &state)?;
+
+            let (new_a, new_f) = sub_u8_u8(a, subtrahend, f, true);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::SubCarry8Const(constu8) => {
+            let a = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+
+            let (new_a, new_f) = sub_u8_u8(a, Symbolic::from(constu8), f, true);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::And8(tgt) => {
+            let a = state.get_register(&Register::A);
+            let andend = read_value8_from_target(tgt, mem, &state)?;
+
+            let new_a = a & andend;
+            let new_f = flags_with_zero(Symbolic::from(0x20), new_a);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::And8Const(constu8) => {
+            let a = state.get_register(&Register::A);
+
+            let new_a = a & Symbolic::from(constu8);
+            let new_f = flags_with_zero(Symbolic::from(0x20), new_a);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::Xor8(tgt) => {
+            let a = state.get_register(&Register::A);
+            let xorend = read_value8_from_target(tgt, mem, &state)?;
+
+            let new_a = a ^ xorend;
+            let new_f = flags_with_zero(Symbolic::from(0x00), new_a);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::Xor8Const(constu8) => {
+            let a = state.get_register(&Register::A);
+
+            let new_a = a & Symbolic::from(constu8);
+            let new_f = flags_with_zero(Symbolic::from(0x00), new_a);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::Or8(tgt) => {
+            let a = state.get_register(&Register::A);
+            let orend = read_value8_from_target(tgt, mem, &state)?;
+
+            let new_a = a | orend;
+            let new_f = flags_with_zero(Symbolic::from(0x00), new_a);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::Or8Const(constu8) => {
+            let a = state.get_register(&Register::A);
+
+            let new_a = a | Symbolic::from(constu8);
+            let new_f = flags_with_zero(Symbolic::from(0x00), new_a);
+
+            state.set_register(Register::A, new_a);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::Cp(tgt) => {
+            let a = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+            let subtrahend = read_value8_from_target(tgt, mem, &state)?;
+
+            let (_, new_f) = sub_u8_u8(a, subtrahend, f, false);
+
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::CpConst(constu8) => {
+            let a = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+
+            let (_, new_f) = sub_u8_u8(a, Symbolic::from(constu8), f, false);
+
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::RotateLeftCarry(tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+            let f = state.get_register(&Register::F);
+
+            let old_c = (f & Symbolic::from(0x10)) >> 4;
+            let new_val = val << 1 | old_c;
+            let new_c = (val & Symbolic::from(0x80)) >> 3;
+
+            let new_f = flags_with_zero(new_c, new_val);
+
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::RotateLeftCarryAccum => {
+            let val = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+
+            let old_c = (f & Symbolic::from(0x10)) >> 4;
+            let new_val = val << 1 | old_c;
+            let new_f = (val & Symbolic::from(0x80)) >> 3;
+
+            state.set_register(Register::A, new_val);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::RotateLeft(tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+
+            let new_val = (val << 1) | (val >> 7);
+            let new_c = (val & Symbolic::from(0x80)) >> 3;
+
+            let new_f = flags_with_zero(new_c, new_val);
+
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::RotateLeftAccum => {
+            let val = state.get_register(&Register::A);
+
+            let new_val = (val << 1) | (val >> 7);
+            let new_f = (val & Symbolic::from(0x80)) >> 3;
+
+            state.set_register(Register::A, new_val);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::RotateRightCarry(tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+            let f = state.get_register(&Register::F);
+
+            let old_c = (f & Symbolic::from(0x10)) << 3;
+            let new_val = old_c | (val >> 1);
+            let new_c = (val & Symbolic::from(0x01)) << 4;
+
+            let new_f = flags_with_zero(new_c, new_val);
+
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::RotateRightCarryAccum => {
+            let val = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+
+            let old_c = (f & Symbolic::from(0x10)) << 3;
+            let new_val = old_c | (val >> 1);
+            let new_f = (val & Symbolic::from(0x01)) << 4;
+
+            state.set_register(Register::A, new_val);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::RotateRight(tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+
+            let new_val = (val << 7) | (val >> 1);
+            let new_c = (val & Symbolic::from(0x01)) << 4;
+
+            let new_f = flags_with_zero(new_c, new_val);
+
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::RotateRightAccum => {
+            let val = state.get_register(&Register::A);
+
+            let new_val = (val << 7) | (val >> 1);
+            let new_f = (val & Symbolic::from(0x01)) << 4;
+
+            state.set_register(Register::A, new_val);
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::ShiftLeftArithmetic(tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+
+            let new_val = val << 1;
+            let new_c = (val & Symbolic::from(0x80)) >> 3;
+
+            let new_f = flags_with_zero(new_c, new_val);
+
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::ShiftRightArithmetic(tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+
+            let new_val = val >> 1;
+
+            let new_f = flags_with_zero(Symbolic::from(0x00), new_val);
+
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::NybbleSwap(tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+
+            let new_val = (val << 4) | (val >> 4);
+
+            let new_f = flags_with_zero(Symbolic::from(0x00), new_val);
+
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::ShiftRightLogical(tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+
+            let sign_ext = val & Symbolic::from(0x80);
+            let new_val = sign_ext | (val >> 1);
+            let new_c = (val & Symbolic::from(0x01)) << 4;
+
+            let new_f = flags_with_zero(new_c, new_val);
+
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::BitTest(bit, tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+            let f = state.get_register(&Register::F);
+
+            let test_bit = (val >> bit) & Symbolic::from(0x01);
+            let new_f = flags_with_zero(f, test_bit) & Symbolic::from(0x90) | Symbolic::from(0x20);
+
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::BitReset(bit, tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+
+            let reset_mask = !(Symbolic::<u8>::from(0x01) << bit);
+            let new_val = val & reset_mask;
+
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+        }
+        Instruction::BitSet(bit, tgt) => {
+            let val = read_value8_from_target(tgt, mem, &state)?;
+
+            let set_mask = Symbolic::<u8>::from(0x01) << bit;
+            let new_val = val | set_mask;
+
+            write_value8_to_target(new_val, tgt, mem, &mut state, trace)?;
+        }
+        Instruction::Compliment => {
+            let val = state.get_register(&Register::A);
+            let f = state.get_register(&Register::F);
+
+            let new_val = !val;
+            let new_f = f | Symbolic::from(0x60);
+
+            state.set_register(Register::A, new_val);
+            state.set_register(Register::F, new_f);
+        }
+        //TODO: Impl `DAA`
+        Instruction::DecimalAdjust => return Err(Error::NotYetImplemented),
+        Instruction::SetCarry => {
+            let f = state.get_register(&Register::F);
+
+            let new_f = f & Symbolic::from(0x60) | Symbolic::from(0x10);
+
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::ClearCarry => {
+            let f = state.get_register(&Register::F);
+
+            let new_f = f & Symbolic::from(0x70);
+
+            state.set_register(Register::F, new_f);
+        }
+        Instruction::DisableInterrupt => {}
+        Instruction::EnableInterrupt => {}
+        Instruction::Halt => {}
+        Instruction::Stop => {}
+    };
+
+    Ok((state, p + offset))
 }
