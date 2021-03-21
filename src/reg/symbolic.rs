@@ -497,6 +497,137 @@ type XOROut<T, R> = <T as BitXor<R>>::Output;
 #[allow(dead_code)] //rustc thinks this is unused when it clearly is...
 type SymXOROut<T, R> = Symbolic<<T as BitXor<R>>::Output>;
 
+impl<T> Symbolic<T>
+where
+    T: Clone,
+    Symbolic<T>: Clone,
+{
+    /// Add two symbolic quantities and return both the symbolic result and the
+    /// unsigned carry bit.
+    ///
+    /// You may propagate an incoming carry from a previous `add_with_carry` or
+    /// provide `Some(false)` to signal no carry being propagated.
+    ///
+    /// A carry bit of `None` indicates that the final carry of the result is
+    /// symbolically undefined.
+    pub fn add_with_carry<R>(
+        self,
+        rhs: Symbolic<R>,
+        carry: Option<bool>,
+    ) -> (Symbolic<<T as Add<R>>::Output>, Option<bool>)
+    where
+        T: Add<R> + BitXor<R> + BitAnd<R>,
+        XOROut<T, R>: Clone
+            + Zero
+            + One
+            + BoundWidth<u32>
+            + Shl<u32, Output = XOROut<T, R>>
+            + Not<Output = XOROut<T, R>>,
+        Symbolic<T>: BitXor<Symbolic<R>, Output = SymXOROut<T, R>>
+            + BitAnd<Symbolic<R>, Output = SymXOROut<T, R>>,
+        SymXOROut<T, R>: Clone
+            + BoundWidth<u32>
+            + Shl<u32, Output = SymXOROut<T, R>>
+            + BitAnd<Output = SymXOROut<T, R>>
+            + BitXor<Output = SymXOROut<T, R>>
+            + BitOr<Output = SymXOROut<T, R>>
+            + Not<Output = SymXOROut<T, R>>,
+        <T as BitXor<R>>::Output: Bitwise,
+        Symbolic<<T as Add<R>>::Output>: Convertable<XOROut<T, R>>,
+        Symbolic<R>: Clone,
+    {
+        //Implementation notes:
+        //
+        // 1. I hope the trait bounds above did not literally kill you.
+        // 2. We can't call Symbolic::zero() here, because then we'd have to
+        //    require Zero on symbolic values of T^R, which requires Add on
+        //    Symbolic values of T^R, which requires Zero on symbolic values of
+        //    (T^R)^(T^R), which gives a 128-line long error from rustc.
+        // 3. We're implementing addition literally the way you would do it in
+        //    hardware - or at least, logical descriptions of hardware. This is
+        //    not performant at all.
+        // 4. We never call `add` so we technically don't need that trait here.
+        //    I want the output types to match the concrete types, however, so
+        //    we need this trait that we don't use.
+        // 3. Clippy really hates that we're using binary operations in `Add`.
+
+        let bits: u32 = XOROut::<T, R>::bound_width();
+        let half_adds = self.clone() ^ rhs.clone();
+        let half_carries = self & rhs;
+        let zero: XOROut<T, R> = XOROut::<T, R>::zero();
+        let one: XOROut<T, R> = XOROut::<T, R>::one();
+        let mut carry = match carry {
+            Some(false) => Symbolic::from(zero),
+            Some(true) => Symbolic::from(one),
+            None => Symbolic::from_cares(zero, !one),
+        };
+        let mut sum = carry.clone();
+
+        for bit in 0..bits {
+            let mask = Symbolic::from(XOROut::<T, R>::one() << bit);
+            sum = sum | half_adds.clone() & mask.clone() ^ carry.clone() & mask.clone();
+            carry = (carry & half_adds.clone() & mask.clone() | half_carries.clone() & mask) << 1;
+        }
+
+        let carry = carry.into_concrete().map(|cv| !cv.is_zero());
+
+        (Symbolic::convert_from(sum), carry)
+    }
+
+    /// Subtract two symbolic quantities and return both the symbolic result
+    /// and the unsigned borrow bit.
+    ///
+    /// You may propagate an incoming borrow from a previous `sub_with_borrow`
+    /// or provide `Some(false)` to signal no borrow being propagated.
+    ///
+    /// A carry bit of `None` indicates that the final carry of the result is
+    /// symbolically undefined.
+    pub fn sub_with_borrow<R>(
+        self,
+        rhs: Symbolic<R>,
+        borrow: Option<bool>,
+    ) -> (Symbolic<<T as Sub<R>>::Output>, Option<bool>)
+    where
+        T: Add<R> + Sub<R> + BitXor<R> + BitAnd<R>,
+        R: Not,
+        XOROut<T, R>: Clone
+            + Zero
+            + One
+            + BoundWidth<u32>
+            + Shl<u32, Output = XOROut<T, R>>
+            + Not<Output = XOROut<T, R>>,
+        Symbolic<T>: BitXor<Symbolic<R>, Output = SymXOROut<T, R>>
+            + BitAnd<Symbolic<R>, Output = SymXOROut<T, R>>,
+        SymXOROut<T, R>: Clone
+            + BoundWidth<u32>
+            + Shl<u32, Output = SymXOROut<T, R>>
+            + BitAnd<Output = SymXOROut<T, R>>
+            + BitXor<Output = SymXOROut<T, R>>
+            + BitOr<Output = SymXOROut<T, R>>
+            + Not<Output = SymXOROut<T, R>>,
+        <T as BitXor<R>>::Output: Bitwise,
+        Symbolic<<T as Add<R>>::Output>: Convertable<XOROut<T, R>>,
+        Symbolic<<T as Sub<R>>::Output>: Convertable<<T as Add<R>>::Output>,
+        Symbolic<R>:
+            Clone + Not<Output = Symbolic<<R as Not>::Output>> + Convertable<<R as Not>::Output>,
+    {
+        //Further implementation notes:
+        //
+        // 1. We're implementing subtraction also the same way hardware does it:
+        //    flip the bits and start with a carry. This works for signed and
+        //    unsigned types equally because two's compliement is great.
+        // 2. Since we support propagated carry bits, we flip the carry bit.
+        //    No propagation is signalled with false, so that turns it into
+        //    true, which is what we want.
+        // 3. If you implement an exotic signed type which emulates one's
+        //    compliment or sign-and-magnitude or whatever, that becomes a
+        //    standard numerical type symbolically.
+
+        let (v, f) = self.add_with_carry(Symbolic::convert_from(!rhs), borrow.map(|v| !v));
+        (Symbolic::convert_from(v), f)
+    }
+}
+
 impl<T, R> Add<Symbolic<R>> for Symbolic<T>
 where
     T: Clone + Add<R> + BitXor<R> + BitAnd<R>,
@@ -517,47 +648,21 @@ where
         + BitXor<Output = SymXOROut<T, R>>
         + BitOr<Output = SymXOROut<T, R>>
         + Not<Output = SymXOROut<T, R>>,
+    <T as BitXor<R>>::Output: Bitwise,
     Symbolic<<T as Add<R>>::Output>: Convertable<XOROut<T, R>>,
 {
     type Output = Symbolic<<T as Add<R>>::Output>;
 
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn add(self, rhs: Symbolic<R>) -> Self::Output {
-        //Implementation notes:
-        //
-        // 1. I hope the trait bounds above did not literally kill you.
-        // 2. We can't call Symbolic::zero() here, because then we'd have to
-        //    require Zero on symbolic values of T^R, which requires Add on
-        //    Symbolic values of T^R, which requires Zero on symbolic values of
-        //    (T^R)^(T^R), which gives a 128-line long error from rustc.
-        // 3. We're implementing addition literally the way you would do it in
-        //    hardware - or at least, logical descriptions of hardware. This is
-        //    not performant at all.
-        // 4. We never call `add` so we technically don't need that trait here.
-        //    I want the output types to match the concrete types, however, so
-        //    we need this trait that we don't use.
-        // 3. Clippy really hates that we're using binary operations in `Add`.
-
-        let bits: u32 = XOROut::<T, R>::bound_width();
-        let half_adds = self.clone() ^ rhs.clone();
-        let half_carries = self & rhs;
-        let zero: XOROut<T, R> = XOROut::<T, R>::zero();
-        let mut carry = Symbolic::from(zero);
-        let mut sum = carry.clone();
-
-        for bit in 0..bits {
-            let mask = Symbolic::from(XOROut::<T, R>::one() << bit);
-            sum = sum | half_adds.clone() & mask.clone() ^ carry.clone() & mask.clone();
-            carry = (carry & half_adds.clone() & mask.clone() | half_carries.clone() & mask) << 1;
-        }
-
-        Symbolic::convert_from(sum)
+        self.add_with_carry(rhs, Some(false)).0
     }
 }
 
 impl<T, R> Sub<Symbolic<R>> for Symbolic<T>
 where
-    T: Clone + Sub<R> + BitXor<R> + BitAnd<R>,
+    T: Clone + Add<R> + Sub<R> + BitXor<R> + BitAnd<R>,
+    R: Not,
     XOROut<T, R>: Clone
         + Zero
         + One
@@ -567,7 +672,6 @@ where
     Symbolic<T>: Clone
         + BitXor<Symbolic<R>, Output = SymXOROut<T, R>>
         + BitAnd<Symbolic<R>, Output = SymXOROut<T, R>>,
-    Symbolic<R>: Clone + Not<Output = Symbolic<R>>,
     SymXOROut<T, R>: Clone
         + BoundWidth<u32>
         + Shl<u32, Output = SymXOROut<T, R>>
@@ -575,37 +679,17 @@ where
         + BitXor<Output = SymXOROut<T, R>>
         + BitOr<Output = SymXOROut<T, R>>
         + Not<Output = SymXOROut<T, R>>,
-    Symbolic<<T as Sub<R>>::Output>: Convertable<XOROut<T, R>>,
+    <T as BitXor<R>>::Output: Bitwise,
+    Symbolic<<T as Add<R>>::Output>: Convertable<XOROut<T, R>>,
+    Symbolic<<T as Sub<R>>::Output>: Convertable<<T as Add<R>>::Output>,
+    Symbolic<R>:
+        Clone + Not<Output = Symbolic<<R as Not>::Output>> + Convertable<<R as Not>::Output>,
 {
     type Output = Symbolic<<T as Sub<R>>::Output>;
 
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self, rhs: Symbolic<R>) -> Self::Output {
-        //Further implementation notes:
-        //
-        // 1. We're implementing subtraction also the same way hardware does it:
-        //    flip the bits and start with a carry. This works for signed and
-        //    unsigned types equally because two's compliement is great.
-        // 2. If you implement an exotic signed type which emulates one's
-        //    compliment or sign-and-magnitude or whatever, that becomes a
-        //    standard numerical type symbolically.
-        // 3. Clippy really hates that we're using binary operations in `Sub`.
-
-        let bits: u32 = XOROut::<T, R>::bound_width();
-        let half_adds = self.clone() ^ !rhs.clone();
-        let half_carries = self & !rhs;
-        let zero: XOROut<T, R> = XOROut::<T, R>::zero();
-        let mut sum = Symbolic::from(zero);
-        let one: XOROut<T, R> = XOROut::<T, R>::one();
-        let mut carry = Symbolic::from(one);
-
-        for bit in 0..bits {
-            let mask = Symbolic::from(XOROut::<T, R>::one() << bit);
-            sum = sum | half_adds.clone() & mask.clone() ^ carry.clone() & mask.clone();
-            carry = (carry & half_adds.clone() & mask.clone() | half_carries.clone() & mask) << 1;
-        }
-
-        Symbolic::convert_from(sum)
+        self.sub_with_borrow(rhs, Some(false)).0
     }
 }
 
