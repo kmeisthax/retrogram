@@ -452,7 +452,7 @@ impl Instruction {
                 ),
                 3,
             )), //ld [u16], sp
-            Some(0x10) => Ok((Self::Stop, 1)), //stop
+            Some(0x10) => Ok((Self::Stop, 2)), //stop
             Some(0x18) => Ok((
                 Self::JumpRelative(
                     match mem.read_unit(&(p.clone() + 1)).into_concrete() {
