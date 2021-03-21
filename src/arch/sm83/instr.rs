@@ -601,7 +601,7 @@ impl Instruction {
                         2,
                     )), //ld (targetreg), u8
                     (0, _, _, 7) => Ok((bitop, 1)),                          //legacy bitops
-                    (1, _, _, _) => Ok((Self::LdReg8(targetreg2, targetreg), 1)), //ld (reg2), (reg)
+                    (1, _, _, _) => Ok((Self::LdReg8(targetreg, targetreg2), 1)), //ld (reg2), (reg)
                     (2, _, _, _) => match (op >> 3) & 0x07 {
                         0 => Ok((Self::Add8(targetreg2), 1)),
                         1 => Ok((Self::AddCarry8(targetreg2), 1)),
