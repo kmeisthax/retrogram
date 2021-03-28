@@ -33,6 +33,17 @@ impl Target8 {
             ],
         }
     }
+
+    /// Turn the target into a list of register requisites.
+    pub fn into_register_requisites(self) -> Vec<Requisite<SM83>> {
+        match self {
+            Target8::Register(r) => vec![Requisite::register(r, 0xFF)],
+            Target8::IndirectHL => vec![
+                Requisite::register(Register::H, 0xFF),
+                Requisite::register(Register::L, 0xFF),
+            ],
+        }
+    }
 }
 
 /// Decoding aid for targets of 8-bit ALU instructions
