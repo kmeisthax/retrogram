@@ -11,7 +11,7 @@ where
     AR: Architecture,
 {
     /// Underlying cause of error is I/O related
-    IOError(io::Error),
+    IoError(io::Error),
 
     /// Underlying cause of error is formatting related
     FormatError(fmt::Error),
@@ -79,7 +79,7 @@ where
         use Error::*;
 
         match self {
-            IOError(e) => write!(f, "I/O error: {}", e),
+            IoError(e) => write!(f, "I/O error: {}", e),
             FormatError(e) => write!(f, "Formatting error: {}", e),
             Error::UnconstrainedMemory(p) => write!(f, "Location {:X} is not valid", p),
             UnconstrainedRegister => write!(f, "Prereq analysis failed for instruction"),
@@ -111,23 +111,23 @@ where
         use Error::*;
 
         match self {
-            IOError(e) => Some(e),
+            IoError(e) => Some(e),
             FormatError(e) => Some(e),
             _ => None,
         }
     }
 }
 
-impl<AR> Into<io::Error> for Error<AR>
+impl<AR> From<Error<AR>> for io::Error
 where
     AR: Architecture,
 {
-    fn into(self) -> io::Error {
+    fn from(err: Error<AR>) -> io::Error {
         use Error::*;
 
-        match self {
-            IOError(e) => e,
-            _ => io::Error::new(io::ErrorKind::Other, format!("{}", self)),
+        match err {
+            IoError(e) => e,
+            _ => io::Error::new(io::ErrorKind::Other, format!("{}", err)),
         }
     }
 }
@@ -137,7 +137,7 @@ where
     AR: Architecture,
 {
     fn from(err: io::Error) -> Self {
-        Self::IOError(err)
+        Self::IoError(err)
     }
 }
 

@@ -24,7 +24,7 @@ use std::{result, str};
 /// database.
 #[derive(Copy, Clone, Serialize, Debug)]
 pub enum ExternalFormat {
-    RGBDSSymbolFile,
+    RgbdsSymbolFile,
 }
 
 impl str::FromStr for ExternalFormat {
@@ -32,7 +32,7 @@ impl str::FromStr for ExternalFormat {
 
     fn from_str(s: &str) -> result::Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_ref() {
-            "rgbds_symbols" => Ok(ExternalFormat::RGBDSSymbolFile),
+            "rgbds_symbols" => Ok(ExternalFormat::RgbdsSymbolFile),
             _ => Err(()),
         }
     }

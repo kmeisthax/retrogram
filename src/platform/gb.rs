@@ -25,7 +25,7 @@ trait Mapper: Send + Sync {
         &self,
         ptr: sm83::PtrVal,
         byte: Symbolic<sm83::Data>,
-        state: &mut State<sm83::SM83>,
+        state: &mut State<sm83::Sm83>,
     ) -> bool;
 }
 
@@ -64,21 +64,21 @@ impl Mapper for LinearMapper {
         &self,
         _ptr: sm83::PtrVal,
         _byte: Symbolic<sm83::Data>,
-        _state: &mut State<sm83::SM83>,
+        _state: &mut State<sm83::Sm83>,
     ) -> bool {
         false
     }
 }
 
-struct MBC1Mapper {}
+struct Mbc1Mapper {}
 
-impl MBC1Mapper {
+impl Mbc1Mapper {
     fn new() -> Self {
-        MBC1Mapper {}
+        Mbc1Mapper {}
     }
 }
 
-impl Mapper for MBC1Mapper {
+impl Mapper for Mbc1Mapper {
     fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(0x00) => None,
@@ -112,7 +112,7 @@ impl Mapper for MBC1Mapper {
         &self,
         ptr: sm83::PtrVal,
         byte: Symbolic<sm83::Data>,
-        state: &mut State<sm83::SM83>,
+        state: &mut State<sm83::Sm83>,
     ) -> bool {
         if (0x2000..=0x3FFF).contains(&ptr) {
             let byte = match byte.into_concrete() {
@@ -134,15 +134,15 @@ impl Mapper for MBC1Mapper {
     }
 }
 
-struct MBC2Mapper {}
+struct Mbc2Mapper {}
 
-impl MBC2Mapper {
+impl Mbc2Mapper {
     fn new() -> Self {
-        MBC2Mapper {}
+        Mbc2Mapper {}
     }
 }
 
-impl Mapper for MBC2Mapper {
+impl Mapper for Mbc2Mapper {
     fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => {
@@ -174,7 +174,7 @@ impl Mapper for MBC2Mapper {
         &self,
         ptr: sm83::PtrVal,
         byte: Symbolic<sm83::Data>,
-        state: &mut State<sm83::SM83>,
+        state: &mut State<sm83::Sm83>,
     ) -> bool {
         if (0x2000..=0x3FFF).contains(&ptr) && ptr & 0x0100 != 0 {
             state.set_platform_context(
@@ -188,15 +188,15 @@ impl Mapper for MBC2Mapper {
     }
 }
 
-struct MBC3Mapper {}
+struct Mbc3Mapper {}
 
-impl MBC3Mapper {
+impl Mbc3Mapper {
     fn new() -> Self {
-        MBC3Mapper {}
+        Mbc3Mapper {}
     }
 }
 
-impl Mapper for MBC3Mapper {
+impl Mapper for Mbc3Mapper {
     fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
@@ -226,7 +226,7 @@ impl Mapper for MBC3Mapper {
         &self,
         ptr: sm83::PtrVal,
         byte: Symbolic<sm83::Data>,
-        state: &mut State<sm83::SM83>,
+        state: &mut State<sm83::Sm83>,
     ) -> bool {
         if (0x2000..=0x3FFF).contains(&ptr) {
             let byte = match byte.into_concrete() {
@@ -245,15 +245,15 @@ impl Mapper for MBC3Mapper {
     }
 }
 
-struct MBC5Mapper {}
+struct Mbc5Mapper {}
 
-impl MBC5Mapper {
+impl Mbc5Mapper {
     fn new() -> Self {
-        MBC5Mapper {}
+        Mbc5Mapper {}
     }
 }
 
-impl Mapper for MBC5Mapper {
+impl Mapper for Mbc5Mapper {
     fn decode_banked_addr(&self, ptr: &memory::Pointer<sm83::PtrVal>) -> Option<usize> {
         match ptr.get_platform_context("R").into_concrete() {
             Some(b) => Some(((*ptr.as_pointer() as usize) & 0x3FFF) + (b * 0x4000) as usize),
@@ -283,7 +283,7 @@ impl Mapper for MBC5Mapper {
         &self,
         ptr: sm83::PtrVal,
         byte: Symbolic<sm83::Data>,
-        state: &mut State<sm83::SM83>,
+        state: &mut State<sm83::Sm83>,
     ) -> bool {
         if (0x2000..=0x2FFF).contains(&ptr) {
             let old_data = state.get_platform_context("R") & Symbolic::from(0x100);
@@ -312,7 +312,7 @@ impl Mapper for MBC5Mapper {
 /// memory region at `$4000` that is also 16KB large. As a consequence, Game Boy
 /// ROM images are composed of 16KB chunks of memory that can mapped in or out
 /// depending on a mapper-specific memory scheme.
-struct GameBoyROMImage<M>
+struct GameBoyRomImage<M>
 where
     M: Mapper,
 {
@@ -320,7 +320,7 @@ where
     mapper: M,
 }
 
-impl<M> GameBoyROMImage<M>
+impl<M> GameBoyRomImage<M>
 where
     M: Mapper,
 {
@@ -332,11 +332,11 @@ where
 
         file.read_to_end(&mut data)?;
 
-        Ok(GameBoyROMImage { data, mapper })
+        Ok(GameBoyRomImage { data, mapper })
     }
 }
 
-impl<M> memory::Image<sm83::SM83> for GameBoyROMImage<M>
+impl<M> memory::Image<sm83::Sm83> for GameBoyRomImage<M>
 where
     M: Mapper,
 {
@@ -364,7 +364,7 @@ where
         &self,
         _ptr: sm83::PtrVal,
         _base: sm83::PtrVal,
-    ) -> Vec<Requisite<sm83::SM83>> {
+    ) -> Vec<Requisite<sm83::Sm83>> {
         vec![Requisite::platform_context(
             "R".to_string(),
             self.mapper.context_mask(),
@@ -425,7 +425,7 @@ where
         ptr: sm83::PtrVal,
         _base: sm83::PtrVal,
         data: Symbolic<sm83::Data>,
-        state: &mut State<sm83::SM83>,
+        state: &mut State<sm83::Sm83>,
     ) -> bool {
         self.mapper.register_write(ptr, data, state)
     }
@@ -433,10 +433,10 @@ where
 
 pub enum PlatformVariant {
     LinearMapper,
-    MBC1Mapper,
-    MBC2Mapper,
-    MBC3Mapper,
-    MBC5Mapper,
+    Mbc1Mapper,
+    Mbc2Mapper,
+    Mbc3Mapper,
+    Mbc5Mapper,
     UnknownMapper,
 }
 
@@ -486,9 +486,9 @@ where
     }
 }
 
-pub struct GBPlatform();
+pub struct GbPlatform();
 
-impl Platform<sm83::SM83> for GBPlatform {
+impl Platform<sm83::Sm83> for GbPlatform {
     /// Construct a `Memory` corresponding to the execution environment of a given
     /// Game Boy ROM image.
     ///
@@ -509,27 +509,27 @@ impl Platform<sm83::SM83> for GBPlatform {
 
         let pv = match romtype {
             [0x00] => PlatformVariant::LinearMapper,  //ROM w/o RAM
-            [0x01] => PlatformVariant::MBC1Mapper,    //MBC1 ROM
-            [0x02] => PlatformVariant::MBC1Mapper,    //MBC1 ROM with RAM
-            [0x03] => PlatformVariant::MBC1Mapper,    //MBC1 ROM with persistent RAM
-            [0x05] => PlatformVariant::MBC2Mapper, //MBC2 ROM; TODO: MBC2 has weird 4-bit SRAM and we should always return symbolic 4-bit values
-            [0x06] => PlatformVariant::MBC2Mapper, //MBC2 ROM w/ persistence
+            [0x01] => PlatformVariant::Mbc1Mapper,    //MBC1 ROM
+            [0x02] => PlatformVariant::Mbc1Mapper,    //MBC1 ROM with RAM
+            [0x03] => PlatformVariant::Mbc1Mapper,    //MBC1 ROM with persistent RAM
+            [0x05] => PlatformVariant::Mbc2Mapper, //MBC2 ROM; TODO: MBC2 has weird 4-bit SRAM and we should always return symbolic 4-bit values
+            [0x06] => PlatformVariant::Mbc2Mapper, //MBC2 ROM w/ persistence
             [0x08] => PlatformVariant::LinearMapper, //ROM with RAM
             [0x09] => PlatformVariant::LinearMapper, //ROM with persistent RAM
             [0x0B] => PlatformVariant::UnknownMapper, //MMM01, currently not supported
             [0x0C] => PlatformVariant::UnknownMapper, //MMM01, currently not supported, with RAM
             [0x0D] => PlatformVariant::UnknownMapper, //MMM01, currently not supported, with persistent RAM
-            [0x0F] => PlatformVariant::MBC3Mapper,    //MBC3 with persistent clock
-            [0x10] => PlatformVariant::MBC3Mapper,    //MBC3 with persistent clock and RAM
-            [0x11] => PlatformVariant::MBC3Mapper,    //MBC3 ROM only
-            [0x12] => PlatformVariant::MBC3Mapper,    //MBC3 with RAM
-            [0x13] => PlatformVariant::MBC3Mapper,    //MBC3 with persistent RAM, no clock
-            [0x19] => PlatformVariant::MBC5Mapper,    //MBC5 ROM only
-            [0x1A] => PlatformVariant::MBC5Mapper,    //MBC5 with RAM
-            [0x1B] => PlatformVariant::MBC5Mapper,    //MBC5 with persistent RAM
-            [0x1C] => PlatformVariant::MBC5Mapper,    //MBC5 with rumble motor
-            [0x1D] => PlatformVariant::MBC5Mapper,    //MBC5 with rumble motor and RAM
-            [0x1E] => PlatformVariant::MBC5Mapper,    //MBC5 with rumble motor and persistent RAM
+            [0x0F] => PlatformVariant::Mbc3Mapper,    //MBC3 with persistent clock
+            [0x10] => PlatformVariant::Mbc3Mapper,    //MBC3 with persistent clock and RAM
+            [0x11] => PlatformVariant::Mbc3Mapper,    //MBC3 ROM only
+            [0x12] => PlatformVariant::Mbc3Mapper,    //MBC3 with RAM
+            [0x13] => PlatformVariant::Mbc3Mapper,    //MBC3 with persistent RAM, no clock
+            [0x19] => PlatformVariant::Mbc5Mapper,    //MBC5 ROM only
+            [0x1A] => PlatformVariant::Mbc5Mapper,    //MBC5 with RAM
+            [0x1B] => PlatformVariant::Mbc5Mapper,    //MBC5 with persistent RAM
+            [0x1C] => PlatformVariant::Mbc5Mapper,    //MBC5 with rumble motor
+            [0x1D] => PlatformVariant::Mbc5Mapper,    //MBC5 with rumble motor and RAM
+            [0x1E] => PlatformVariant::Mbc5Mapper,    //MBC5 with rumble motor and persistent RAM
             [0x20] => PlatformVariant::UnknownMapper, //MBC6 ROM only
             [0x22] => PlatformVariant::UnknownMapper, //MBC7 with tilt sensor, rumble motor, and persistent EEPROM
             [0xFC] => PlatformVariant::UnknownMapper, //Game Boy Camera with CCD video sensor
@@ -543,27 +543,27 @@ impl Platform<sm83::SM83> for GBPlatform {
             PlatformVariant::LinearMapper => bus.install_rom_image(
                 0x0000,
                 0x8000,
-                Box::new(GameBoyROMImage::new(file, LinearMapper::new())?),
+                Box::new(GameBoyRomImage::new(file, LinearMapper::new())?),
             ),
-            PlatformVariant::MBC1Mapper => bus.install_rom_image(
+            PlatformVariant::Mbc1Mapper => bus.install_rom_image(
                 0x0000,
                 0x8000,
-                Box::new(GameBoyROMImage::new(file, MBC1Mapper::new())?),
+                Box::new(GameBoyRomImage::new(file, Mbc1Mapper::new())?),
             ),
-            PlatformVariant::MBC2Mapper => bus.install_rom_image(
+            PlatformVariant::Mbc2Mapper => bus.install_rom_image(
                 0x0000,
                 0x8000,
-                Box::new(GameBoyROMImage::new(file, MBC2Mapper::new())?),
+                Box::new(GameBoyRomImage::new(file, Mbc2Mapper::new())?),
             ),
-            PlatformVariant::MBC3Mapper => bus.install_rom_image(
+            PlatformVariant::Mbc3Mapper => bus.install_rom_image(
                 0x0000,
                 0x8000,
-                Box::new(GameBoyROMImage::new(file, MBC3Mapper::new())?),
+                Box::new(GameBoyRomImage::new(file, Mbc3Mapper::new())?),
             ),
-            PlatformVariant::MBC5Mapper => bus.install_rom_image(
+            PlatformVariant::Mbc5Mapper => bus.install_rom_image(
                 0x0000,
                 0x8000,
-                Box::new(GameBoyROMImage::new(file, MBC5Mapper::new())?),
+                Box::new(GameBoyRomImage::new(file, Mbc5Mapper::new())?),
             ),
             PlatformVariant::UnknownMapper => panic!(
                 "Platform variant detection failed! Please manually specify the platform variant."

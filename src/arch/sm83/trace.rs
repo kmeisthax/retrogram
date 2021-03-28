@@ -11,7 +11,7 @@ use crate::reg::{Convertable, Symbolic, TryConvertable};
 fn read_value8_from_target(target: Target8, mem: &Bus, state: &State) -> Result<Symbolic<u8>> {
     match target {
         Target8::Register(r) => Ok(state.get_register(&r)),
-        Target8::IndirectHL => {
+        Target8::IndirectHl => {
             let h: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::H));
             let l: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::L));
             let hl = h << 8 | l;
@@ -33,7 +33,7 @@ fn write_value8_to_target(
         Target8::Register(r) => {
             state.set_register(r, value);
         }
-        Target8::IndirectHL => {
+        Target8::IndirectHl => {
             let h: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::H));
             let l: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::L));
             let hl = h << 8 | l;
@@ -53,27 +53,27 @@ fn write_value8_to_target(
 /// or pre-decrement value.
 fn read_value16_from_regpair(pair: RegisterPair, state: &mut State) -> Symbolic<u16> {
     let (hi, lo) = match pair {
-        RegisterPair::AF => {
+        RegisterPair::Af => {
             let a: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::A));
             let f: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::F));
             (a, f)
         }
-        RegisterPair::BC => {
+        RegisterPair::Bc => {
             let b: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::B));
             let c: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::C));
             (b, c)
         }
-        RegisterPair::DE => {
+        RegisterPair::De => {
             let d: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::D));
             let e: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::E));
             (d, e)
         }
-        RegisterPair::HL => {
+        RegisterPair::Hl => {
             let h: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::H));
             let l: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::L));
             (h, l)
         }
-        RegisterPair::HLIncrement => {
+        RegisterPair::HlIncrement => {
             let h: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::H));
             let l: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::L));
 
@@ -89,7 +89,7 @@ fn read_value16_from_regpair(pair: RegisterPair, state: &mut State) -> Symbolic<
 
             (h, l)
         }
-        RegisterPair::HLDecrement => {
+        RegisterPair::HlDecrement => {
             let h: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::H));
             let l: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::L));
 
@@ -105,7 +105,7 @@ fn read_value16_from_regpair(pair: RegisterPair, state: &mut State) -> Symbolic<
 
             (h, l)
         }
-        RegisterPair::SP => {
+        RegisterPair::Sp => {
             let s: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::S));
             let p: Symbolic<u16> = Symbolic::convert_from(state.get_register(&Register::P));
             (s, p)
@@ -124,25 +124,25 @@ fn write_value16_to_regpair(pair: RegisterPair, value: Symbolic<u16>, state: &mu
     let lo = Symbolic::try_convert_from(value & Symbolic::from(0xFF)).unwrap();
 
     match pair {
-        RegisterPair::AF => {
+        RegisterPair::Af => {
             state.set_register(Register::A, hi);
             state.set_register(Register::F, lo);
         }
-        RegisterPair::BC => {
+        RegisterPair::Bc => {
             state.set_register(Register::B, hi);
             state.set_register(Register::C, lo);
         }
-        RegisterPair::DE => {
+        RegisterPair::De => {
             state.set_register(Register::D, hi);
             state.set_register(Register::E, lo);
         }
-        RegisterPair::HL => {
+        RegisterPair::Hl => {
             state.set_register(Register::H, hi);
             state.set_register(Register::L, lo);
         }
-        RegisterPair::HLIncrement => {}
-        RegisterPair::HLDecrement => {}
-        RegisterPair::SP => {
+        RegisterPair::HlIncrement => {}
+        RegisterPair::HlDecrement => {}
+        RegisterPair::Sp => {
             state.set_register(Register::S, hi);
             state.set_register(Register::P, lo);
         }
@@ -287,7 +287,7 @@ fn push_to_stack(
     state: &mut State,
     trace: &mut Trace,
 ) -> Result<()> {
-    let sp = read_value16_from_regpair(RegisterPair::SP, state)
+    let sp = read_value16_from_regpair(RegisterPair::Sp, state)
         .into_concrete()
         .ok_or(Error::UnconstrainedRegister)?;
     let val_hi = Symbolic::try_convert_from(val >> 8).unwrap();
@@ -295,24 +295,24 @@ fn push_to_stack(
 
     mem.write_memory(sp, &[val_lo, val_hi], state, Some(trace));
 
-    write_value16_to_regpair(RegisterPair::SP, Symbolic::from(sp - 2), state);
+    write_value16_to_regpair(RegisterPair::Sp, Symbolic::from(sp - 2), state);
 
     Ok(())
 }
 
 fn pop_from_stack(mem: &Bus, state: &mut State) -> Result<Symbolic<u16>> {
-    let sp = read_value16_from_regpair(RegisterPair::SP, state)
+    let sp = read_value16_from_regpair(RegisterPair::Sp, state)
         .into_concrete()
         .ok_or(Error::UnconstrainedRegister)?;
     let val = mem.read_leword_stateful(sp, state);
 
-    write_value16_to_regpair(RegisterPair::SP, Symbolic::from(sp + 2), state);
+    write_value16_to_regpair(RegisterPair::Sp, Symbolic::from(sp + 2), state);
 
     Ok(val)
 }
 
 fn pop_pc_from_stack(mem: &Bus, state: &mut State) -> Result<u16> {
-    let sp = read_value16_from_regpair(RegisterPair::SP, state)
+    let sp = read_value16_from_regpair(RegisterPair::Sp, state)
         .into_concrete()
         .ok_or(Error::UnconstrainedRegister)?;
     let val = mem
@@ -320,7 +320,7 @@ fn pop_pc_from_stack(mem: &Bus, state: &mut State) -> Result<u16> {
         .into_concrete()
         .ok_or_else(|| Error::UnconstrainedMemory(state.contextualize_pointer(sp)))?;
 
-    write_value16_to_regpair(RegisterPair::SP, Symbolic::from(sp + 2), state);
+    write_value16_to_regpair(RegisterPair::Sp, Symbolic::from(sp + 2), state);
 
     Ok(val)
 }
@@ -354,16 +354,16 @@ pub fn trace(
             let value8 = read_value8_from_target(src, mem, &state)?;
             write_value8_to_target(value8, tgt, mem, &mut state, trace)?;
         }
-        Instruction::LdHLSP(offset) => {
-            let sp = read_value16_from_regpair(RegisterPair::SP, &mut state);
+        Instruction::LdHlSp(offset) => {
+            let sp = read_value16_from_regpair(RegisterPair::Sp, &mut state);
             let (new_sp, new_flags) =
                 add_u16_i8(sp, Symbolic::from(offset), state.get_register(&Register::F));
-            write_value16_to_regpair(RegisterPair::HL, new_sp, &mut state);
+            write_value16_to_regpair(RegisterPair::Hl, new_sp, &mut state);
             state.set_register(Register::F, new_flags & Symbolic::from(0x30));
         }
-        Instruction::LdSPHL => {
-            let hl = read_value16_from_regpair(RegisterPair::HL, &mut state);
-            write_value16_to_regpair(RegisterPair::SP, hl, &mut state);
+        Instruction::LdSpHl => {
+            let hl = read_value16_from_regpair(RegisterPair::Hl, &mut state);
+            write_value16_to_regpair(RegisterPair::Sp, hl, &mut state);
         }
         Instruction::LdWriteStatic(addr) => {
             let a = state.get_register(&Register::A);
@@ -421,7 +421,7 @@ pub fn trace(
         Instruction::LdConst16(regpair, constu16) => {
             write_value16_to_regpair(regpair, Symbolic::from(constu16), &mut state);
         }
-        Instruction::LdWriteStaticSP(addr) => {
+        Instruction::LdWriteStaticSp(addr) => {
             let s = state.get_register(&Register::S);
             let p = state.get_register(&Register::P);
 
@@ -479,7 +479,7 @@ pub fn trace(
             }
         }
         Instruction::JumpDynamic => {
-            let hl = read_value16_from_regpair(RegisterPair::HL, &mut state)
+            let hl = read_value16_from_regpair(RegisterPair::Hl, &mut state)
                 .into_concrete()
                 .ok_or(Error::UnconstrainedRegister)?;
             return Ok((state, hl));
@@ -528,23 +528,23 @@ pub fn trace(
             return Ok((state, new_pc));
         }
         Instruction::Add16(regpair) => {
-            let hl = read_value16_from_regpair(RegisterPair::HL, &mut state);
+            let hl = read_value16_from_regpair(RegisterPair::Hl, &mut state);
             let addend = read_value16_from_regpair(regpair, &mut state);
             let f = state.get_register(&Register::F);
 
             let (new_hl, new_f) = add_u16_u16(hl, addend, f);
 
-            write_value16_to_regpair(RegisterPair::HL, new_hl, &mut state);
+            write_value16_to_regpair(RegisterPair::Hl, new_hl, &mut state);
             state.set_register(Register::F, new_f);
         }
         Instruction::AddSpConst(offset) => {
-            let sp = read_value16_from_regpair(RegisterPair::SP, &mut state);
+            let sp = read_value16_from_regpair(RegisterPair::Sp, &mut state);
             let f = state.get_register(&Register::F);
 
             let (new_sp, new_f) = add_u16_i8(sp, Symbolic::from(offset), f);
             let new_f = new_f & Symbolic::from(0x70);
 
-            write_value16_to_regpair(RegisterPair::SP, new_sp, &mut state);
+            write_value16_to_regpair(RegisterPair::Sp, new_sp, &mut state);
             state.set_register(Register::F, new_f);
         }
         Instruction::Add8(tgt) => {

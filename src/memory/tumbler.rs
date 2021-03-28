@@ -51,9 +51,9 @@ impl From<(usize, usize, usize)> for Tumbler {
     }
 }
 
-impl Into<(usize, usize, usize)> for Tumbler {
-    fn into(self) -> (usize, usize, usize) {
-        (self.region_index, self.image_index, self.line_index)
+impl From<Tumbler> for (usize, usize, usize) {
+    fn from(tumbl: Tumbler) -> Self {
+        (tumbl.region_index, tumbl.image_index, tumbl.line_index)
     }
 }
 

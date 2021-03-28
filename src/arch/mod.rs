@@ -52,12 +52,12 @@ use std::str;
 /// Enumeration of all architectures that ship with Retrogram.
 #[derive(Copy, Clone, Serialize, Debug, PartialEq, Eq)]
 pub enum ArchName {
-    SM83,
-    AARCH32,
+    Sm83,
+    AArch32,
 
     /// Test
     #[cfg(test)]
-    TEST,
+    Test,
 }
 
 impl ArchName {
@@ -67,27 +67,27 @@ impl ArchName {
     /// lookup may fail.
     pub fn default_asm(self) -> Option<asm::AssemblerName> {
         match self {
-            ArchName::SM83 => Some(asm::AssemblerName::RGBDS),
-            ArchName::AARCH32 => None,
+            ArchName::Sm83 => Some(asm::AssemblerName::Rgbds),
+            ArchName::AArch32 => None,
 
             #[cfg(test)]
-            ArchName::TEST => None,
+            ArchName::Test => None,
         }
     }
 
     /// Iterate all supported architectures.
     pub fn iter() -> impl IntoIterator<Item = Self> {
-        vec![Self::SM83, Self::AARCH32]
+        vec![Self::Sm83, Self::AArch32]
     }
 
     /// Yield a human-friendly name for this architecture.
     pub fn friendly_name(self) -> &'static str {
         match self {
-            Self::SM83 => "SM83 (LR35902 / \"Game Boy\" Z80)",
-            Self::AARCH32 => "ARM Architecture 32-bit",
+            Self::Sm83 => "SM83 (LR35902 / \"Game Boy\" Z80)",
+            Self::AArch32 => "ARM Architecture 32-bit",
 
             #[cfg(test)]
-            Self::TEST => "Test Architecture",
+            Self::Test => "Test Architecture",
         }
     }
 }
@@ -97,12 +97,12 @@ impl str::FromStr for ArchName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_ref() {
-            "sm83" => Ok(ArchName::SM83),
-            "lr35902" => Ok(ArchName::SM83),
-            "gbz80" => Ok(ArchName::SM83),
-            "arm" => Ok(ArchName::AARCH32),
-            "arm32" => Ok(ArchName::AARCH32),
-            "aarch32" => Ok(ArchName::AARCH32),
+            "sm83" => Ok(ArchName::Sm83),
+            "lr35902" => Ok(ArchName::Sm83),
+            "gbz80" => Ok(ArchName::Sm83),
+            "arm" => Ok(ArchName::AArch32),
+            "arm32" => Ok(ArchName::AArch32),
+            "aarch32" => Ok(ArchName::AArch32),
             _ => Err(()),
         }
     }

@@ -39,9 +39,9 @@ macro_rules! masked_tryconv_impl {
 
 macro_rules! unwrap_impl {
     ($type:ident, $wrapped_type:ident, $into_type:ident) => {
-        impl Into<$into_type> for $type {
-            fn into(self) -> $into_type {
-                self.v.into()
+        impl From<$type> for $into_type {
+            fn from(me: $type) -> $into_type {
+                me.v.into()
             }
         }
     };

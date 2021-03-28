@@ -732,7 +732,7 @@ where
     ))
 }
 
-fn blx_immediate<L>(p: &memory::Pointer<PtrVal>, h: u32, offset: u32) -> aarch32::Result<Disasm<L>>
+fn blx_immediate<L>(p: &memory::Pointer<PtrVal>, h: u32, offset: u32) -> Disasm<L>
 where
     L: Literal,
 {
@@ -748,15 +748,15 @@ where
     target.set_arch_context(THUMB_STATE, reg::Symbolic::from(1));
     let jumpref = refr::new_static_ref(p.clone(), target.clone(), refkind::Subroutine);
 
-    Ok(Disasm::new(
+    Disasm::new(
         Instruction::new("BLX", vec![op::cptr(target)]),
         4,
         Flow::Calling,
         vec![jumpref],
-    ))
+    )
 }
 
-fn bkpt<L>(instr: u32) -> aarch32::Result<Disasm<L>>
+fn bkpt<L>(instr: u32) -> Disasm<L>
 where
     L: Literal,
 {
@@ -764,12 +764,12 @@ where
     let low_immed = instr & 0x0000_000F;
     let immed = high_immed | low_immed;
 
-    Ok(Disasm::new(
+    Disasm::new(
         Instruction::new("BKPT", vec![op::lit(immed)]),
         4,
         Flow::Normal,
         vec![],
-    ))
+    )
 }
 
 fn cdp<L>(
@@ -880,7 +880,7 @@ where
     ))
 }
 
-fn cps<L>(rn_val: u32, lsimmed: u32) -> aarch32::Result<Disasm<L>>
+fn cps<L>(rn_val: u32, lsimmed: u32) -> Disasm<L>
 where
     L: Literal,
 {
@@ -916,25 +916,25 @@ where
 
     //TODO: reject bit 16 and bit 5 not being zero, reject invalid immod/mmod
     match (mode, iflags.as_ref()) {
-        (0, "") => Ok(Disasm::new(
+        (0, "") => Disasm::new(
             Instruction::new(&format!("CPS{}", effect), vec![]),
             4,
             Flow::Normal,
             vec![],
-        )),
-        (_, "") => Ok(Disasm::new(
+        ),
+        (_, "") => Disasm::new(
             Instruction::new(&format!("CPS{}", effect), vec![op::lit(mode)]),
             4,
             Flow::Normal,
             vec![],
-        )),
-        (0, _) => Ok(Disasm::new(
+        ),
+        (0, _) => Disasm::new(
             Instruction::new(&format!("CPS{}", effect), vec![op::sym(&iflags)]),
             4,
             Flow::Normal,
             vec![],
-        )),
-        (_, _) => Ok(Disasm::new(
+        ),
+        (_, _) => Disasm::new(
             Instruction::new(
                 &format!("CPS{}", effect),
                 vec![op::sym(&iflags), op::lit(mode)],
@@ -942,7 +942,7 @@ where
             4,
             Flow::Normal,
             vec![],
-        )),
+        ),
     }
 }
 
@@ -1365,11 +1365,11 @@ where
         match (
             cond, opcat, immed_mode, pbit, u, b, w, l, special, shiftop, regshift,
         ) {
-            (15, 0, 0, 1, 0, 0, 0, 0, _, _, _) => cps(rn_val, lsimmed), //Change Processor State / Set Endianness
+            (15, 0, 0, 1, 0, 0, 0, 0, _, _, _) => Ok(cps(rn_val, lsimmed)), //Change Processor State / Set Endianness
             (15, 1, x, 1, u, 1, 0, 1, _, _, _) => pld(x, u, rn, shift_imm, regshift, rm, lsimmed), //Cache Preload
             (15, 2, 0, p, u, 1, w, 0, _, _, _) => Err(analysis::Error::NotYetImplemented), //Save Return State
             (15, 2, 0, p, u, 0, w, 1, _, _, _) => Err(analysis::Error::NotYetImplemented), //Return from Exception
-            (15, 2, 1, h, _, _, _, _, _, _, _) => blx_immediate(p, h, instr),
+            (15, 2, 1, h, _, _, _, _, _, _, _) => Ok(blx_immediate(p, h, instr)),
             (15, 3, 0, q, u, n, w, l, _, _, _) => {
                 ldst_coproc(p, cond, q, u, n, w, l, rn, rd_val, rs_val, data_immed)
             }
@@ -1380,7 +1380,7 @@ where
                 crt(cond, copcode1, d, rn_val, rd, rs_val, copcode2, rm_val)
             }
             (15, _, _, _, _, _, _, _, _, _, _) => Err(analysis::Error::NotYetImplemented), //Unconditionally executed extension space
-            (14, 0, 0, 1, 0, 0, 1, 0, 0, 3, 1) => bkpt(instr), //Software Breakpoint
+            (14, 0, 0, 1, 0, 0, 1, 0, 0, 3, 1) => Ok(bkpt(instr)), //Software Breakpoint
             (_, 0, 0, 0, _, _, _, _, 1, 0, 1) => mul(p, cond, opcode, rn, rd, rs, rm),
             (_, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1) => bx(p, cond, rm), //BX to Thumb
             (_, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0) => bxj(cond, rm),   //BX to Jazelle DBX

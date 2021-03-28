@@ -68,9 +68,9 @@ impl From<&str> for Literal {
 }
 
 #[derive(Copy, Clone)]
-pub struct RGBDS();
+pub struct Rgbds();
 
-impl Assembler for RGBDS {
+impl Assembler for Rgbds {
     type Literal = Literal;
 
     fn emit_comment(&self, stream: &mut dyn Write, comment_data: &str) -> Result<()> {

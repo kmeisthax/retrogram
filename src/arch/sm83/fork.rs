@@ -40,8 +40,8 @@ pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> Result<(HashSet<Requisite>
 
                 (prereq_list, true)
             }
-            Ok((Instruction::LdHLSP(_), _)) => (vec![], true),
-            Ok((Instruction::LdSPHL, _)) => (vec![], true),
+            Ok((Instruction::LdHlSp(_), _)) => (vec![], true),
+            Ok((Instruction::LdSpHl, _)) => (vec![], true),
             Ok((Instruction::LdWriteStatic(_), _)) => (vec![], true),
             Ok((Instruction::LdWritePtr(ptr_regpair), _)) => (ptr_regpair.into_requisites(), true),
             Ok((Instruction::LdWriteHiStatic(_), _)) => (vec![], true),
@@ -52,7 +52,7 @@ pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> Result<(HashSet<Requisite>
             Ok((Instruction::LdReadHiPtr, _)) => (vec![], true),
             Ok((Instruction::LdConst8(tgt, _), _)) => (tgt.into_memory_requisites(), true),
             Ok((Instruction::LdConst16(_regpair, _), _)) => (vec![], true),
-            Ok((Instruction::LdWriteStaticSP(_), _)) => (vec![], true),
+            Ok((Instruction::LdWriteStaticSp(_), _)) => (vec![], true),
             Ok((Instruction::Inc16(_), _)) => (vec![], true),
             Ok((Instruction::Inc8(tgt), _)) => (tgt.into_memory_requisites(), true),
             Ok((Instruction::Dec16(_), _)) => (vec![], true),
@@ -63,25 +63,25 @@ pub fn prereq(p: PtrVal, mem: &Bus, state: &State) -> Result<(HashSet<Requisite>
             Ok((Instruction::JumpRelative(_, cond), _)) => {
                 (cond.map(|c| c.into_requisite()).into_iter().collect(), true)
             }
-            Ok((Instruction::JumpDynamic, _)) => (RegisterPair::HL.into_requisites(), true),
+            Ok((Instruction::JumpDynamic, _)) => (RegisterPair::Hl.into_requisites(), true),
             Ok((Instruction::Call(_, cond), _)) => (
                 cond.map(|c| c.into_requisite())
                     .into_iter()
-                    .chain(RegisterPair::SP.into_requisites().into_iter())
+                    .chain(RegisterPair::Sp.into_requisites().into_iter())
                     .collect(),
                 true,
             ),
-            Ok((Instruction::CallRst(_), _)) => (RegisterPair::SP.into_requisites(), true),
-            Ok((Instruction::Push(_), _)) => (RegisterPair::SP.into_requisites(), true),
-            Ok((Instruction::Pop(_), _)) => (RegisterPair::SP.into_requisites(), true),
+            Ok((Instruction::CallRst(_), _)) => (RegisterPair::Sp.into_requisites(), true),
+            Ok((Instruction::Push(_), _)) => (RegisterPair::Sp.into_requisites(), true),
+            Ok((Instruction::Pop(_), _)) => (RegisterPair::Sp.into_requisites(), true),
             Ok((Instruction::Return(cond), _)) => (
                 cond.map(|c| c.into_requisite())
                     .into_iter()
-                    .chain(RegisterPair::SP.into_requisites().into_iter())
+                    .chain(RegisterPair::Sp.into_requisites().into_iter())
                     .collect(),
                 true,
             ),
-            Ok((Instruction::ReturnFromInterrupt, _)) => (RegisterPair::SP.into_requisites(), true),
+            Ok((Instruction::ReturnFromInterrupt, _)) => (RegisterPair::Sp.into_requisites(), true),
             Ok((Instruction::Add16(_), _)) => (vec![], true),
             Ok((Instruction::AddSpConst(_), _)) => (vec![], true),
             Ok((Instruction::Add8(tgt), _)) => (tgt.into_memory_requisites(), true),

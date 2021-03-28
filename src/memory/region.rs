@@ -5,7 +5,7 @@ use crate::analysis::{Requisite, Trace};
 use crate::arch::Architecture;
 use crate::maths::CheckedSub;
 use crate::memory::bss::UnknownImage;
-use crate::memory::rombin::ROMBinaryImage;
+use crate::memory::rombin::RomBinaryImage;
 use crate::memory::{Behavior, Desegmentable, Endianness, Image, Offset, Pointer, Tumbler};
 use crate::reg::{State, Symbolic};
 use crate::{memory, reg};
@@ -153,7 +153,7 @@ where
             Err(_) => panic!("Data is too long for offset"),
         };
 
-        self_mem.install_rom_image(at, offset, Box::new(ROMBinaryImage::from_data(data)));
+        self_mem.install_rom_image(at, offset, Box::new(RomBinaryImage::from_data(data)));
 
         self_mem
     }
@@ -274,9 +274,9 @@ where
         self.views.push(Region {
             start,
             length: length.clone(),
-            read_memtype: Behavior::MappedIO,
-            write_memtype: Behavior::MappedIO,
-            exec_memtype: Behavior::MappedIO,
+            read_memtype: Behavior::MappedIo,
+            write_memtype: Behavior::MappedIo,
+            exec_memtype: Behavior::MappedIo,
             image: Box::new(UnknownImage::new(length.try_into().unwrap())),
         });
     }
@@ -305,9 +305,9 @@ where
             start,
             length,
             read_memtype: Behavior::Memory,
-            write_memtype: Behavior::MappedIO,
+            write_memtype: Behavior::MappedIo,
             exec_memtype: Behavior::Memory,
-            image: Box::new(ROMBinaryImage::read_bytes(file)?),
+            image: Box::new(RomBinaryImage::read_bytes(file)?),
         });
 
         Ok(())

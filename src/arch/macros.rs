@@ -8,17 +8,17 @@
 macro_rules! with_architecture {
     ($erased:ident, |$arch:ident| $callback:block) => {
         match $erased.arch() {
-            crate::arch::ArchName::SM83 => {
-                let $arch = crate::arch::sm83::SM83();
+            crate::arch::ArchName::Sm83 => {
+                let $arch = crate::arch::sm83::Sm83();
                 $callback
             }
-            crate::arch::ArchName::AARCH32 => {
+            crate::arch::ArchName::AArch32 => {
                 let $arch = crate::arch::aarch32::AArch32();
                 $callback
             }
 
             #[cfg(test)]
-            crate::arch::ArchName::TEST => {
+            crate::arch::ArchName::Test => {
                 let $arch = crate::arch::tests::TestArchitecture;
                 $callback
             }
@@ -36,22 +36,22 @@ macro_rules! with_prog_architecture {
     ($prog:ident, |$plat:ident, $arch:ident, $asm:ident| $callback:block) => {
         match crate::cli::resolve_program_config($prog) {
             Ok((
-                crate::arch::ArchName::SM83,
-                crate::platform::PlatformName::GB,
-                crate::asm::AssemblerName::RGBDS,
+                crate::arch::ArchName::Sm83,
+                crate::platform::PlatformName::Gb,
+                crate::asm::AssemblerName::Rgbds,
             )) => {
-                let $plat = crate::platform::gb::GBPlatform();
-                let $asm = crate::asm::rgbds::RGBDS();
-                let $arch = crate::arch::sm83::SM83();
+                let $plat = crate::platform::gb::GbPlatform();
+                let $asm = crate::asm::rgbds::Rgbds();
+                let $arch = crate::arch::sm83::Sm83();
                 $callback
             }
             Ok((
-                crate::arch::ArchName::AARCH32,
-                crate::platform::PlatformName::AGB,
-                crate::asm::AssemblerName::ARMIPS,
+                crate::arch::ArchName::AArch32,
+                crate::platform::PlatformName::Agb,
+                crate::asm::AssemblerName::Armips,
             )) => {
-                let $plat = crate::platform::agb::AGBPlatform();
-                let $asm = crate::asm::armips::ARMIPS();
+                let $plat = crate::platform::agb::AgbPlatform();
+                let $asm = crate::asm::armips::Armips();
                 let $arch = crate::arch::aarch32::AArch32();
                 $callback
             }

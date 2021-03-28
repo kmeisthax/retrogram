@@ -203,7 +203,7 @@ impl Architecture for AArch32 {
     type Offset = Offset;
 
     fn name(&self) -> ArchName {
-        ArchName::AARCH32
+        ArchName::AArch32
     }
 
     fn parse_architectural_contexts(

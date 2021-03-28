@@ -21,7 +21,7 @@ impl Architecture for TestArchitecture {
     type Offset = u32;
 
     fn name(&self) -> ArchName {
-        ArchName::SM83
+        ArchName::Test
     }
 
     fn parse_architectural_contexts(

@@ -492,10 +492,10 @@ where
     }
 }
 
-type XOROut<T, R> = <T as BitXor<R>>::Output;
+type XorOut<T, R> = <T as BitXor<R>>::Output;
 
 #[allow(dead_code)] //rustc thinks this is unused when it clearly is...
-type SymXOROut<T, R> = Symbolic<<T as BitXor<R>>::Output>;
+type SymXorOut<T, R> = Symbolic<<T as BitXor<R>>::Output>;
 
 impl<T> Symbolic<T>
 where
@@ -517,23 +517,23 @@ where
     ) -> (Symbolic<<T as Add<R>>::Output>, Option<bool>)
     where
         T: Add<R> + BitXor<R> + BitAnd<R>,
-        XOROut<T, R>: Clone
+        XorOut<T, R>: Clone
             + Zero
             + One
             + BoundWidth<u32>
-            + Shl<u32, Output = XOROut<T, R>>
-            + Not<Output = XOROut<T, R>>,
-        Symbolic<T>: BitXor<Symbolic<R>, Output = SymXOROut<T, R>>
-            + BitAnd<Symbolic<R>, Output = SymXOROut<T, R>>,
-        SymXOROut<T, R>: Clone
+            + Shl<u32, Output = XorOut<T, R>>
+            + Not<Output = XorOut<T, R>>,
+        Symbolic<T>: BitXor<Symbolic<R>, Output = SymXorOut<T, R>>
+            + BitAnd<Symbolic<R>, Output = SymXorOut<T, R>>,
+        SymXorOut<T, R>: Clone
             + BoundWidth<u32>
-            + Shl<u32, Output = SymXOROut<T, R>>
-            + BitAnd<Output = SymXOROut<T, R>>
-            + BitXor<Output = SymXOROut<T, R>>
-            + BitOr<Output = SymXOROut<T, R>>
-            + Not<Output = SymXOROut<T, R>>,
+            + Shl<u32, Output = SymXorOut<T, R>>
+            + BitAnd<Output = SymXorOut<T, R>>
+            + BitXor<Output = SymXorOut<T, R>>
+            + BitOr<Output = SymXorOut<T, R>>
+            + Not<Output = SymXorOut<T, R>>,
         <T as BitXor<R>>::Output: Bitwise,
-        Symbolic<<T as Add<R>>::Output>: Convertable<XOROut<T, R>>,
+        Symbolic<<T as Add<R>>::Output>: Convertable<XorOut<T, R>>,
         Symbolic<R>: Clone,
     {
         //Implementation notes:
@@ -551,11 +551,11 @@ where
         //    we need this trait that we don't use.
         // 3. Clippy really hates that we're using binary operations in `Add`.
 
-        let bits: u32 = XOROut::<T, R>::bound_width();
+        let bits: u32 = XorOut::<T, R>::bound_width();
         let half_adds = self.clone() ^ rhs.clone();
         let half_carries = self & rhs;
-        let zero: XOROut<T, R> = XOROut::<T, R>::zero();
-        let one: XOROut<T, R> = XOROut::<T, R>::one();
+        let zero: XorOut<T, R> = XorOut::<T, R>::zero();
+        let one: XorOut<T, R> = XorOut::<T, R>::one();
         let mut carry = match carry {
             Some(false) => Symbolic::from(zero),
             Some(true) => Symbolic::from(one),
@@ -564,7 +564,7 @@ where
         let mut sum = carry.clone();
 
         for bit in 0..bits {
-            let mask = Symbolic::from(XOROut::<T, R>::one() << bit);
+            let mask = Symbolic::from(XorOut::<T, R>::one() << bit);
             sum = sum | half_adds.clone() & mask.clone() ^ carry.clone() & mask.clone();
             carry = (carry & half_adds.clone() & mask.clone() | half_carries.clone() & mask) << 1;
         }
@@ -590,23 +590,23 @@ where
     where
         T: Add<R> + Sub<R> + BitXor<R> + BitAnd<R>,
         R: Not,
-        XOROut<T, R>: Clone
+        XorOut<T, R>: Clone
             + Zero
             + One
             + BoundWidth<u32>
-            + Shl<u32, Output = XOROut<T, R>>
-            + Not<Output = XOROut<T, R>>,
-        Symbolic<T>: BitXor<Symbolic<R>, Output = SymXOROut<T, R>>
-            + BitAnd<Symbolic<R>, Output = SymXOROut<T, R>>,
-        SymXOROut<T, R>: Clone
+            + Shl<u32, Output = XorOut<T, R>>
+            + Not<Output = XorOut<T, R>>,
+        Symbolic<T>: BitXor<Symbolic<R>, Output = SymXorOut<T, R>>
+            + BitAnd<Symbolic<R>, Output = SymXorOut<T, R>>,
+        SymXorOut<T, R>: Clone
             + BoundWidth<u32>
-            + Shl<u32, Output = SymXOROut<T, R>>
-            + BitAnd<Output = SymXOROut<T, R>>
-            + BitXor<Output = SymXOROut<T, R>>
-            + BitOr<Output = SymXOROut<T, R>>
-            + Not<Output = SymXOROut<T, R>>,
+            + Shl<u32, Output = SymXorOut<T, R>>
+            + BitAnd<Output = SymXorOut<T, R>>
+            + BitXor<Output = SymXorOut<T, R>>
+            + BitOr<Output = SymXorOut<T, R>>
+            + Not<Output = SymXorOut<T, R>>,
         <T as BitXor<R>>::Output: Bitwise,
-        Symbolic<<T as Add<R>>::Output>: Convertable<XOROut<T, R>>,
+        Symbolic<<T as Add<R>>::Output>: Convertable<XorOut<T, R>>,
         Symbolic<<T as Sub<R>>::Output>: Convertable<<T as Add<R>>::Output>,
         Symbolic<R>:
             Clone + Not<Output = Symbolic<<R as Not>::Output>> + Convertable<<R as Not>::Output>,
@@ -631,25 +631,25 @@ where
 impl<T, R> Add<Symbolic<R>> for Symbolic<T>
 where
     T: Clone + Add<R> + BitXor<R> + BitAnd<R>,
-    XOROut<T, R>: Clone
+    XorOut<T, R>: Clone
         + Zero
         + One
         + BoundWidth<u32>
-        + Shl<u32, Output = XOROut<T, R>>
-        + Not<Output = XOROut<T, R>>,
+        + Shl<u32, Output = XorOut<T, R>>
+        + Not<Output = XorOut<T, R>>,
     Symbolic<T>: Clone
-        + BitXor<Symbolic<R>, Output = SymXOROut<T, R>>
-        + BitAnd<Symbolic<R>, Output = SymXOROut<T, R>>,
+        + BitXor<Symbolic<R>, Output = SymXorOut<T, R>>
+        + BitAnd<Symbolic<R>, Output = SymXorOut<T, R>>,
     Symbolic<R>: Clone,
-    SymXOROut<T, R>: Clone
+    SymXorOut<T, R>: Clone
         + BoundWidth<u32>
-        + Shl<u32, Output = SymXOROut<T, R>>
-        + BitAnd<Output = SymXOROut<T, R>>
-        + BitXor<Output = SymXOROut<T, R>>
-        + BitOr<Output = SymXOROut<T, R>>
-        + Not<Output = SymXOROut<T, R>>,
+        + Shl<u32, Output = SymXorOut<T, R>>
+        + BitAnd<Output = SymXorOut<T, R>>
+        + BitXor<Output = SymXorOut<T, R>>
+        + BitOr<Output = SymXorOut<T, R>>
+        + Not<Output = SymXorOut<T, R>>,
     <T as BitXor<R>>::Output: Bitwise,
-    Symbolic<<T as Add<R>>::Output>: Convertable<XOROut<T, R>>,
+    Symbolic<<T as Add<R>>::Output>: Convertable<XorOut<T, R>>,
 {
     type Output = Symbolic<<T as Add<R>>::Output>;
 
@@ -663,24 +663,24 @@ impl<T, R> Sub<Symbolic<R>> for Symbolic<T>
 where
     T: Clone + Add<R> + Sub<R> + BitXor<R> + BitAnd<R>,
     R: Not,
-    XOROut<T, R>: Clone
+    XorOut<T, R>: Clone
         + Zero
         + One
         + BoundWidth<u32>
-        + Shl<u32, Output = XOROut<T, R>>
-        + Not<Output = XOROut<T, R>>,
+        + Shl<u32, Output = XorOut<T, R>>
+        + Not<Output = XorOut<T, R>>,
     Symbolic<T>: Clone
-        + BitXor<Symbolic<R>, Output = SymXOROut<T, R>>
-        + BitAnd<Symbolic<R>, Output = SymXOROut<T, R>>,
-    SymXOROut<T, R>: Clone
+        + BitXor<Symbolic<R>, Output = SymXorOut<T, R>>
+        + BitAnd<Symbolic<R>, Output = SymXorOut<T, R>>,
+    SymXorOut<T, R>: Clone
         + BoundWidth<u32>
-        + Shl<u32, Output = SymXOROut<T, R>>
-        + BitAnd<Output = SymXOROut<T, R>>
-        + BitXor<Output = SymXOROut<T, R>>
-        + BitOr<Output = SymXOROut<T, R>>
-        + Not<Output = SymXOROut<T, R>>,
+        + Shl<u32, Output = SymXorOut<T, R>>
+        + BitAnd<Output = SymXorOut<T, R>>
+        + BitXor<Output = SymXorOut<T, R>>
+        + BitOr<Output = SymXorOut<T, R>>
+        + Not<Output = SymXorOut<T, R>>,
     <T as BitXor<R>>::Output: Bitwise,
-    Symbolic<<T as Add<R>>::Output>: Convertable<XOROut<T, R>>,
+    Symbolic<<T as Add<R>>::Output>: Convertable<XorOut<T, R>>,
     Symbolic<<T as Sub<R>>::Output>: Convertable<<T as Add<R>>::Output>,
     Symbolic<R>:
         Clone + Not<Output = Symbolic<<R as Not>::Output>> + Convertable<<R as Not>::Output>,

@@ -133,7 +133,7 @@ pub type SignedValue = i8;
 pub type Data = u8;
 
 /// The compatible memory model type necessary to analyze GBz80 programs.
-pub type Bus = memory::Memory<SM83>;
+pub type Bus = memory::Memory<Sm83>;
 
 /// The pointer type necessary to model GBz80 pointers.
 pub type BusAddress = memory::Pointer<PtrVal>;
@@ -157,14 +157,14 @@ pub type Section<L> = ast::Section<L, PtrVal, Data, Offset>;
 
 /// The register state type which represents the execution state of a given
 /// SM83 program.
-pub type State = reg::State<SM83>;
+pub type State = reg::State<Sm83>;
 
 /// The prerequisites necessary to execute a given SM83 program.
-pub type Requisite = analysis::Requisite<SM83>;
+pub type Requisite = analysis::Requisite<Sm83>;
 
 /// The trace log type which represents the past execution of a given SM83
 /// program.
-pub type Trace = analysis::Trace<SM83>;
+pub type Trace = analysis::Trace<Sm83>;
 
 /// The disasm type which represents a successful disassembly of a single
 /// instruction.
@@ -173,13 +173,13 @@ pub type Trace = analysis::Trace<SM83>;
 /// is an extension of the generic AST literal trait.
 pub type Disasm<L> = analysis::Disasm<L, PtrVal, Offset>;
 
-pub type Result<T> = analysis::Result<T, SM83>;
+pub type Result<T> = analysis::Result<T, Sm83>;
 
 /// Architectural type for SM83
 #[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct SM83();
+pub struct Sm83();
 
-impl Architecture for SM83 {
+impl Architecture for Sm83 {
     type Register = Register;
     type Word = Value;
     type SignedWord = SignedValue;
@@ -188,7 +188,7 @@ impl Architecture for SM83 {
     type Offset = Offset;
 
     fn name(&self) -> ArchName {
-        ArchName::SM83
+        ArchName::Sm83
     }
 
     fn parse_architectural_contexts(

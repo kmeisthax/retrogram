@@ -8,14 +8,14 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::io;
 
-pub struct ROMBinaryImage<AR>
+pub struct RomBinaryImage<AR>
 where
     AR: Architecture,
 {
     data: Vec<AR::Byte>,
 }
 
-impl<AR> ROMBinaryImage<AR>
+impl<AR> RomBinaryImage<AR>
 where
     AR: Architecture,
 {
@@ -48,7 +48,7 @@ where
     }
 }
 
-impl<AR> Image<AR> for ROMBinaryImage<AR>
+impl<AR> Image<AR> for RomBinaryImage<AR>
 where
     AR: Architecture,
     AR::Offset: Offset<AR::PtrVal> + TryInto<usize> + TryFrom<usize>,

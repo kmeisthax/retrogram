@@ -45,7 +45,7 @@ pub fn parse_symbol_file(
     _prog: &project::Program,
     _dsrc: &project::DataSource,
     files: &mut [io::BufReader<fs::File>],
-    db: &mut Database<sm83::SM83>,
+    db: &mut Database<sm83::Sm83>,
 ) -> io::Result<()> {
     for file in files {
         for line in file.lines() {

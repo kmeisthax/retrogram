@@ -76,9 +76,9 @@ impl From<&str> for Literal {
 }
 
 #[derive(Copy, Clone)]
-pub struct ARMIPS();
+pub struct Armips();
 
-impl Assembler for ARMIPS {
+impl Assembler for Armips {
     type Literal = Literal;
 
     fn emit_comment(&self, stream: &mut dyn Write, comment_data: &str) -> Result<()> {

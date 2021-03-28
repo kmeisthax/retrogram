@@ -5,9 +5,9 @@ use crate::memory::Behavior;
 use crate::platform::Platform;
 use std::io;
 
-pub struct AGBPlatform();
+pub struct AgbPlatform();
 
-impl Platform<aarch32::AArch32> for AGBPlatform {
+impl Platform<aarch32::AArch32> for AgbPlatform {
     fn construct_platform<F>(&self, file: &mut F) -> io::Result<aarch32::Bus>
     where
         F: io::Read + io::Seek,

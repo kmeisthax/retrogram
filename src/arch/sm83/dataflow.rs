@@ -25,17 +25,17 @@ pub fn dataflow(
             src.into_register_requisites(),
             tgt.into_register_requisites(),
         ),
-        Ok((Instruction::LdHLSP(_), _)) => (
-            RegisterPair::HL.into_requisites(),
-            RegisterPair::SP
+        Ok((Instruction::LdHlSp(_), _)) => (
+            RegisterPair::Hl.into_requisites(),
+            RegisterPair::Sp
                 .into_requisites()
                 .into_iter()
                 .chain(vec![Register::F.into_requisite()].into_iter())
                 .collect(),
         ),
-        Ok((Instruction::LdSPHL, _)) => (
-            RegisterPair::SP.into_requisites(),
-            RegisterPair::HL.into_requisites(),
+        Ok((Instruction::LdSpHl, _)) => (
+            RegisterPair::Sp.into_requisites(),
+            RegisterPair::Hl.into_requisites(),
         ),
         Ok((Instruction::LdWriteStatic(tgt), _)) => (
             vec![Register::A.into_requisite()],
@@ -71,8 +71,8 @@ pub fn dataflow(
         ),
         Ok((Instruction::LdConst8(tgt, _), _)) => (vec![], tgt.into_register_requisites()),
         Ok((Instruction::LdConst16(regpair, _), _)) => (vec![], regpair.into_requisites()),
-        Ok((Instruction::LdWriteStaticSP(tgt), _)) => (
-            RegisterPair::SP.into_requisites(),
+        Ok((Instruction::LdWriteStaticSp(tgt), _)) => (
+            RegisterPair::Sp.into_requisites(),
             static_memory_requisite(tgt),
         ),
         Ok((Instruction::Inc16(regpair), _)) => {
@@ -97,71 +97,71 @@ pub fn dataflow(
             (vec![Register::F.into_requisite()], vec![])
         }
         Ok((Instruction::JumpRelative(_, _), _)) => (vec![], vec![]),
-        Ok((Instruction::JumpDynamic, _)) => (RegisterPair::HL.into_requisites(), vec![]),
+        Ok((Instruction::JumpDynamic, _)) => (RegisterPair::Hl.into_requisites(), vec![]),
         Ok((Instruction::Call(_, cond), _)) if cond.is_some() => (
-            RegisterPair::SP
+            RegisterPair::Sp
                 .into_requisites()
                 .into_iter()
                 .chain(vec![Register::F.into_requisite()].into_iter())
                 .collect(),
-            RegisterPair::SP.into_requisites(),
+            RegisterPair::Sp.into_requisites(),
         ),
         Ok((Instruction::Call(_, _), _)) => (
-            RegisterPair::SP.into_requisites(),
-            RegisterPair::SP.into_requisites(),
+            RegisterPair::Sp.into_requisites(),
+            RegisterPair::Sp.into_requisites(),
         ),
         Ok((Instruction::CallRst(_), _)) => (
-            RegisterPair::SP.into_requisites(),
-            RegisterPair::SP.into_requisites(),
+            RegisterPair::Sp.into_requisites(),
+            RegisterPair::Sp.into_requisites(),
         ),
         Ok((Instruction::Push(pair), _)) => (
-            RegisterPair::SP
+            RegisterPair::Sp
                 .into_requisites()
                 .into_iter()
                 .chain(pair.into_requisites().into_iter())
                 .collect(),
-            RegisterPair::SP.into_requisites(),
+            RegisterPair::Sp.into_requisites(),
         ),
         Ok((Instruction::Pop(pair), _)) => (
-            RegisterPair::SP.into_requisites(),
-            RegisterPair::SP
+            RegisterPair::Sp.into_requisites(),
+            RegisterPair::Sp
                 .into_requisites()
                 .into_iter()
                 .chain(pair.into_requisites().into_iter())
                 .collect(),
         ),
         Ok((Instruction::Return(cond), _)) if cond.is_some() => (
-            RegisterPair::SP
+            RegisterPair::Sp
                 .into_requisites()
                 .into_iter()
                 .chain(vec![Register::F.into_requisite()].into_iter())
                 .collect(),
-            RegisterPair::SP.into_requisites(),
+            RegisterPair::Sp.into_requisites(),
         ),
         Ok((Instruction::Return(_), _)) => (
-            RegisterPair::SP.into_requisites(),
-            RegisterPair::SP.into_requisites(),
+            RegisterPair::Sp.into_requisites(),
+            RegisterPair::Sp.into_requisites(),
         ),
         Ok((Instruction::ReturnFromInterrupt, _)) => (
-            RegisterPair::SP.into_requisites(),
-            RegisterPair::SP.into_requisites(),
+            RegisterPair::Sp.into_requisites(),
+            RegisterPair::Sp.into_requisites(),
         ),
         Ok((Instruction::Add16(pair), _)) => (
-            RegisterPair::HL
+            RegisterPair::Hl
                 .into_requisites()
                 .into_iter()
                 .chain(pair.into_requisites().into_iter())
                 .chain(vec![Register::F.into_requisite()])
                 .collect(),
-            RegisterPair::HL
+            RegisterPair::Hl
                 .into_requisites()
                 .into_iter()
                 .chain(vec![Register::F.into_requisite()])
                 .collect(),
         ),
         Ok((Instruction::AddSpConst(_), _)) => (
-            RegisterPair::SP.into_requisites(),
-            RegisterPair::SP
+            RegisterPair::Sp.into_requisites(),
+            RegisterPair::Sp
                 .into_requisites()
                 .into_iter()
                 .chain(vec![Register::F.into_requisite()])

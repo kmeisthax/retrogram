@@ -28,14 +28,14 @@ pub enum AbstractOperand {
     Indirect(&'static str),
 }
 
-impl<L> Into<Operand<L>> for AbstractOperand
+impl<L> From<AbstractOperand> for Operand<L>
 where
     L: Literal,
 {
-    fn into(self) -> Operand<L> {
-        match self {
-            Self::Symbol(s) => op::sym(s),
-            Self::Indirect(is) => op::indir(op::sym(is)),
+    fn from(op: AbstractOperand) -> Self {
+        match op {
+            AbstractOperand::Symbol(s) => op::sym(s),
+            AbstractOperand::Indirect(is) => op::indir(op::sym(is)),
         }
     }
 }
@@ -64,7 +64,7 @@ where
             Flow::Normal,
             vec![],
         ),
-        (Instruction::LdHLSP(sp_offset), offset) => Disasm::new(
+        (Instruction::LdHlSp(sp_offset), offset) => Disasm::new(
             inst::new(
                 "ld",
                 vec![op::sym("hl"), op::addop(op::sym("sp"), op::lit(sp_offset))],
@@ -73,7 +73,7 @@ where
             Flow::Normal,
             vec![],
         ),
-        (Instruction::LdSPHL, offset) => Disasm::new(
+        (Instruction::LdSpHl, offset) => Disasm::new(
             inst::new("ld", vec![op::sym("sp"), op::sym("hl")]),
             offset,
             Flow::Normal,
@@ -163,7 +163,7 @@ where
             Flow::Normal,
             vec![],
         ),
-        (Instruction::LdWriteStaticSP(sp_base), offset) => Disasm::new(
+        (Instruction::LdWriteStaticSp(sp_base), offset) => Disasm::new(
             inst::new(
                 "ld",
                 vec![op::indir(op::dptr(p.contextualize(sp_base))), op::sym("sp")],

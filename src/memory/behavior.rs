@@ -20,14 +20,14 @@ pub enum Behavior {
     /// 4. Execution is semantically valid
     Memory,
 
-    /// MappedIO behavior corresponds to regions which do not obey memory
+    /// Mapped I/O behavior corresponds to regions which do not obey memory
     /// semantics:
     ///
     /// 1. Writes and reads have arbitrary semantic value
     /// 2. Repeated writes and reads have semantic value regardless of the value
     ///    written or read
     /// 3. Execution is semantically invalid (though may be possible)
-    MappedIO,
+    MappedIo,
 
     /// Invalid behavior corresponds to regions which do not respond to this
     /// particular action. If multiple regions are valid for a given address,

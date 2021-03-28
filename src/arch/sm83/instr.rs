@@ -1,7 +1,7 @@
 //! Instruction enumeration
 
 use crate::analysis::{Error, Requisite};
-use crate::arch::sm83::{Bus, BusAddress, Offset, PtrVal, Register, Result, SM83};
+use crate::arch::sm83::{Bus, BusAddress, Offset, PtrVal, Register, Result, Sm83};
 use crate::ast::{Literal, Operand};
 use crate::reg::Symbolic;
 
@@ -9,7 +9,7 @@ use crate::reg::Symbolic;
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Target8 {
     Register(Register),
-    IndirectHL,
+    IndirectHl,
 }
 
 impl Target8 {
@@ -19,15 +19,15 @@ impl Target8 {
     {
         match self {
             Target8::Register(reg) => reg.into_operand(),
-            Target8::IndirectHL => Operand::indir(Operand::sym("hl")),
+            Target8::IndirectHl => Operand::indir(Operand::sym("hl")),
         }
     }
 
     /// Turn the target into a list of memory requisites.
-    pub fn into_memory_requisites(self) -> Vec<Requisite<SM83>> {
+    pub fn into_memory_requisites(self) -> Vec<Requisite<Sm83>> {
         match self {
             Target8::Register(_) => vec![],
-            Target8::IndirectHL => vec![
+            Target8::IndirectHl => vec![
                 Requisite::register(Register::H, 0xFF),
                 Requisite::register(Register::L, 0xFF),
             ],
@@ -35,10 +35,10 @@ impl Target8 {
     }
 
     /// Turn the target into a list of register requisites.
-    pub fn into_register_requisites(self) -> Vec<Requisite<SM83>> {
+    pub fn into_register_requisites(self) -> Vec<Requisite<Sm83>> {
         match self {
             Target8::Register(r) => vec![Requisite::register(r, 0xFF)],
-            Target8::IndirectHL => vec![
+            Target8::IndirectHl => vec![
                 Requisite::register(Register::H, 0xFF),
                 Requisite::register(Register::L, 0xFF),
             ],
@@ -54,20 +54,20 @@ pub static TARGET8_ALU_REG: [Target8; 8] = [
     Target8::Register(Register::E),
     Target8::Register(Register::H),
     Target8::Register(Register::L),
-    Target8::IndirectHL,
+    Target8::IndirectHl,
     Target8::Register(Register::A),
 ];
 
 /// A target location for a 16-bit value.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RegisterPair {
-    BC,
-    DE,
-    HL,
-    AF,
-    SP,
-    HLIncrement,
-    HLDecrement,
+    Bc,
+    De,
+    Hl,
+    Af,
+    Sp,
+    HlIncrement,
+    HlDecrement,
 }
 
 impl RegisterPair {
@@ -76,43 +76,43 @@ impl RegisterPair {
         L: Literal,
     {
         match self {
-            Self::BC => Operand::sym("bc"),
-            Self::DE => Operand::sym("de"),
-            Self::HL => Operand::sym("hl"),
-            Self::AF => Operand::sym("af"),
-            Self::SP => Operand::sym("sp"),
-            Self::HLIncrement => Operand::sym("hli"),
-            Self::HLDecrement => Operand::sym("hld"),
+            Self::Bc => Operand::sym("bc"),
+            Self::De => Operand::sym("de"),
+            Self::Hl => Operand::sym("hl"),
+            Self::Af => Operand::sym("af"),
+            Self::Sp => Operand::sym("sp"),
+            Self::HlIncrement => Operand::sym("hli"),
+            Self::HlDecrement => Operand::sym("hld"),
         }
     }
 
-    pub fn into_requisites(self) -> Vec<Requisite<SM83>> {
+    pub fn into_requisites(self) -> Vec<Requisite<Sm83>> {
         match self {
-            Self::BC => vec![
+            Self::Bc => vec![
                 Requisite::register(Register::B, 0xFF),
                 Requisite::register(Register::C, 0xFF),
             ],
-            Self::DE => vec![
+            Self::De => vec![
                 Requisite::register(Register::D, 0xFF),
                 Requisite::register(Register::E, 0xFF),
             ],
-            Self::HL => vec![
+            Self::Hl => vec![
                 Requisite::register(Register::H, 0xFF),
                 Requisite::register(Register::L, 0xFF),
             ],
-            Self::AF => vec![
+            Self::Af => vec![
                 Requisite::register(Register::A, 0xFF),
                 Requisite::register(Register::F, 0xFF),
             ],
-            Self::SP => vec![
+            Self::Sp => vec![
                 Requisite::register(Register::S, 0xFF),
                 Requisite::register(Register::P, 0xFF),
             ],
-            Self::HLIncrement => vec![
+            Self::HlIncrement => vec![
                 Requisite::register(Register::H, 0xFF),
                 Requisite::register(Register::L, 0xFF),
             ],
-            Self::HLDecrement => vec![
+            Self::HlDecrement => vec![
                 Requisite::register(Register::H, 0xFF),
                 Requisite::register(Register::L, 0xFF),
             ],
@@ -123,10 +123,10 @@ impl RegisterPair {
 /// Enumeration of all of the ways that ALU instructions that load constants
 /// into registers name register pairs.
 pub static TARGET16_ALU_REG: [RegisterPair; 4] = [
-    RegisterPair::BC,
-    RegisterPair::DE,
-    RegisterPair::HL,
-    RegisterPair::SP,
+    RegisterPair::Bc,
+    RegisterPair::De,
+    RegisterPair::Hl,
+    RegisterPair::Sp,
 ];
 
 /// Enumeration of all the ways that ALU instructions that read or write memory
@@ -136,19 +136,19 @@ pub static TARGET16_ALU_REG: [RegisterPair; 4] = [
 /// separate encoding scheme (see `TARGET8_ALU_REG`) for arbitrary register
 /// transfer instructions that also allows writing any register to `[HL]`.
 pub static TARGET16_ALU_MEM: [RegisterPair; 4] = [
-    RegisterPair::BC,
-    RegisterPair::DE,
-    RegisterPair::HLIncrement,
-    RegisterPair::HLDecrement,
+    RegisterPair::Bc,
+    RegisterPair::De,
+    RegisterPair::HlIncrement,
+    RegisterPair::HlDecrement,
 ];
 
 /// Enumeration of all the ways that stack manipulation instructions can select
 /// a register pair to be pushed or popped.
 pub static TARGET16_STACK_REG: [RegisterPair; 4] = [
-    RegisterPair::BC,
-    RegisterPair::DE,
-    RegisterPair::HL,
-    RegisterPair::AF,
+    RegisterPair::Bc,
+    RegisterPair::De,
+    RegisterPair::Hl,
+    RegisterPair::Af,
 ];
 
 /// A condition code for a conditional instruction.
@@ -156,8 +156,8 @@ pub static TARGET16_STACK_REG: [RegisterPair; 4] = [
 pub enum Condition {
     Z,
     C,
-    NZ,
-    NC,
+    Nz,
+    Nc,
 }
 
 impl Condition {
@@ -168,15 +168,15 @@ impl Condition {
         match self {
             Self::Z => Operand::sym("z"),
             Self::C => Operand::sym("c"),
-            Self::NZ => Operand::sym("nz"),
-            Self::NC => Operand::sym("nc"),
+            Self::Nz => Operand::sym("nz"),
+            Self::Nc => Operand::sym("nc"),
         }
     }
 
-    pub fn into_requisite(self) -> Requisite<SM83> {
+    pub fn into_requisite(self) -> Requisite<Sm83> {
         match self {
-            Self::Z | Self::NZ => Requisite::register(Register::F, 0x80),
-            Self::C | Self::NC => Requisite::register(Register::F, 0x10),
+            Self::Z | Self::Nz => Requisite::register(Register::F, 0x80),
+            Self::C | Self::Nc => Requisite::register(Register::F, 0x10),
         }
     }
 
@@ -194,13 +194,13 @@ impl Condition {
                     .ok_or(Error::UnconstrainedRegister)?
                     != 0
             }
-            Self::NZ => {
+            Self::Nz => {
                 (flags & Symbolic::from(0x80))
                     .into_concrete()
                     .ok_or(Error::UnconstrainedRegister)?
                     == 0
             }
-            Self::NC => {
+            Self::Nc => {
                 (flags & Symbolic::from(0x10))
                     .into_concrete()
                     .ok_or(Error::UnconstrainedRegister)?
@@ -211,7 +211,7 @@ impl Condition {
 }
 
 pub static ALU_CONDCODE: [Condition; 4] =
-    [Condition::NZ, Condition::Z, Condition::NC, Condition::C];
+    [Condition::Nz, Condition::Z, Condition::Nc, Condition::C];
 
 /// A decoded SM83 instruction.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -224,10 +224,10 @@ pub enum Instruction {
     LdReg8(Target8, Target8),
 
     /// LD HL, SP+(i8)
-    LdHLSP(i8),
+    LdHlSp(i8),
 
     /// LD SP, HL
-    LdSPHL,
+    LdSpHl,
 
     /// LD instructions of the form LD [(u16)], a
     LdWriteStatic(u16),
@@ -260,7 +260,7 @@ pub enum Instruction {
     LdConst16(RegisterPair, u16),
 
     /// LD [(u16)], SP
-    LdWriteStaticSP(u16),
+    LdWriteStaticSp(u16),
 
     /// INC instructions of the form INC (regpair)
     Inc16(RegisterPair),
@@ -455,7 +455,7 @@ impl Instruction {
             //Z80 instructions that don't fit the pattern decoder below
             Some(0x00) => Ok((Self::Nop, 1)), //nop
             Some(0x08) => Ok((
-                Self::LdWriteStaticSP(
+                Self::LdWriteStaticSp(
                     match mem.read_leword::<u16>(&(p.clone() + 1)).into_concrete() {
                         Some(a16) => a16,
                         None => return Err(Error::UnconstrainedMemory(p.clone() + 1)),
@@ -500,7 +500,7 @@ impl Instruction {
             Some(0xC9) => Ok((Self::Return(None), 1)), //ret
             Some(0xD9) => Ok((Self::ReturnFromInterrupt, 1)), //reti
             Some(0xE9) => Ok((Self::JumpDynamic, 1)),  //jp [hl]
-            Some(0xF9) => Ok((Self::LdSPHL, 1)),       //ld sp, hl
+            Some(0xF9) => Ok((Self::LdSpHl, 1)),       //ld sp, hl
 
             Some(0xE0) => Ok((
                 Self::LdWriteHiStatic(match mem.read_unit(&(p.clone() + 1)).into_concrete() {
@@ -524,7 +524,7 @@ impl Instruction {
                 2,
             )), //ldh a, [u8]
             Some(0xF8) => Ok((
-                Self::LdHLSP(match mem.read_unit(&(p.clone() + 1)).into_concrete() {
+                Self::LdHlSp(match mem.read_unit(&(p.clone() + 1)).into_concrete() {
                     Some(r8) => r8 as i8,
                     None => return Err(Error::UnconstrainedMemory(p.clone() + 1)),
                 }),

@@ -50,7 +50,7 @@ where
     }
 }
 
-fn uncond_branch<L>(p: &memory::Pointer<PtrVal>, offset: u16) -> aarch32::Result<Disasm<L>>
+fn uncond_branch<L>(p: &memory::Pointer<PtrVal>, offset: u16) -> Disasm<L>
 where
     L: Literal,
 {
@@ -60,12 +60,12 @@ where
     let signed_offset = (((offset | sign_extend) as i16) as i32) << 1;
     let target = p.contextualize((signed_offset - 4 + *p.as_pointer() as i32) as PtrVal);
 
-    Ok(Disasm::new(
+    Disasm::new(
         Instruction::new("B", vec![op::cptr(target.clone())]),
         2,
         Flow::Branching(false),
         vec![refr::new_static_ref(p.clone(), target, refkind::Code)],
-    ))
+    )
 }
 
 fn special_data<L>(
@@ -392,11 +392,7 @@ where
     }
 }
 
-fn load_pool_constant<L>(
-    p: &memory::Pointer<PtrVal>,
-    low_rd: u16,
-    immed: u16,
-) -> aarch32::Result<Disasm<L>>
+fn load_pool_constant<L>(p: &memory::Pointer<PtrVal>, low_rd: u16, immed: u16) -> Disasm<L>
 where
     L: Literal,
 {
@@ -412,12 +408,12 @@ where
         ],
     );
 
-    Ok(Disasm::new(
+    Disasm::new(
         ast,
         2,
         Flow::Normal,
         vec![refr::new_static_ref(p.clone(), target_ptr, refkind::Data)],
-    ))
+    )
 }
 
 fn load_store_register_offset<L>(
@@ -803,7 +799,7 @@ where
     }
 }
 
-fn breakpoint<L>(p: &memory::Pointer<PtrVal>, immed: u16) -> aarch32::Result<Disasm<L>>
+fn breakpoint<L>(p: &memory::Pointer<PtrVal>, immed: u16) -> Disasm<L>
 where
     L: Literal,
 {
@@ -816,12 +812,12 @@ where
         refkind::Subroutine,
     )];
 
-    Ok(Disasm::new(
+    Disasm::new(
         Instruction::new("BKPT", vec![op::lit(immed as u32)]),
         2,
         Flow::Calling,
         targets,
-    ))
+    )
 }
 
 /// Disassemble the instruction at `p` in `mem`.
@@ -872,7 +868,7 @@ where
                 (1, _, _, _) => math_immed(shift_opcode, math_rd_rn, immed),
                 (2, 0, 0, 0) => data_processing(dp_opcode, rn, rd),
                 (2, 0, 0, 1) => special_data(p, dp_opcode, rn, rd),
-                (2, 0, 1, _) => load_pool_constant(p, rd, immed),
+                (2, 0, 1, _) => Ok(load_pool_constant(p, rd, immed)),
                 (2, 1, _, _) => load_store_register_offset(lsro_opcode, rm, rn, rd),
                 (3, b, l, _) => load_store_immed_offset_word(b, l, shift_immed, rn, rd),
                 (4, 0, l, _) => load_store_immed_offset_halfword(l, shift_immed, rn, rd),
@@ -883,12 +879,12 @@ where
                     (0, 0, 1, 0) => sign_zero_extend(immed, rn, rd),
                     (1, 0, 1, 0) => endian_reverse(immed, rn, rd),
                     (l, 1, 0, r) => push_pop(l, r, immed),
-                    (1, 1, 1, 0) => breakpoint(p, immed),
+                    (1, 1, 1, 0) => Ok(breakpoint(p, immed)),
                     _ => Err(analysis::Error::InvalidInstruction), //undefined
                 },
                 (6, 0, l, _) => load_store_multiple(l, math_rd_rn, immed),
                 (6, 1, _, _) => cond_branch(p, cond, immed),
-                (7, 0, 0, _) => uncond_branch(p, large_offset),
+                (7, 0, 0, _) => Ok(uncond_branch(p, large_offset)),
                 (7, 0, 1, _) => Err(analysis::Error::InvalidInstruction), //BLX suffix or undefined
                 (7, 1, 0, _) => uncond_branch_link(p, mem, large_offset),
                 (7, 1, 1, _) => Err(analysis::Error::InvalidInstruction), //BL suffix

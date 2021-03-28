@@ -1,7 +1,7 @@
 //! SM83 test suite
 
 use crate::analysis::Error;
-use crate::arch::sm83::Target8::{IndirectHL as THL, Register as TReg};
+use crate::arch::sm83::Target8::{IndirectHl as THL, Register as TReg};
 use crate::arch::sm83::{
     Condition as Cond, Instruction as Inst, Register as Reg, RegisterPair as Pair,
 };
@@ -29,68 +29,68 @@ macro_rules! assert_sm83_err {
 #[test]
 fn sm83_disasm() {
     assert_sm83!(vec![0x00], Inst::Nop, 1);
-    assert_sm83!(vec![0x01, 0x23, 0x01], Inst::LdConst16(Pair::BC, 0x123), 3);
-    assert_sm83!(vec![0x02], Inst::LdWritePtr(Pair::BC), 1);
-    assert_sm83!(vec![0x03], Inst::Inc16(Pair::BC), 1);
+    assert_sm83!(vec![0x01, 0x23, 0x01], Inst::LdConst16(Pair::Bc, 0x123), 3);
+    assert_sm83!(vec![0x02], Inst::LdWritePtr(Pair::Bc), 1);
+    assert_sm83!(vec![0x03], Inst::Inc16(Pair::Bc), 1);
     assert_sm83!(vec![0x04], Inst::Inc8(TReg(Reg::B)), 1);
     assert_sm83!(vec![0x05], Inst::Dec8(TReg(Reg::B)), 1);
     assert_sm83!(vec![0x06, 0x12], Inst::LdConst8(TReg(Reg::B), 0x12), 2);
     assert_sm83!(vec![0x07], Inst::RotateLeftCarryAccum, 1);
-    assert_sm83!(vec![0x08, 0x34, 0x12], Inst::LdWriteStaticSP(0x1234), 3);
-    assert_sm83!(vec![0x09], Inst::Add16(Pair::BC), 1);
-    assert_sm83!(vec![0x0A], Inst::LdReadPtr(Pair::BC), 1);
-    assert_sm83!(vec![0x0B], Inst::Dec16(Pair::BC), 1);
+    assert_sm83!(vec![0x08, 0x34, 0x12], Inst::LdWriteStaticSp(0x1234), 3);
+    assert_sm83!(vec![0x09], Inst::Add16(Pair::Bc), 1);
+    assert_sm83!(vec![0x0A], Inst::LdReadPtr(Pair::Bc), 1);
+    assert_sm83!(vec![0x0B], Inst::Dec16(Pair::Bc), 1);
     assert_sm83!(vec![0x0C], Inst::Inc8(TReg(Reg::C)), 1);
     assert_sm83!(vec![0x0D], Inst::Dec8(TReg(Reg::C)), 1);
     assert_sm83!(vec![0x0E, 0x12], Inst::LdConst8(TReg(Reg::C), 0x12), 2);
     assert_sm83!(vec![0x0F], Inst::RotateRightCarryAccum, 1);
 
     assert_sm83!(vec![0x10, 0x00], Inst::Stop, 2);
-    assert_sm83!(vec![0x11, 0x23, 0x01], Inst::LdConst16(Pair::DE, 0x123), 3);
-    assert_sm83!(vec![0x12], Inst::LdWritePtr(Pair::DE), 1);
-    assert_sm83!(vec![0x13], Inst::Inc16(Pair::DE), 1);
+    assert_sm83!(vec![0x11, 0x23, 0x01], Inst::LdConst16(Pair::De, 0x123), 3);
+    assert_sm83!(vec![0x12], Inst::LdWritePtr(Pair::De), 1);
+    assert_sm83!(vec![0x13], Inst::Inc16(Pair::De), 1);
     assert_sm83!(vec![0x14], Inst::Inc8(TReg(Reg::D)), 1);
     assert_sm83!(vec![0x15], Inst::Dec8(TReg(Reg::D)), 1);
     assert_sm83!(vec![0x16, 0x12], Inst::LdConst8(TReg(Reg::D), 0x12), 2);
     assert_sm83!(vec![0x17], Inst::RotateLeftAccum, 1);
     assert_sm83!(vec![0x18, 0xFF], Inst::JumpRelative(-1, None), 2);
-    assert_sm83!(vec![0x19], Inst::Add16(Pair::DE), 1);
-    assert_sm83!(vec![0x1A], Inst::LdReadPtr(Pair::DE), 1);
-    assert_sm83!(vec![0x1B], Inst::Dec16(Pair::DE), 1);
+    assert_sm83!(vec![0x19], Inst::Add16(Pair::De), 1);
+    assert_sm83!(vec![0x1A], Inst::LdReadPtr(Pair::De), 1);
+    assert_sm83!(vec![0x1B], Inst::Dec16(Pair::De), 1);
     assert_sm83!(vec![0x1C], Inst::Inc8(TReg(Reg::E)), 1);
     assert_sm83!(vec![0x1D], Inst::Dec8(TReg(Reg::E)), 1);
     assert_sm83!(vec![0x1E, 0x12], Inst::LdConst8(TReg(Reg::E), 0x12), 2);
     assert_sm83!(vec![0x1F], Inst::RotateRightAccum, 1);
 
-    assert_sm83!(vec![0x20, 0xFF], Inst::JumpRelative(-1, Some(Cond::NZ)), 2);
-    assert_sm83!(vec![0x21, 0x23, 0x01], Inst::LdConst16(Pair::HL, 0x123), 3);
-    assert_sm83!(vec![0x22], Inst::LdWritePtr(Pair::HLIncrement), 1);
-    assert_sm83!(vec![0x23], Inst::Inc16(Pair::HL), 1);
+    assert_sm83!(vec![0x20, 0xFF], Inst::JumpRelative(-1, Some(Cond::Nz)), 2);
+    assert_sm83!(vec![0x21, 0x23, 0x01], Inst::LdConst16(Pair::Hl, 0x123), 3);
+    assert_sm83!(vec![0x22], Inst::LdWritePtr(Pair::HlIncrement), 1);
+    assert_sm83!(vec![0x23], Inst::Inc16(Pair::Hl), 1);
     assert_sm83!(vec![0x24], Inst::Inc8(TReg(Reg::H)), 1);
     assert_sm83!(vec![0x25], Inst::Dec8(TReg(Reg::H)), 1);
     assert_sm83!(vec![0x26, 0x12], Inst::LdConst8(TReg(Reg::H), 0x12), 2);
     assert_sm83!(vec![0x27], Inst::DecimalAdjust, 1);
     assert_sm83!(vec![0x28, 0xFF], Inst::JumpRelative(-1, Some(Cond::Z)), 2);
-    assert_sm83!(vec![0x29], Inst::Add16(Pair::HL), 1);
-    assert_sm83!(vec![0x2A], Inst::LdReadPtr(Pair::HLIncrement), 1);
-    assert_sm83!(vec![0x2B], Inst::Dec16(Pair::HL), 1);
+    assert_sm83!(vec![0x29], Inst::Add16(Pair::Hl), 1);
+    assert_sm83!(vec![0x2A], Inst::LdReadPtr(Pair::HlIncrement), 1);
+    assert_sm83!(vec![0x2B], Inst::Dec16(Pair::Hl), 1);
     assert_sm83!(vec![0x2C], Inst::Inc8(TReg(Reg::L)), 1);
     assert_sm83!(vec![0x2D], Inst::Dec8(TReg(Reg::L)), 1);
     assert_sm83!(vec![0x2E, 0x12], Inst::LdConst8(TReg(Reg::L), 0x12), 2);
     assert_sm83!(vec![0x2F], Inst::Compliment, 1);
 
-    assert_sm83!(vec![0x30, 0xFF], Inst::JumpRelative(-1, Some(Cond::NC)), 2);
-    assert_sm83!(vec![0x31, 0x23, 0x01], Inst::LdConst16(Pair::SP, 0x123), 3);
-    assert_sm83!(vec![0x32], Inst::LdWritePtr(Pair::HLDecrement), 1);
-    assert_sm83!(vec![0x33], Inst::Inc16(Pair::SP), 1);
+    assert_sm83!(vec![0x30, 0xFF], Inst::JumpRelative(-1, Some(Cond::Nc)), 2);
+    assert_sm83!(vec![0x31, 0x23, 0x01], Inst::LdConst16(Pair::Sp, 0x123), 3);
+    assert_sm83!(vec![0x32], Inst::LdWritePtr(Pair::HlDecrement), 1);
+    assert_sm83!(vec![0x33], Inst::Inc16(Pair::Sp), 1);
     assert_sm83!(vec![0x34], Inst::Inc8(THL), 1);
     assert_sm83!(vec![0x35], Inst::Dec8(THL), 1);
     assert_sm83!(vec![0x36, 0x12], Inst::LdConst8(THL, 0x12), 2);
     assert_sm83!(vec![0x37], Inst::SetCarry, 1);
     assert_sm83!(vec![0x38, 0xFF], Inst::JumpRelative(-1, Some(Cond::C)), 2);
-    assert_sm83!(vec![0x39], Inst::Add16(Pair::SP), 1);
-    assert_sm83!(vec![0x3A], Inst::LdReadPtr(Pair::HLDecrement), 1);
-    assert_sm83!(vec![0x3B], Inst::Dec16(Pair::SP), 1);
+    assert_sm83!(vec![0x39], Inst::Add16(Pair::Sp), 1);
+    assert_sm83!(vec![0x3A], Inst::LdReadPtr(Pair::HlDecrement), 1);
+    assert_sm83!(vec![0x3B], Inst::Dec16(Pair::Sp), 1);
     assert_sm83!(vec![0x3C], Inst::Inc8(TReg(Reg::A)), 1);
     assert_sm83!(vec![0x3D], Inst::Dec8(TReg(Reg::A)), 1);
     assert_sm83!(vec![0x3E, 0x12], Inst::LdConst8(TReg(Reg::A), 0x12), 2);
@@ -240,20 +240,20 @@ fn sm83_disasm() {
     assert_sm83!(vec![0xBE], Inst::Cp(THL), 1);
     assert_sm83!(vec![0xBF], Inst::Cp(TReg(Reg::A)), 1);
 
-    assert_sm83!(vec![0xC0], Inst::Return(Some(Cond::NZ)), 1);
-    assert_sm83!(vec![0xC1], Inst::Pop(Pair::BC), 1);
+    assert_sm83!(vec![0xC0], Inst::Return(Some(Cond::Nz)), 1);
+    assert_sm83!(vec![0xC1], Inst::Pop(Pair::Bc), 1);
     assert_sm83!(
         vec![0xC2, 0x34, 0x12],
-        Inst::Jump(0x1234, Some(Cond::NZ)),
+        Inst::Jump(0x1234, Some(Cond::Nz)),
         3
     );
     assert_sm83!(vec![0xC3, 0x34, 0x12], Inst::Jump(0x1234, None), 3);
     assert_sm83!(
         vec![0xC4, 0x34, 0x12],
-        Inst::Call(0x1234, Some(Cond::NZ)),
+        Inst::Call(0x1234, Some(Cond::Nz)),
         3
     );
-    assert_sm83!(vec![0xC5], Inst::Push(Pair::BC), 1);
+    assert_sm83!(vec![0xC5], Inst::Push(Pair::Bc), 1);
     assert_sm83!(vec![0xC6, 0xC3], Inst::Add8Const(0xC3), 2);
     assert_sm83!(vec![0xC7], Inst::CallRst(0x00), 1);
 
@@ -582,20 +582,20 @@ fn sm83_disasm() {
     assert_sm83!(vec![0xCE, 0xC3], Inst::AddCarry8Const(0xC3), 2);
     assert_sm83!(vec![0xCF], Inst::CallRst(0x08), 1);
 
-    assert_sm83!(vec![0xD0], Inst::Return(Some(Cond::NC)), 1);
-    assert_sm83!(vec![0xD1], Inst::Pop(Pair::DE), 1);
+    assert_sm83!(vec![0xD0], Inst::Return(Some(Cond::Nc)), 1);
+    assert_sm83!(vec![0xD1], Inst::Pop(Pair::De), 1);
     assert_sm83!(
         vec![0xD2, 0x34, 0x12],
-        Inst::Jump(0x1234, Some(Cond::NC)),
+        Inst::Jump(0x1234, Some(Cond::Nc)),
         3
     );
     assert_sm83_err!(vec![0xD3], Error::InvalidInstruction);
     assert_sm83!(
         vec![0xD4, 0x34, 0x12],
-        Inst::Call(0x1234, Some(Cond::NC)),
+        Inst::Call(0x1234, Some(Cond::Nc)),
         3
     );
-    assert_sm83!(vec![0xD5], Inst::Push(Pair::DE), 1);
+    assert_sm83!(vec![0xD5], Inst::Push(Pair::De), 1);
     assert_sm83!(vec![0xD6, 0xC3], Inst::Sub8Const(0xC3), 2);
     assert_sm83!(vec![0xD7], Inst::CallRst(0x10), 1);
 
@@ -609,11 +609,11 @@ fn sm83_disasm() {
     assert_sm83!(vec![0xDF], Inst::CallRst(0x18), 1);
 
     assert_sm83!(vec![0xE0, 0xAC], Inst::LdWriteHiStatic(0xAC), 2);
-    assert_sm83!(vec![0xE1], Inst::Pop(Pair::HL), 1);
+    assert_sm83!(vec![0xE1], Inst::Pop(Pair::Hl), 1);
     assert_sm83!(vec![0xE2], Inst::LdWriteHiPtr, 1);
     assert_sm83_err!(vec![0xE3], Error::InvalidInstruction);
     assert_sm83_err!(vec![0xE4], Error::InvalidInstruction);
-    assert_sm83!(vec![0xE5], Inst::Push(Pair::HL), 1);
+    assert_sm83!(vec![0xE5], Inst::Push(Pair::Hl), 1);
     assert_sm83!(vec![0xE6, 0xC3], Inst::And8Const(0xC3), 2);
     assert_sm83!(vec![0xE7], Inst::CallRst(0x20), 1);
 
@@ -627,16 +627,16 @@ fn sm83_disasm() {
     assert_sm83!(vec![0xEF], Inst::CallRst(0x28), 1);
 
     assert_sm83!(vec![0xF0, 0xAC], Inst::LdReadHiStatic(0xAC), 2);
-    assert_sm83!(vec![0xF1], Inst::Pop(Pair::AF), 1);
+    assert_sm83!(vec![0xF1], Inst::Pop(Pair::Af), 1);
     assert_sm83!(vec![0xF2], Inst::LdReadHiPtr, 1);
     assert_sm83!(vec![0xF3], Inst::DisableInterrupt, 1);
     assert_sm83_err!(vec![0xF4], Error::InvalidInstruction);
-    assert_sm83!(vec![0xF5], Inst::Push(Pair::AF), 1);
+    assert_sm83!(vec![0xF5], Inst::Push(Pair::Af), 1);
     assert_sm83!(vec![0xF6, 0xC3], Inst::Or8Const(0xC3), 2);
     assert_sm83!(vec![0xF7], Inst::CallRst(0x30), 1);
 
-    assert_sm83!(vec![0xF8, 0xFF], Inst::LdHLSP(-1), 2);
-    assert_sm83!(vec![0xF9], Inst::LdSPHL, 1);
+    assert_sm83!(vec![0xF8, 0xFF], Inst::LdHlSp(-1), 2);
+    assert_sm83!(vec![0xF9], Inst::LdSpHl, 1);
     assert_sm83!(vec![0xFA, 0x34, 0x12], Inst::LdReadStatic(0x1234), 3);
     assert_sm83!(vec![0xFB], Inst::EnableInterrupt, 1);
     assert_sm83_err!(vec![0xFC], Error::InvalidInstruction);

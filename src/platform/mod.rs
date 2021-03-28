@@ -17,8 +17,8 @@ use std::str;
 /// Enumeration of all platforms that ship with Retrogram.
 #[derive(Copy, Clone, Serialize, Debug, PartialEq, Eq)]
 pub enum PlatformName {
-    GB,
-    AGB,
+    Gb,
+    Agb,
 }
 
 impl PlatformName {
@@ -28,8 +28,8 @@ impl PlatformName {
     /// fail.
     pub fn default_arch(self) -> Option<arch::ArchName> {
         match self {
-            PlatformName::GB => Some(arch::ArchName::SM83),
-            PlatformName::AGB => Some(arch::ArchName::AARCH32),
+            PlatformName::Gb => Some(arch::ArchName::Sm83),
+            PlatformName::Agb => Some(arch::ArchName::AArch32),
         }
     }
 
@@ -37,23 +37,23 @@ impl PlatformName {
     /// architecture.
     pub fn is_compatible_with_arch(self, arch: arch::ArchName) -> bool {
         match (self, arch) {
-            (PlatformName::GB, arch::ArchName::SM83) => true,
-            (PlatformName::GB, _) => false,
-            (PlatformName::AGB, arch::ArchName::AARCH32) => true,
-            (PlatformName::AGB, _) => false,
+            (PlatformName::Gb, arch::ArchName::Sm83) => true,
+            (PlatformName::Gb, _) => false,
+            (PlatformName::Agb, arch::ArchName::AArch32) => true,
+            (PlatformName::Agb, _) => false,
         }
     }
 
     /// Iterate all valid platform names.
     pub fn iter() -> impl IntoIterator<Item = PlatformName> {
-        vec![Self::GB, Self::AGB]
+        vec![Self::Gb, Self::Agb]
     }
 
     /// Yield a name for this platform.
     pub fn friendly_name(self) -> &'static str {
         match self {
-            Self::GB => "Game Boy",
-            Self::AGB => "Game Boy Advance",
+            Self::Gb => "Game Boy",
+            Self::Agb => "Game Boy Advance",
         }
     }
 }
@@ -63,9 +63,9 @@ impl str::FromStr for PlatformName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_ref() {
-            "gb" => Ok(PlatformName::GB),
-            "gba" => Ok(PlatformName::AGB),
-            "agb" => Ok(PlatformName::AGB),
+            "gb" => Ok(PlatformName::Gb),
+            "gba" => Ok(PlatformName::Agb),
+            "agb" => Ok(PlatformName::Agb),
             _ => Err(()),
         }
     }

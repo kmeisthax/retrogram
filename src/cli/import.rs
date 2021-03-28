@@ -92,11 +92,11 @@ pub fn import<'a>(project: &mut Project, prog: &Program, argv: &ArgMatches<'a>) 
 
     match (arch, platform, format) {
         (
-            arch::ArchName::SM83,
-            platform::PlatformName::GB,
-            database::ExternalFormat::RGBDSSymbolFile,
+            arch::ArchName::Sm83,
+            platform::PlatformName::Gb,
+            database::ExternalFormat::RgbdsSymbolFile,
         ) => import_for_arch(project, prog, &source, &database::rgbds::parse_symbol_file),
-        //(arch::ArchName::AARCH32, platform::PlatformName::AGB) => scan_for_arch(prog, start_spec, &arch::aarch32::disassemble, &platform::agb::construct_platform(&mut file)?),
+        //(arch::ArchName::AArch32, platform::PlatformName::Agb) => scan_for_arch(prog, start_spec, &arch::aarch32::disassemble, &platform::agb::construct_platform(&mut file)?),
         _ => Err(io::Error::new(
             io::ErrorKind::Other,
             "The given combination of architecture, platform, and/or assembler are not compatible.",
