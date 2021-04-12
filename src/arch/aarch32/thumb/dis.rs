@@ -210,7 +210,7 @@ where
             vec![],
         )),
         0xB => Ok(Disasm::new(
-            Instruction::new("CMM", vec![rd_operand, rm_operand]),
+            Instruction::new("CMN", vec![rd_operand, rm_operand]),
             2,
             Flow::Normal,
             vec![],
@@ -535,8 +535,8 @@ where
     let offset_operand = op::lit((offset * 4) as u32);
 
     let opcode_name = match l {
-        0 => "STRH",
-        1 => "LDRH",
+        0 => "STR",
+        1 => "LDR",
         _ => return Err(analysis::Error::Misinterpretation(2, false)),
     };
     let operands = vec![
