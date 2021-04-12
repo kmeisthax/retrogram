@@ -131,6 +131,101 @@ impl str::FromStr for Aarch32Register {
     }
 }
 
+/// Represents a register bitfield.
+pub struct Aarch32RegisterList(u16);
+
+impl From<u16> for Aarch32RegisterList {
+    fn from(bitfield: u16) -> Self {
+        Aarch32RegisterList(bitfield)
+    }
+}
+
+impl IntoIterator for Aarch32RegisterList {
+    type Item = Aarch32Register;
+    type IntoIter = Aarch32RegisterListIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Aarch32RegisterListIter {
+            next: 0,
+            left: self.0,
+        }
+    }
+}
+
+impl Aarch32RegisterList {
+    pub fn from_thumb_push(r: u16, register_list: u8) -> Self {
+        Self(register_list as u16 | r << 14)
+    }
+
+    pub fn from_thumb_pop(r: u16, register_list: u8) -> Self {
+        Self(register_list as u16 | r << 15)
+    }
+
+    pub fn from_thumb_stm_ldm(register_list: u8) -> Self {
+        Self(register_list as u16)
+    }
+}
+
+/// Represents a register bitfield being iterated over.
+pub struct Aarch32RegisterListIter {
+    next: u8,
+    left: u16,
+}
+
+impl Iterator for Aarch32RegisterListIter {
+    type Item = Aarch32Register;
+
+    fn next(&mut self) -> Option<Aarch32Register> {
+        while self.next < 16 && self.left & 1 == 0 {
+            self.next += 1;
+            self.left >>= 1;
+        }
+
+        Aarch32Register::from_instr(self.next as u32)
+    }
+}
+
+pub enum Condition {
+    Always,
+    Equal,
+    NotEqual,
+    UnsignedGreaterEqual,
+    UnsignedLess,
+    Negative,
+    PositiveZero,
+    Overflow,
+    NoOverflow,
+    UnsignedGreater,
+    UnsignedLessEqual,
+    SignedGreaterEqual,
+    SignedLess,
+    SignedGreater,
+    SignedLessEqual,
+}
+
+impl Condition {
+    pub fn from_cond_field(cond: u8) -> Option<Self> {
+        match cond {
+            0 => Some(Self::Equal),
+            1 => Some(Self::NotEqual),
+            2 => Some(Self::UnsignedGreaterEqual),
+            3 => Some(Self::UnsignedLess),
+            4 => Some(Self::Negative),
+            5 => Some(Self::PositiveZero),
+            6 => Some(Self::Overflow),
+            7 => Some(Self::NoOverflow),
+            8 => Some(Self::UnsignedGreater),
+            9 => Some(Self::UnsignedLessEqual),
+            10 => Some(Self::SignedGreaterEqual),
+            11 => Some(Self::SignedLess),
+            12 => Some(Self::SignedGreater),
+            13 => Some(Self::SignedLessEqual),
+            14 => Some(Self::Always),
+            _ => None,
+        }
+    }
+}
+
 /// The type which represents a value contained in an ARM AArch32 register.
 pub type Value = u32;
 
