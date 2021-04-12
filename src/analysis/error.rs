@@ -65,9 +65,9 @@ where
     /// retrogram that needs to be corrected.
     ///
     /// The S parameter indicates the size of the instruction that could not be
-    /// decoded, and the `bool` parameter indicates if it was a big-endian or
-    /// little-endian value. This may be useful for displaying the invalid data
-    /// to the user.
+    /// decoded, and the `bool` parameter indicates if it was a big-endian
+    /// (true) or little-endian (false) value. This may be useful for
+    /// displaying the invalid data to the user.
     Misinterpretation(AR::Offset, bool),
 }
 
