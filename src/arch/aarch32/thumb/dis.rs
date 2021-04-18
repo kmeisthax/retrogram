@@ -5,7 +5,7 @@ use crate::analysis::Reference as refr;
 use crate::analysis::ReferenceKind as refkind;
 use crate::arch::aarch32;
 use crate::arch::aarch32::arm::condcode;
-use crate::arch::aarch32::thumb::THUMB_STATE;
+use crate::arch::aarch32::thumb::{THUMB_STATE, ThumbInstruction};
 use crate::arch::aarch32::Aarch32Register as A32Reg;
 use crate::arch::aarch32::{Bus, Disasm, Literal, PtrVal};
 use crate::ast::{Instruction, Operand as op};
@@ -841,6 +841,222 @@ pub fn disassemble<L>(p: &memory::Pointer<PtrVal>, mem: &Bus) -> aarch32::Result
 where
     L: Literal,
 {
+    let (instr, offset) = ThumbInstruction::from_static_stream(p, mem)?;
+    let disasm = match instr {
+        ThumbInstruction::LogicalShiftLeftImmediate(rd, rm, immed8) => {
+            Disasm::new(
+                Instruction::new("LSL", vec![op::sym(rd.to_string()), op::sym(rm.to_string()), op::lit(immed8)]),
+                offset,
+                Flow::Normal,
+                vec![]
+            )
+        },
+        ThumbInstruction::LogicalShiftRightImmediate(rd, rm, immed8) => {
+
+        },
+        ThumbInstruction::ArithmeticShiftRightImmediate(rd, rm, immed8) => {
+
+        },
+        ThumbInstruction::AddRegister(rd, rn, rm) => {
+
+        },
+        ThumbInstruction::SubRegister(Register, Register, Register) => {
+
+        },
+        ThumbInstruction::AddImmediate3(Register, Register, u8) => {
+
+        },
+        ThumbInstruction::SubImmediate3(Register, Register, u8) => {
+
+        },
+        ThumbInstruction::MovImmediate8(Register, u8) => {
+
+        },
+        ThumbInstruction::CmpImmediate8(Register, u8) => {
+
+        },
+        ThumbInstruction::AddImmediate8(Register, u8) => {
+
+        },
+        ThumbInstruction::SubImmediate8(Register, u8) => {
+
+        },
+        ThumbInstruction::AddImmediate8Pc(Register, u8) => {
+
+        },
+        ThumbInstruction::AddImmediate8Sp(Register, u8) => {
+
+        },
+        ThumbInstruction::AddSpImmediate7(u8) => {
+
+        },
+        ThumbInstruction::SubSpImmediate7(u8) => {
+
+        },
+        ThumbInstruction::AndRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::EorRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::LogicalShiftLeftRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::LogicalShiftRightRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::ArithmeticShiftRightRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::AddCarryRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::RotateRightRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::SubCarryRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::BitTestRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::NegateRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::CompareRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::CompareNegativeRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::OrRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::MultiplyRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::BitClearRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::MoveNotRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::AddHighRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::CompareHighRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::MovHighRegister(Register, Register) => {
+
+        },
+        ThumbInstruction::BranchConditional(Condition, i8) => {
+
+        },
+        ThumbInstruction::Branch(i16) => {
+
+        },
+        ThumbInstruction::BranchLink(i32) => {
+
+        },
+        ThumbInstruction::BranchLinkExchange(i32) => {
+
+        },
+        ThumbInstruction::BranchExchangeDynamic(Register) => {
+
+        },
+        ThumbInstruction::BranchLinkExchangeDynamic(Register) => {
+
+        },
+        ThumbInstruction::StoreWordSpRelative(Register, u8) => {
+
+        },
+        ThumbInstruction::StoreWordRegisterRelative(Register, Register, Register) => {
+
+        },
+        ThumbInstruction::StoreWordRegisterImmedOffset(Register, Register, u8) => {
+
+        },
+        ThumbInstruction::StoreHalfwordRegisterRelative(Register, Register, Register) => {
+
+        },
+        ThumbInstruction::StoreHalfwordRegisterImmedOffset(Register, Register, u8) => {
+
+        },
+        ThumbInstruction::StoreByteRegisterRelative(Register, Register, Register) => {
+
+        },
+        ThumbInstruction::StoreByteRegisterImmedOffset(Register, Register, u8) => {
+
+        },
+        ThumbInstruction::LoadWordPcRelative(Register, u8) => {
+
+        },
+        ThumbInstruction::LoadWordSpRelative(Register, u8) => {
+
+        },
+        ThumbInstruction::LoadSignedByteRegisterRelative(Register, Register, Register) => {
+
+        },
+        ThumbInstruction::LoadWordRegisterRelative(Register, Register, Register) => {
+
+        },
+        ThumbInstruction::LoadWordRegisterImmedOffset(Register, Register, u8) => {
+
+        },
+        ThumbInstruction::LoadHalfwordRegisterRelative(Register, Register, Register) => {
+
+        },
+        ThumbInstruction::LoadHalfwordRegisterImmedOffset(Register, Register, u8) => {
+
+        },
+        ThumbInstruction::LoadByteRegisterRelative(Register, Register, Register) => {
+
+        },
+        ThumbInstruction::LoadByteRegisterImmedOffset(Register, Register, u8) => {
+
+        },
+        ThumbInstruction::LoadSignedHalfwordRegisterRelative(Register, Register, Register) => {
+
+        },
+        ThumbInstruction::SignExtendHalfword(Register, Register) => {
+
+        },
+        ThumbInstruction::SignExtendByte(Register, Register) => {
+
+        },
+        ThumbInstruction::UnsignExtendHalfword(Register, Register) => {
+
+        },
+        ThumbInstruction::UnsignExtendByte(Register, Register) => {
+
+        },
+        ThumbInstruction::ByteReverseWord(Register, Register) => {
+
+        },
+        ThumbInstruction::ByteReversePackedHalfword(Register, Register) => {
+
+        },
+        ThumbInstruction::ByteReverseSignedHalfword(Register, Register) => {
+
+        },
+        ThumbInstruction::Push(RegisterList) => {
+
+        },
+        ThumbInstruction::Pop(RegisterList) => {
+
+        },
+        ThumbInstruction::Breakpoint(u8) => {
+
+        },
+        ThumbInstruction::StoreMultipleIncrementAfter(Register, RegisterList) => {
+
+        },
+        ThumbInstruction::LoadMultipleIncrementAfter(Register, RegisterList) => {
+
+        },
+    }
+
     match mem.read_leword::<u16>(p).into_concrete() {
         Some(instr) => {
             let rd = instr & 0x0007; //sometimes also sbz
