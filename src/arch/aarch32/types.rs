@@ -132,6 +132,7 @@ impl str::FromStr for Aarch32Register {
 }
 
 /// Represents a register bitfield.
+#[derive(Copy, Clone, Debug)]
 pub struct Aarch32RegisterList(u16);
 
 impl From<u16> for Aarch32RegisterList {
@@ -163,6 +164,11 @@ impl Aarch32RegisterList {
 
     pub fn from_thumb_stm_ldm(register_list: u8) -> Self {
         Self(register_list as u16)
+    }
+
+    pub fn contains(self, register: Aarch32Register) -> bool {
+        let mask = 0xFFFE >> register.into_instr();
+        (self.0 & mask) != 0
     }
 }
 
@@ -222,6 +228,28 @@ impl Condition {
             13 => Some(Self::SignedLessEqual),
             14 => Some(Self::Always),
             _ => None,
+        }
+    }
+}
+
+impl fmt::Display for Condition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Always => Ok(()),
+            Self::Equal => write!(f, "EQ"),
+            Self::NotEqual => write!(f, "NE"),
+            Self::UnsignedGreaterEqual => write!(f, "HS"),
+            Self::UnsignedLess => write!(f, "LO"),
+            Self::Negative => write!(f, "MI"),
+            Self::PositiveZero => write!(f, "PL"),
+            Self::Overflow => write!(f, "VS"),
+            Self::NoOverflow => write!(f, "VC"),
+            Self::UnsignedGreater => write!(f, "HI"),
+            Self::UnsignedLessEqual => write!(f, "LS"),
+            Self::SignedGreaterEqual => write!(f, "GE"),
+            Self::SignedLess => write!(f, "LT"),
+            Self::SignedGreater => write!(f, "GT"),
+            Self::SignedLessEqual => write!(f, "LE"),
         }
     }
 }

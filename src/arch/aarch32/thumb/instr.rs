@@ -110,6 +110,9 @@ pub enum ThumbInstruction {
     /// MOV hrd, hrm
     MovHighRegister(Register, Register),
 
+    /// SWI immed_8
+    SoftwareInterrupt(i8),
+
     /// B(cond) immed_8
     BranchConditional(Condition, i8),
 
@@ -381,6 +384,7 @@ impl ThumbInstruction {
                         RegisterList::from_thumb_stm_ldm(immed),
                     ),
 
+                    (6, 1, _, _) if cond == 15 => Self::SoftwareInterrupt(immed as i8),
                     (6, 1, _, _) => Self::BranchConditional(
                         Condition::from_cond_field(cond as u8).ok_or(Error::InvalidInstruction)?,
                         immed as i8,
